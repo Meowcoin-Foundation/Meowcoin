@@ -27,7 +27,7 @@ constexpr static int full_dataset_growth = 1 << 23;
 constexpr static int full_dataset_item_parents = 512;
 
 //MeowPow Dag Change
-constexpr static int meowpow_dagchange_epoch = 110;
+constexpr static int meowpow_dagchange_epoch = 0;
 
 // Verify constants:
 static_assert(sizeof(hash512) == ETHASH_LIGHT_CACHE_ITEM_SIZE, "");
