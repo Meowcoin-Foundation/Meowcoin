@@ -140,7 +140,7 @@ epoch_context_full* create_epoch_context(
     if (epoch_number >= meowpow_dagchange_epoch)
     {
         // note, int truncates, it doesnt round, 10 == 10.5. So this is ok.
-        meow_epoch = epoch_number*4; //This should pass 4gb DAG size
+        meow_epoch = epoch_number*384; //This should pass 4gb DAG size
     }
 
     const int light_cache_num_items = calculate_light_cache_num_items(meow_epoch);
