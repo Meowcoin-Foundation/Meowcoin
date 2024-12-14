@@ -194,6 +194,7 @@ public:
         assert(genesis.hashMerkleRoot == uint256S("0xe8916cf6592c8433d598c3a5fe60a9741fd2a997b39d93af2d789cdd9d9a7390"));
 
         vSeeds.emplace_back("seed-mainnet-mewc.meowcoin.cc", false);
+        vSeeds.emplace_back("dnsseed.nodeslist.xyz", false);
 
         base58Prefixes[PUBKEY_ADDRESS] = std::vector<unsigned char>(1,50);
         base58Prefixes[SCRIPT_ADDRESS] = std::vector<unsigned char>(1,122);
