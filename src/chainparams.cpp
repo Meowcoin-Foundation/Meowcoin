@@ -126,6 +126,7 @@ public:
         consensus.powLimit = uint256S("00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.kawpowLimit = uint256S("00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"); // Estimated starting diff for first 180 kawpow blocks
         consensus.meowpowLimit = uint256S("00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"); // Estimated starting diff for first 180 kawpow blocks
+        consensus.auxpowLimit = uint256S("00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.nPowTargetTimespan = 2016 * 60; // 1.4 days
         consensus.nPowTargetSpacing = 1 * 60;
 		consensus.fPowAllowMinDifficultyBlocks = false;
@@ -162,6 +163,16 @@ public:
         consensus.vDeployments[Consensus::DEPLOYMENT_COINBASE_ASSETS].nTimeout = 1653264000; // Monday, 23 May 2022 00:00:00
         consensus.vDeployments[Consensus::DEPLOYMENT_COINBASE_ASSETS].nOverrideRuleChangeActivationThreshold = 1411; // Approx 70% of 2016
         consensus.vDeployments[Consensus::DEPLOYMENT_COINBASE_ASSETS].nOverrideMinerConfirmationWindow = 2016;
+        consensus.vDeployments[Consensus::DEPLOYMENT_AUXPOW].bit = 11;
+        consensus.vDeployments[Consensus::DEPLOYMENT_AUXPOW].nStartTime = 1743487200; // Tue Apr 01 2025 06:00:00 GMT+0000
+        consensus.vDeployments[Consensus::DEPLOYMENT_AUXPOW].nTimeout = 1743746400; // Fri Apr 04 2025 06:00:00 GMT+0000
+        consensus.vDeployments[Consensus::DEPLOYMENT_AUXPOW].nOverrideRuleChangeActivationThreshold = 1411; // Approx 70% of 2016
+        consensus.vDeployments[Consensus::DEPLOYMENT_AUXPOW].nOverrideMinerConfirmationWindow = 2016;
+
+        //Auxpow Algo Consensus
+        consensus.powForkTime = 1743487200; // Tue Apr 01 2025 06:00:00 GMT+0000
+        consensus.lwmaAveragingWindow = 90;
+        //Maybe some powTypeLimits go here or something
 
 	    consensus.BIP34LockedIn = 6048; // Locked_in at height 6048
 
@@ -308,6 +319,7 @@ public:
         consensus.powLimit = uint256S("00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.kawpowLimit = uint256S("00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.meowpowLimit = uint256S("00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+        consensus.auxpowLimit = uint256S("00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.nPowTargetTimespan = 2016 * 60; // 1.4 days
         consensus.nPowTargetSpacing = 1 * 60;
         consensus.fPowAllowMinDifficultyBlocks = false;
@@ -344,6 +356,16 @@ public:
         consensus.vDeployments[Consensus::DEPLOYMENT_COINBASE_ASSETS].nTimeout = 1659178800; // UTC: Fri Aug 13 2021 18:00:00
         consensus.vDeployments[Consensus::DEPLOYMENT_COINBASE_ASSETS].nOverrideRuleChangeActivationThreshold = 1411; // Approx 70% of 2016
         consensus.vDeployments[Consensus::DEPLOYMENT_COINBASE_ASSETS].nOverrideMinerConfirmationWindow = 2016;
+        consensus.vDeployments[Consensus::DEPLOYMENT_AUXPOW].bit = 11;
+        consensus.vDeployments[Consensus::DEPLOYMENT_AUXPOW].nStartTime = -1; // Tue Apr 01 2025 06:00:00 GMT+0000
+        consensus.vDeployments[Consensus::DEPLOYMENT_AUXPOW].nTimeout = std::numeric_limits<int64_t>::max(); // Fri Apr 04 2025 06:00:00 GMT+0000
+        consensus.vDeployments[Consensus::DEPLOYMENT_AUXPOW].nOverrideRuleChangeActivationThreshold = 1411; // Approx 70% of 2016
+        consensus.vDeployments[Consensus::DEPLOYMENT_AUXPOW].nOverrideMinerConfirmationWindow = 2016;
+
+        //Auxpow Algo Consensus
+        consensus.powForkTime = 1743487200; // Tue Apr 01 2025 06:00:00 GMT+0000
+        consensus.lwmaAveragingWindow = 90;
+        //Maybe some powTypeLimits go here or something
 
         // The best chain should have at least this much work.
         consensus.nMinimumChainWork = uint256S("0x0000000000000000000000000000000000000000000000000000000000100010");

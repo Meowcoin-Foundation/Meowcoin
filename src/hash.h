@@ -317,14 +317,14 @@ public:
 uint64_t SipHashUint256(uint64_t k0, uint64_t k1, const uint256& val);
 uint64_t SipHashUint256Extra(uint64_t k0, uint64_t k1, const uint256& val, uint32_t extra);
 
-inline int GetHashSelection(const uint256 PrevBlockHash, int index) {
-    assert(index >= 0);
-    assert(index < 16);
+// inline int GetHashSelection(const uint256 PrevBlockHash, int index) {
+//     assert(index >= 0);
+//     assert(index < 16);
 
-    #define START_OF_LAST_16_NIBBLES_OF_HASH 48
-    int hashSelection = PrevBlockHash.GetNibble(START_OF_LAST_16_NIBBLES_OF_HASH + index);
-    return(hashSelection);
-}
+//     #define START_OF_LAST_16_NIBBLES_OF_HASH 48
+//     int hashSelection = PrevBlockHash.GetNibble(START_OF_LAST_16_NIBBLES_OF_HASH + index);
+//     return(hashSelection);
+// }
 
 extern double algoHashTotal[16];
 extern int algoHashHits[16];

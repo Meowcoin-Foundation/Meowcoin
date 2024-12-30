@@ -10,6 +10,23 @@
 #include "primitives/transaction.h"
 #include "serialize.h"
 #include "uint256.h"
+#include <string>
+
+// AuxPow Algo - An impossible pow hash
+const uint256 HIGH_HASH = uint256S("0x0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+
+const std::string DEFAULT_POW_TYPE = "meowpow";
+
+const std::string POW_TYPE_NAMES[] = {
+    "meowpow",
+    "auxpow",
+};
+
+enum POW_TYPE {
+    POW_TYPE_MEOWPOW,
+    POW_TYPE_AUXPOW,
+    NUM_BLOCK_TYPES
+};
 
 /** Nodes collect new transactions into a block, hash them into a hash tree,
  * and scan through nonce values to make the block's hash satisfy proof-of-work
@@ -97,6 +114,9 @@ public:
     uint256 GetX16RHash() const;
     uint256 GetX16RV2Hash() const;
 
+    //AuxPow Algo
+    static uint256 AuxPowHashArbitrary(const char* data);
+
     uint256 GetHashFull(uint256& mix_hash) const;
     uint256 GetKAWPOWHeaderHash() const;
     uint256 GetMEOWPOWHeaderHash() const;
@@ -110,6 +130,21 @@ public:
     int64_t GetBlockTime() const
     {
         return (int64_t)nTime;
+    }
+
+    // AuxPow Algo
+    POW_TYPE GetPoWType() const {
+        return (POW_TYPE)((nVersion >> 16) & 0xFF);
+    }
+
+    // AuxPow Algo
+    std::string GetPoWTypeName() const {
+        // if (nVersion >= 0x20000000)
+        //     return POW_TYPE_NAMES[0];
+        POW_TYPE pt = GetPoWType();
+        if (pt >= NUM_BLOCK_TYPES)
+            return "unrecognised";
+        return POW_TYPE_NAMES[pt];
     }
 };
 

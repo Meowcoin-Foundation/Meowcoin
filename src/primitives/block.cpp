@@ -15,6 +15,8 @@
 static const uint32_t MAINNET_X16RV2ACTIVATIONTIME = 1569945600;
 static const uint32_t TESTNET_X16RV2ACTIVATIONTIME = 1567533600;
 static const uint32_t REGTEST_X16RV2ACTIVATIONTIME = 1569931200;
+static const uint32_t MAINNET_AUXPOWACTIVATIONTIME = 1719859200;
+static const uint32_t TESTNET_AUXPOWACTIVATIONTIME = 1719859200;
 
 uint32_t nKAWPOWActivationTime;
 uint32_t nMEOWPOWActivationTime;
@@ -38,48 +40,62 @@ void BlockNetwork::SetNetwork(const std::string& net)
 
 uint256 CBlockHeader::GetHash() const
 {
+    uint32_t nTimeToUse = MAINNET_X16RV2ACTIVATIONTIME;
+    if (bNetwork.fOnTestnet) {
+        nTimeToUse = TESTNET_X16RV2ACTIVATIONTIME;
+    } else if (bNetwork.fOnRegtest) {
+        nTimeToUse = REGTEST_X16RV2ACTIVATIONTIME;
+    }
+
     if (nTime < nKAWPOWActivationTime) {
-        uint32_t nTimeToUse = MAINNET_X16RV2ACTIVATIONTIME;
-        if (bNetwork.fOnTestnet) {
-            nTimeToUse = TESTNET_X16RV2ACTIVATIONTIME;
-        } else if (bNetwork.fOnRegtest) {
-            nTimeToUse = REGTEST_X16RV2ACTIVATIONTIME;
-        }
         if (nTime >= nTimeToUse) {
             return HashX16RV2(BEGIN(nVersion), END(nNonce), hashPrevBlock);
         }
-        else {
         return HashX16R(BEGIN(nVersion), END(nNonce), hashPrevBlock);
-        }
-    } if (nTime < nMEOWPOWActivationTime) {
+    } else if (nTime < nMEOWPOWActivationTime) {
         return KAWPOWHash_OnlyMix(*this);
     } else {
-        return MEOWPOWHash_OnlyMix(*this); //MEOWPOW to engage as the primary algo
+        return MEOWPOWHash_OnlyMix(*this); // MEOWPOW as the primary algo
     }
 }
 
 uint256 CBlockHeader::GetHashFull(uint256& mix_hash) const
 {
+    uint32_t nTimeToUse = MAINNET_X16RV2ACTIVATIONTIME;
+    if (bNetwork.fOnTestnet) {
+        nTimeToUse = TESTNET_X16RV2ACTIVATIONTIME;
+    } else if (bNetwork.fOnRegtest) {
+        nTimeToUse = REGTEST_X16RV2ACTIVATIONTIME;
+    }
+
     if (nTime < nKAWPOWActivationTime) {
-        uint32_t nTimeToUse = MAINNET_X16RV2ACTIVATIONTIME;
-        if (bNetwork.fOnTestnet) {
-            nTimeToUse = TESTNET_X16RV2ACTIVATIONTIME;
-        } else if (bNetwork.fOnRegtest) {
-            nTimeToUse = REGTEST_X16RV2ACTIVATIONTIME;
-        }
         if (nTime >= nTimeToUse) {
             return HashX16RV2(BEGIN(nVersion), END(nNonce), hashPrevBlock);
         }
-
         return HashX16R(BEGIN(nVersion), END(nNonce), hashPrevBlock);
-    } if (nTime < nMEOWPOWActivationTime) {
+    } else if (nTime < MAINNET_AUXPOWACTIVATIONTIME) {
         return KAWPOWHash(*this, mix_hash);
     } else {
-        return MEOWPOWHash(*this, mix_hash); //MEOWPOW to engage as the primary algo
+        // Dual-algo mix: AuxPoW and MEOWPOW
+        if (bNetwork.fOnTestnet && nTime >= TESTNET_AUXPOWACTIVATIONTIME) {
+            return AuxPoWHash(*this, mix_hash); // Replace with actual AuxPoW hash function
+        } else {
+            switch (GetPoWType()) {
+            case POW_TYPE_MEOWPOW:
+                return MEOWPOWHash(*this, mix_hash);
+            case POW_TYPE_AUXPOW:
+                return AuxPoWHash(*this, mix_hash); // Replace with actual AuxPoW hash function
+            default:
+                return HIGH_HASH; // Return a bad hash for invalid blockType
+            }
+        }
     }
 }
 
-
+//AuxPow Algo
+uint256 CBlockHeader::AuxPowHashArbitrary(const char* data) {
+    return AuxPow(data, data + strlen(data), true)
+}
 
 
 uint256 CBlockHeader::GetX16RHash() const

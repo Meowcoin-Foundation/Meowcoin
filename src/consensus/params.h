@@ -24,6 +24,7 @@ enum DeploymentPos
     // DEPLOYMENT_CSV, // Deployment of BIP68, BIP112, and BIP113.
 //    DEPLOYMENT_SEGWIT, // Deployment of BIP141, BIP143, and BIP147.
     // NOTE: Also add new deployments to VersionBitsDeploymentInfo in versionbits.cpp
+    DEPLOYMENT_AUXPOW,
     MAX_VERSION_BITS_DEPLOYMENTS
 };
 
@@ -80,6 +81,11 @@ struct Params {
     uint256 defaultAssumeValid;
     bool nSegwitEnabled;
     bool nCSVEnabled;
+
+    //AuxPow Consensus Fields
+    uint32_t powForkTime;
+    int64_t lwmaAveragingWindow;
+    std::vector<uint256> powTypeLimits;
 };
 } // namespace Consensus
 

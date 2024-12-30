@@ -21,6 +21,8 @@
  */
 static const int64_t MAX_FUTURE_BLOCK_TIME = 2 * 60 * 60;
 static const int64_t MAX_FUTURE_BLOCK_TIME_DGW = MAX_FUTURE_BLOCK_TIME / 10;
+static const int64_t MAX_FUTURE_BLOCK_TIME_AUXPOW = (90 * 5 * 60) / 20;
+//The auxpow value above may need to be adjusted
 
 /**
  * Timestamp window used as a grace period by code that compares external

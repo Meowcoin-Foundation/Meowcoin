@@ -118,6 +118,8 @@ MEOWCOIN_CORE_H = \
   algo/sha2.c \
   algo/extra.c \
   algo/extra.h \
+  algo/auxpow.h \
+  algo/auxpow.cpp \
   algo/sph_sha2big.c \
   algo/haval.c \
   algo/tiger.cpp \
