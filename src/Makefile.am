@@ -137,6 +137,7 @@ MEOWCOIN_CORE_H = \
   assets/snapshotrequestdb.h \
   assets/assetsnapshotdb.h \
   assets/rewards.h \
+  auxpow.h \
   base58.h \
   bloom.h \
   blockencodings.h \
@@ -189,6 +190,7 @@ MEOWCOIN_CORE_H = \
   rpc/client.h \
   rpc/mining.h \
   rpc/protocol.h \
+  rpc/rawtransaction.h \
   rpc/safemode.h \
   rpc/server.h \
   rpc/register.h \
@@ -393,6 +395,8 @@ libmeowcoin_consensus_a_SOURCES = \
   prevector.h \
   primitives/block.cpp \
   primitives/block.h \
+  primitives/pureheader.cpp \
+  primitives/pureheader.h \
   primitives/transaction.cpp \
   primitives/transaction.h \
   pubkey.cpp \
@@ -421,6 +425,7 @@ libmeowcoin_consensus_a_SOURCES = \
 libmeowcoin_common_a_CPPFLAGS = $(AM_CPPFLAGS) $(MEOWCOIN_INCLUDES)
 libmeowcoin_common_a_CXXFLAGS = $(AM_CXXFLAGS) $(PIE_FLAGS)
 libmeowcoin_common_a_SOURCES = \
+  auxpow.cpp \
   base58.cpp \
   chainparams.cpp \
   coins.cpp \

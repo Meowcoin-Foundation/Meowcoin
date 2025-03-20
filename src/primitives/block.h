@@ -7,9 +7,14 @@
 #ifndef MEOWCOIN_PRIMITIVES_BLOCK_H
 #define MEOWCOIN_PRIMITIVES_BLOCK_H
 
+#include "auxpow.h"
 #include "primitives/transaction.h"
+#include "primitives/pureheader.h"
 #include "serialize.h"
 #include "uint256.h"
+
+#include <memory>
+#include <boost/shared_ptr.hpp>
 
 /** Nodes collect new transactions into a block, hash them into a hash tree,
  * and scan through nonce values to make the block's hash satisfy proof-of-work
@@ -18,38 +23,11 @@
  * in the block is a special one that creates a new coin owned by the creator
  * of the block.
  */
-
-extern uint32_t nKAWPOWActivationTime;
-extern uint32_t nMEOWPOWActivationTime;
-
-class BlockNetwork
+class CBlockHeader : public CPureBlockHeader
 {
 public:
-    BlockNetwork();
-    bool fOnRegtest;
-    bool fOnTestnet;
-    void SetNetwork(const std::string& network);
-};
-
-extern BlockNetwork bNetwork;
-
-
-class CBlockHeader
-{
-public:
-
-    // header
-    int32_t nVersion;
-    uint256 hashPrevBlock;
-    uint256 hashMerkleRoot;
-    uint32_t nTime;
-    uint32_t nBits;
-    uint32_t nNonce;
-
-    //KAAAWWWPOW+Meowpow data
-    uint32_t nHeight;
-    uint64_t nNonce64;
-    uint256 mix_hash;
+    // auxpow (if this is a merge-minded block)
+    boost::shared_ptr<CAuxPow> auxpow;
 
     CBlockHeader()
     {
@@ -60,57 +38,32 @@ public:
 
     template <typename Stream, typename Operation>
     inline void SerializationOp(Stream& s, Operation ser_action) {
-        READWRITE(this->nVersion);
-        READWRITE(hashPrevBlock);
-        READWRITE(hashMerkleRoot);
-        READWRITE(nTime);
-        READWRITE(nBits);
-        if (nTime < nKAWPOWActivationTime) {
-            READWRITE(nNonce);
-        } else { //This should be more than adequte for Meowpow
-            READWRITE(nHeight);
-            READWRITE(nNonce64);
-            READWRITE(mix_hash);
-        }
+        READWRITE(*(CPureBlockHeader*)this);
+
+        if (this->IsAuxpow())
+        {
+            if (ser_action.ForRead())
+                auxpow.reset (new CAuxPow());
+            assert(auxpow);
+            READWRITE(*auxpow);
+        } else if (ser_action.ForRead())
+            auxpow.reset();
     }
 
     void SetNull()
     {
-        nVersion = 0;
-        hashPrevBlock.SetNull();
-        hashMerkleRoot.SetNull();
-        nTime = 0;
-        nBits = 0;
-        nNonce = 0;
-
-        nNonce64 = 0;
-        nHeight = 0;
-        mix_hash.SetNull();
+        CPureBlockHeader::SetNull();
+        auxpow.reset();
     }
 
-    bool IsNull() const
-    {
-        return (nBits == 0);
-    }
+    /**
+     * Set the block's auxpow (or unset it).  This takes care of updating
+     * the version accordingly.
+     * @param apow Pointer to the auxpow to use or NULL.
+     */
+    void SetAuxpow (CAuxPow* apow);
 
-    uint256 GetHash() const;
-    uint256 GetX16RHash() const;
-    uint256 GetX16RV2Hash() const;
-
-    uint256 GetHashFull(uint256& mix_hash) const;
-    uint256 GetKAWPOWHeaderHash() const;
-    uint256 GetMEOWPOWHeaderHash() const;
     std::string ToString() const;
-
-    /// Use for testing algo switch
-    uint256 TestTiger() const;
-    uint256 TestSha512() const;
-    uint256 TestGost512() const;
-
-    int64_t GetBlockTime() const
-    {
-        return (int64_t)nTime;
-    }
 };
 
 
@@ -159,19 +112,13 @@ public:
         block.nTime          = nTime;
         block.nBits          = nBits;
         block.nNonce         = nNonce;
-
+        block.auxpow         = auxpow;
         // KAWPOW
         block.nHeight        = nHeight;
         block.nNonce64       = nNonce64;
         block.mix_hash       = mix_hash;
         return block;
     }
-
-    // void SetPrevBlockHash(uint256 prevHash) 
-    // {
-    //     block.hashPrevBlock = prevHash;
-    // }
-
     std::string ToString() const;
 };
 
@@ -205,55 +152,6 @@ struct CBlockLocator
     bool IsNull() const
     {
         return vHave.empty();
-    }
-};
-
-/**
- * Custom serializer for CBlockHeader that omits the nNonce and mixHash, for use
- * as input to ProgPow.
- */
-class CKAWPOWInput : private CBlockHeader
-{
-public:
-    CKAWPOWInput(const CBlockHeader &header)
-    {
-        CBlockHeader::SetNull();
-        *((CBlockHeader*)this) = header;
-    }
-
-    ADD_SERIALIZE_METHODS;
-
-    template <typename Stream, typename Operation>
-    inline void SerializationOp(Stream& s, Operation ser_action) {
-        READWRITE(this->nVersion);
-        READWRITE(hashPrevBlock);
-        READWRITE(hashMerkleRoot);
-        READWRITE(nTime);
-        READWRITE(nBits);
-        READWRITE(nHeight);
-    }
-};
-
-//MEOWPOW
-class CMEOWPOWInput : private CBlockHeader
-{
-public:
-    CMEOWPOWInput(const CBlockHeader &header)
-    {
-        CBlockHeader::SetNull();
-        *((CBlockHeader*)this) = header;
-    }
-
-    ADD_SERIALIZE_METHODS;
-
-    template <typename Stream, typename Operation>
-    inline void SerializationOp(Stream& s, Operation ser_action) {
-        READWRITE(this->nVersion);
-        READWRITE(hashPrevBlock);
-        READWRITE(hashMerkleRoot);
-        READWRITE(nTime);
-        READWRITE(nBits);
-        READWRITE(nHeight);
     }
 };
 
