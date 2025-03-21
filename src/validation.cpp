@@ -4271,8 +4271,8 @@ static bool ContextualCheckBlockHeader(const CBlockHeader& block, CValidationSta
     //                              strprintf("rejected nVersion=0x%08x block", block.nVersion));
 
     // Reject outdated version blocks once assets are active.
-    if (AreAssetsDeployed() && block.GetBaseVersion() < VERSIONBITS_TOP_BITS_ASSETS)
-        return state.Invalid(false, REJECT_OBSOLETE, strprintf("bad-version(0x%08x)", block.nVersion), strprintf("rejected nVersion=0x%08x block", block.nVersion));
+    //if (AreAssetsDeployed() && block.GetBaseVersion() < VERSIONBITS_TOP_BITS_ASSETS)
+    //    return state.Invalid(false, REJECT_OBSOLETE, strprintf("bad-version(0x%08x)", block.nVersion), strprintf("rejected nVersion=0x%08x block", block.nVersion));
 
     return true;
 }

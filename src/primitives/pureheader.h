@@ -182,12 +182,11 @@ public:
 
     /**
      * Check whether this is a "legacy" block without chain ID.
-     * @return True iff it is.
+     * @return True if it is.
      */
     inline bool IsLegacy() const
     {
-        return nVersion == 4;
-        return nVersion == 1;
+        return nVersion == 4 || nVersion == 805306368 || nVersion == 1;
     }
 };
 
