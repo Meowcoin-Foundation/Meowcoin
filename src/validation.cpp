@@ -1285,9 +1285,18 @@ bool CheckProofOfWork(const CBlockHeader& block, const Consensus::Params& params
             return error("%s : no auxpow on block with auxpow version",
                          __func__);
 
-        if (!CheckProofOfWork(block.GetHash(), block.nBits, params))
-            return error("%s : non-AUX proof of work failed", __func__);
+        if (block.nTime >= nKAWPOWActivationTime) {
+            uint256 mix_hash;
+            if (!CheckProofOfWork(block.GetHashFull(mix_hash), block.nBits, params))
+                return error("%s : non-AUX proof of work failed", __func__);
 
+            if (mix_hash != block.mix_hash) {
+                return error("%s : non-AUX mix_hash proof of work check failed", __func__);
+            }
+        } else {
+            if (!CheckProofOfWork(block.GetHash(), block.nBits, params))
+                return error("%s : non-AUX proof of work failed", __func__);
+        }
         return true;
     }
 
