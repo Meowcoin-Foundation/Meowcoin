@@ -9,6 +9,7 @@
 #include "utilstrencodings.h"
 #include "tinyformat.h"
 #include "crypto/common.h"
+#include "crypto/scrypt.h"
 
 static const uint32_t MAINNET_X16RV2ACTIVATIONTIME = 1569945600;
 static const uint32_t TESTNET_X16RV2ACTIVATIONTIME = 1567533600;
