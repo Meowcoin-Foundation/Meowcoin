@@ -55,11 +55,16 @@ uint256 CPureBlockHeader::GetHash() const
             return HashX16RV2(BEGIN(nVersion), END(nNonce), hashPrevBlock);
         }
         else {
-        return HashX16R(BEGIN(nVersion), END(nNonce), hashPrevBlock);
+            return HashX16R(BEGIN(nVersion), END(nNonce), hashPrevBlock);
         }
-    } if (nTime < nMEOWPOWActivationTime) {
+    }
+    
+    if (nTime < nMEOWPOWActivationTime) {
         return KAWPOWHash_OnlyMix(*this);
     } else {
+        if (IsAuxpow()) {
+            return GetAuxPowHash();
+        }
         return MEOWPOWHash_OnlyMix(*this); //MEOWPOW to engage as the primary algo
     }
 }
@@ -112,4 +117,11 @@ uint256 CPureBlockHeader::GetMEOWPOWHeaderHash() const
     CMEOWPOWInput input{*this};
 
     return SerializeHash(input);
+}
+
+uint256 CPureBlockHeader::GetAuxPowHash() const
+{
+    uint256 thash;
+    scrypt_1024_1_1_256(BEGIN(nVersion), BEGIN(thash));
+    return thash;
 }

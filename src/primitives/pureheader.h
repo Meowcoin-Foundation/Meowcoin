@@ -68,14 +68,13 @@ public:
         READWRITE(hashMerkleRoot);
         READWRITE(nTime);
         READWRITE(nBits);
-        if (nTime < nKAWPOWActivationTime) {
+        if (nTime < nKAWPOWActivationTime || IsAuxPow()) {
             READWRITE(nNonce);
         } else { //This should be more than adequte for Meowpow
             READWRITE(nHeight);
             READWRITE(nNonce64);
             READWRITE(mix_hash);
         }
-
     }
 
     void SetNull()
@@ -104,7 +103,7 @@ public:
     uint256 GetHashFull(uint256& mix_hash) const;
     uint256 GetKAWPOWHeaderHash() const;
     uint256 GetMEOWPOWHeaderHash() const;
-
+    uint256 GetAuxPowHash() const;
 
     int64_t GetBlockTime() const
     {
