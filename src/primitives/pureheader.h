@@ -68,7 +68,7 @@ public:
         READWRITE(hashMerkleRoot);
         READWRITE(nTime);
         READWRITE(nBits);
-        if (nTime < nKAWPOWActivationTime || IsAuxPow()) {
+        if (nTime < nKAWPOWActivationTime || IsAuxpow()) {
             READWRITE(nNonce);
         } else { //This should be more than adequte for Meowpow
             READWRITE(nHeight);
