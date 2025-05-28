@@ -8,6 +8,7 @@
 
 #include "serialize.h"
 #include "uint256.h"
+#include <stdio.h>
 
 extern uint32_t nKAWPOWActivationTime;
 extern uint32_t nMEOWPOWActivationTime;
@@ -68,6 +69,8 @@ public:
         READWRITE(hashMerkleRoot);
         READWRITE(nTime);
         READWRITE(nBits);
+        printf("CBlockHeader: nVersion=%u\n", nVersion);
+        printf("CBlockHeader: IsAuxpow()=%s\n", IsAuxpow() ? "true" : "false");
         if (nTime < nKAWPOWActivationTime || IsAuxpow()) {
             READWRITE(nNonce);
         } else { //This should be more than adequte for Meowpow
