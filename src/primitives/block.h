@@ -29,6 +29,11 @@ public:
     // auxpow (if this is a merge-minded block)
     boost::shared_ptr<CAuxPow> auxpow;
 
+    //KAAAWWWPOW+Meowpow data
+    uint32_t nHeight;
+    uint64_t nNonce64;
+    uint256 mix_hash;
+
     CBlockHeader()
     {
         SetNull();
@@ -42,18 +47,33 @@ public:
 
         if (this->IsAuxpow())
         {
+            READWRITE(nNonce);
             if (ser_action.ForRead())
                 auxpow.reset (new CAuxPow());
             assert(auxpow);
             READWRITE(*auxpow);
-        } else if (ser_action.ForRead())
+        } else if (ser_action.ForRead()) {
             auxpow.reset();
+        }
+
+        printf("CBlockHeader: nVersion=%u\n", nVersion);
+        printf("CBlockHeader: IsAuxpow()=%s\n", IsAuxpow() ? "true" : "false");
+        if (! IsAuxpow()) {
+            READWRITE(nHeight);
+            READWRITE(nNonce64);
+            READWRITE(mix_hash);
+        }
     }
 
     void SetNull()
     {
         CPureBlockHeader::SetNull();
         auxpow.reset();
+        nNonce = 0;
+
+        nNonce64 = 0;
+        nHeight = 0;
+        mix_hash.SetNull();
     }
 
     /**

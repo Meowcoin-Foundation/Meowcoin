@@ -50,11 +50,6 @@ public:
     uint32_t nBits;
     uint32_t nNonce;
 
-    //KAAAWWWPOW+Meowpow data
-    uint32_t nHeight;
-    uint64_t nNonce64;
-    uint256 mix_hash;
-
     CPureBlockHeader()
     {
         SetNull();
@@ -69,14 +64,8 @@ public:
         READWRITE(hashMerkleRoot);
         READWRITE(nTime);
         READWRITE(nBits);
-        printf("CBlockHeader: nVersion=%u\n", nVersion);
-        printf("CBlockHeader: IsAuxpow()=%s\n", IsAuxpow() ? "true" : "false");
-        if (nTime < nKAWPOWActivationTime || IsAuxpow()) {
+        if (nTime < nKAWPOWActivationTime) {
             READWRITE(nNonce);
-        } else { //This should be more than adequte for Meowpow
-            READWRITE(nHeight);
-            READWRITE(nNonce64);
-            READWRITE(mix_hash);
         }
     }
 
@@ -88,10 +77,6 @@ public:
         nTime = 0;
         nBits = 0;
         nNonce = 0;
-
-        nNonce64 = 0;
-        nHeight = 0;
-        mix_hash.SetNull();
     }
 
     bool IsNull() const
