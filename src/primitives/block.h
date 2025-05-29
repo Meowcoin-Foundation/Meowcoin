@@ -39,6 +39,9 @@ public:
         SetNull();
     }
 
+    uint256 GetKAWPOWHeaderHash() const;
+    uint256 GetMEOWPOWHeaderHash() const;
+    
     ADD_SERIALIZE_METHODS;
 
     template <typename Stream, typename Operation>

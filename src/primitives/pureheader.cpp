@@ -100,25 +100,6 @@ uint256 CPureBlockHeader::GetX16RV2Hash() const
     return HashX16RV2(BEGIN(nVersion), END(nNonce), hashPrevBlock);
 }
 
-/**
- * @brief This takes a block header, removes the nNonce64 and the mixHash. Then performs a serialized hash of it SHA256D.
- * This will be used as the input to the KAAAWWWPOW hashing function
- * @note Only to be called and used on KAAAWWWPOW block headers
- */
-uint256 CPureBlockHeader::GetKAWPOWHeaderHash() const
-{
-    CKAWPOWInput input{*this};
-
-    return SerializeHash(input);
-}
-
-uint256 CPureBlockHeader::GetMEOWPOWHeaderHash() const
-{
-    CMEOWPOWInput input{*this};
-
-    return SerializeHash(input);
-}
-
 uint256 CPureBlockHeader::GetAuxPowHash() const
 {
     uint256 thash;

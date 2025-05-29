@@ -89,8 +89,6 @@ public:
     uint256 GetX16RV2Hash() const;
 
     uint256 GetHashFull(uint256& mix_hash) const;
-    uint256 GetKAWPOWHeaderHash() const;
-    uint256 GetMEOWPOWHeaderHash() const;
     uint256 GetAuxPowHash() const;
 
     int64_t GetBlockTime() const

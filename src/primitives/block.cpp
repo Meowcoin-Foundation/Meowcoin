@@ -50,3 +50,22 @@ std::string CBlock::ToString() const
     }
     return s.str();
 }
+
+/**
+ * @brief This takes a block header, removes the nNonce64 and the mixHash. Then performs a serialized hash of it SHA256D.
+ * This will be used as the input to the KAAAWWWPOW hashing function
+ * @note Only to be called and used on KAAAWWWPOW block headers
+ */
+uint256 CBlockHeader::GetKAWPOWHeaderHash() const
+{
+    CKAWPOWInput input{*this};
+
+    return SerializeHash(input);
+}
+
+uint256 CBlockHeader::GetMEOWPOWHeaderHash() const
+{
+    CMEOWPOWInput input{*this};
+
+    return SerializeHash(input);
+}
