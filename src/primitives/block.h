@@ -57,8 +57,13 @@ public:
 
     template <typename Stream, typename Operation>
     inline void SerializationOp(Stream& s, Operation ser_action) {
+        READWRITE(this->nVersion);
+        READWRITE(hashPrevBlock);
+        READWRITE(hashMerkleRoot);
+        READWRITE(nTime);
+        READWRITE(nBits);
         if (nTime < nKAWPOWActivationTime || IsAuxpow()) {
-            READWRITE(*(CPureBlockHeader*)this);
+            READWRITE(nNonce);
             if (this->IsAuxpow())
             {
                 if (ser_action.ForRead())
@@ -69,11 +74,6 @@ public:
                 auxpow.reset();
             }
         } else {
-            READWRITE(this->nVersion);
-            READWRITE(hashPrevBlock);
-            READWRITE(hashMerkleRoot);
-            READWRITE(nTime);
-            READWRITE(nBits);
             READWRITE(nHeight);
             READWRITE(nNonce64);
             READWRITE(mix_hash);
