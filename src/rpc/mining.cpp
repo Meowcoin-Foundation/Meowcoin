@@ -143,19 +143,15 @@ UniValue generateBlocks(std::shared_ptr<CReserveScript> coinbaseScript, int nGen
         uint256 mix_hash;
         CAuxPow::initAuxPow(*pblock);
         CPureBlockHeader& miningHeader = pblock->auxpow->parentBlock;
-        while (nMaxTries > 0 && miningHeader.nNonce < nInnerLoopCount && !CheckProofOfWork(miningHeader.GetHashFull(mix_hash), pblock->nBits,
+        while (nMaxTries > 0 && miningHeader.nNonce < nInnerLoopCount && !CheckProofOfWork(miningHeader.GetHash(), pblock->nBits,
                                                                                                   GetParams().GetConsensus())) {
-            if (pblock->nTime < nKAWPOWActivationTime) {
-                ++miningHeader.nNonce;
-            } else { 
-                ++miningHeader.nNonce64;
-            }
+            ++miningHeader.nNonce;
             --nMaxTries;
         }
         if (nMaxTries == 0) {
             break;
         }
-        if (miningHeader.nNonce == nInnerLoopCount || miningHeader.nNonce64 == nInnerLoopCount) {
+        if (miningHeader.nNonce == nInnerLoopCount) {
             continue;
         }
 
