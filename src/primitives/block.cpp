@@ -172,3 +172,16 @@ std::string CBlock::ToString() const
 //LogPrintf("Starting Gost512 %dms\n", nStart);
 //block.TestGost512();
 //LogPrintf("Gost512 Finished %dms\n", GetTimeMillis() - nStart);
+
+void CBlockHeader::SetAuxpow (CAuxPow* apow)
+{
+    if (apow)
+    {
+        auxpow.reset(apow);
+        SetAuxpowVersion(true);
+    } else
+    {
+        auxpow.reset();
+        SetAuxpowVersion(false);
+    }
+}
