@@ -257,7 +257,7 @@ uint64_t SipHashUint256Extra(uint64_t k0, uint64_t k1, const uint256& val, uint3
     return v0 ^ v1 ^ v2 ^ v3;
 }
 
-uint256 KAWPOWHash(const CPureBlockHeader& blockHeader, uint256& mix_hash)
+uint256 KAWPOWHash(const CBlockHeader& blockHeader, uint256& mix_hash)
 {
     static ethash::epoch_context_ptr context{nullptr, nullptr};
 
@@ -278,7 +278,7 @@ uint256 KAWPOWHash(const CPureBlockHeader& blockHeader, uint256& mix_hash)
     return uint256S(to_hex(result.final_hash));
 }
 
-uint256 MEOWPOWHash(const CPureBlockHeader& blockHeader, uint256& mix_hash)
+uint256 MEOWPOWHash(const CBlockHeader& blockHeader, uint256& mix_hash)
 {
     static ethash::epoch_context_ptr context{nullptr, nullptr};
 
@@ -301,7 +301,7 @@ uint256 MEOWPOWHash(const CPureBlockHeader& blockHeader, uint256& mix_hash)
 
 
 
-uint256 KAWPOWHash_OnlyMix(const CPureBlockHeader& blockHeader)
+uint256 KAWPOWHash_OnlyMix(const CBlockHeader& blockHeader)
 {
     // Build the header_hash
     uint256 nHeaderHash = blockHeader.GetKAWPOWHeaderHash();
@@ -313,7 +313,7 @@ uint256 KAWPOWHash_OnlyMix(const CPureBlockHeader& blockHeader)
     return uint256S(to_hex(result));
 }
 
-uint256 MEOWPOWHash_OnlyMix(const CPureBlockHeader& blockHeader)
+uint256 MEOWPOWHash_OnlyMix(const CBlockHeader& blockHeader)
 {
     // Build the header_hash
     uint256 nHeaderHash = blockHeader.GetMEOWPOWHeaderHash();
