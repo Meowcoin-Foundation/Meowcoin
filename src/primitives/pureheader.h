@@ -8,21 +8,6 @@
 
 #include "serialize.h"
 #include "uint256.h"
-#include <stdio.h>
-
-extern uint32_t nKAWPOWActivationTime;
-extern uint32_t nMEOWPOWActivationTime;
-
-class BlockNetwork
-{
-public:
-    BlockNetwork();
-    bool fOnRegtest;
-    bool fOnTestnet;
-    void SetNetwork(const std::string& network);
-};
-
-extern BlockNetwork bNetwork;
 
 /**
  * A block header without auxpow information.  This "intermediate step"
@@ -64,9 +49,7 @@ public:
         READWRITE(hashMerkleRoot);
         READWRITE(nTime);
         READWRITE(nBits);
-        if (nTime < nKAWPOWActivationTime) {
-            READWRITE(nNonce);
-        }
+        READWRITE(nNonce);
     }
 
     void SetNull()
@@ -85,11 +68,6 @@ public:
     }
 
     uint256 GetHash() const;
-    uint256 GetX16RHash() const;
-    uint256 GetX16RV2Hash() const;
-
-    uint256 GetHashFull(uint256& mix_hash) const;
-    uint256 GetAuxPowHash() const;
 
     int64_t GetBlockTime() const
     {
@@ -110,7 +88,6 @@ public:
     {
         return GetBaseVersion(nVersion);
     }
-    
     static inline int32_t GetBaseVersion(int32_t ver)
     {
         return ver % VERSION_AUXPOW;
@@ -167,11 +144,12 @@ public:
 
     /**
      * Check whether this is a "legacy" block without chain ID.
-     * @return True if it is.
+     * @return True iff it is.
      */
     inline bool IsLegacy() const
     {
-        return nVersion == 4 || nVersion == 805306368 || nVersion == 1;
+        return nVersion == 1;
     }
 };
+
 #endif // BITCOIN_PRIMITIVES_PUREHEADER_H
