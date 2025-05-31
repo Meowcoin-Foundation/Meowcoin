@@ -58,11 +58,12 @@ public:
     template <typename Stream, typename Operation>
     inline void SerializationOp(Stream& s, Operation ser_action) {
         READWRITE(this->nVersion);
+        nVersion = this->nVersion.GetBaseVersion();
         READWRITE(hashPrevBlock);
         READWRITE(hashMerkleRoot);
         READWRITE(nTime);
         READWRITE(nBits);
-        if (nTime < nKAWPOWActivationTime || IsAuxpow()) {
+        if (nTime < nKAWPOWActivationTime || this->nVersion.IsAuxpow()) {
             READWRITE(nNonce);
             if (this->IsAuxpow())
             {
@@ -167,6 +168,7 @@ public:
         block.nTime          = nTime;
         block.nBits          = nBits;
         block.nNonce         = nNonce;
+        block.auxpow         = auxpow;
 
         // KAWPOW
         block.nHeight        = nHeight;

@@ -18,7 +18,7 @@ uint256 CPureBlockHeader::GetHash() const
     return thash;
 }
 
-void CPureBlockHeader::SetBaseVersion(int32_t nBaseVersion, int32_t nChainId)
+void CBlockVersion::SetBaseVersion(int32_t nBaseVersion, int32_t nChainId)
 {
     assert(nBaseVersion >= 1 && nBaseVersion < VERSION_AUXPOW);
     assert(!IsAuxpow());
@@ -29,7 +29,7 @@ std::string CPureBlockHeader::ToString() const
 {
     std::stringstream s;
     s << strprintf("CBlock(ver=0x%08x, hashPrevBlock=%s, hashMerkleRoot=%s, nTime=%u, nBits=%08x, nNonce=%u)\n",
-                   nVersion,
+                   nVersion.GetBaseVersion(),
                    hashPrevBlock.ToString(),
                    hashMerkleRoot.ToString(),
                    nTime, nBits, nNonce);
