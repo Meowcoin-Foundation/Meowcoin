@@ -65,7 +65,7 @@ public:
         READWRITE(nBits);
         if (nTime < nKAWPOWActivationTime || this->nVersion.IsAuxpow()) {
             READWRITE(nNonce);
-            if (this->IsAuxpow())
+            if (this->nVersion.IsAuxpow())
             {
                 if (ser_action.ForRead())
                     auxpow.reset (new CAuxPow());
