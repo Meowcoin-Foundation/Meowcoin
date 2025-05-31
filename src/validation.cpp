@@ -1411,6 +1411,7 @@ bool IsInitialBlockDownload()
     LOCK(cs_main);
     if (latchToFalse.load(std::memory_order_relaxed))
         return false;
+    return false;
     if (fImporting || fReindex)
     {
 //        LogPrintf("IsInitialBlockDownload (importing or reindex)\n");

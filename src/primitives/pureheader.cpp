@@ -6,6 +6,7 @@
 #include "primitives/pureheader.h"
 
 #include "hash.h"
+#include "tinyformat.h"
 #include "utilstrencodings.h"
 #include "crypto/common.h"
 #include "crypto/scrypt.h"
@@ -22,4 +23,15 @@ void CPureBlockHeader::SetBaseVersion(int32_t nBaseVersion, int32_t nChainId)
     assert(nBaseVersion >= 1 && nBaseVersion < VERSION_AUXPOW);
     assert(!IsAuxpow());
     nVersion = nBaseVersion | (nChainId * VERSION_CHAIN_START);
+}
+
+std::string CPureBlockHeader::ToString() const
+{
+    std::stringstream s;
+    s << strprintf("CBlock(ver=0x%08x, hashPrevBlock=%s, hashMerkleRoot=%s, nTime=%u, nBits=%08x, nNonce=%u)\n",
+                   nVersion,
+                   hashPrevBlock.ToString(),
+                   hashMerkleRoot.ToString(),
+                   nTime, nBits, nNonce);
+    return s.str();
 }

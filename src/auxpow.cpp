@@ -107,6 +107,7 @@ CAuxPow::check (const uint256& hashAuxBlock, int nChainId,
     CScript::const_iterator pcHead =
         std::search(script.begin(), script.end(), UBEGIN(pchMergedMiningHeader), UEND(pchMergedMiningHeader));
 
+    LogPrintf(parentBlock.ToString().c_str());
     CScript::const_iterator pc =
         std::search(script.begin(), script.end(), vchRootHash.begin(), vchRootHash.end());
 

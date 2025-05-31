@@ -74,6 +74,8 @@ public:
         return (int64_t)nTime;
     }
 
+    std::string ToString() const;
+
     /* Below are methods to interpret the version with respect to
        auxpow data and chain ID.  This used to be in the CBlockVersion
        class, but was moved here when we switched back to nVersion being
