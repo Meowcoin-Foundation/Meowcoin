@@ -127,13 +127,14 @@ std::string CBlockHeader::ToString() const
 std::string CBlock::ToString() const
 {
     std::stringstream s;
-    s << strprintf("CBlock(hash=%s, ver=0x%08x, hashPrevBlock=%s, hashMerkleRoot=%s, nTime=%u, nBits=%08x, nNonce=%u, nNonce64=%u, vtx=%u, auxpow=%s)\n",
+    s << strprintf("CBlock(hash=%s, ver=%d, hashPrevBlock=%s, hashMerkleRoot=%s, nTime=%u, nBits=%08x, nNonce=%u, nNonce64=%u, vtx=%u, auxpow=%s)\n",
         GetHash().ToString(),
         nVersion.GetFullVersion(),
         hashPrevBlock.ToString(),
         hashMerkleRoot.ToString(),
         nTime, nBits, nNonce, nNonce64,
-        vtx.size(), auxpow.ToString());
+        vtx.size(), 
+        auxpow ? auxpow->ToString() : "null");
     for (const auto& tx : vtx) {
         s << "  " << tx->ToString() << "\n";
     }

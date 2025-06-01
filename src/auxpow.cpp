@@ -79,52 +79,51 @@ bool
 CAuxPow::check (const uint256& hashAuxBlock, int nChainId,
                 const Consensus::Params& params) const
 {
-    LogPrintf("check auxpow with parentBlock chainId = %d and vChainMerkleBranch size %d and nChainIndex %d\n",parentBlock.nVersion.GetChainId(),vChainMerkleBranch.size(),nChainIndex);
+    LogPrint(BCLog::AUXPOW, "check auxpow with parentBlock chainId = %d and vChainMerkleBranch size %d and nChainIndex %d\n",
+             parentBlock.nVersion.GetChainId(), vChainMerkleBranch.size(), nChainIndex);
 
     if (nIndex != 0)
         return error("AuxPow is not a generate");
 
-    if (params.fStrictChainId && parentBlock.nVersion.GetChainId () == nChainId)
+    if (params.fStrictChainId && parentBlock.nVersion.GetChainId() == nChainId)
         return error("Aux POW parent has our chain ID");
 
     if (vChainMerkleBranch.size() > 30)
         return error("Aux POW chain merkle branch too long");
 
-    LogPrintf("get nRootHash vChainMerkleBranch size %d\n",vChainMerkleBranch.size());
-
     // Check that the chain merkle root is in the coinbase
-    const uint256 nRootHash
-      = CheckMerkleBranch (hashAuxBlock, vChainMerkleBranch, nChainIndex);
-    LogPrintf("create vchRootHash: %s\n",nRootHash.GetHex().c_str());
+    const uint256 nRootHash = CheckMerkleBranch(hashAuxBlock, vChainMerkleBranch, nChainIndex);
+    LogPrint(BCLog::AUXPOW, "create vchRootHash: %s\n", nRootHash.GetHex());
 
-    valtype vchRootHash(nRootHash.begin (), nRootHash.end ());
-    std::reverse (vchRootHash.begin (), vchRootHash.end ()); // correct endian
+    valtype vchRootHash(nRootHash.begin(), nRootHash.end());
+    std::reverse(vchRootHash.begin(), vchRootHash.end()); // correct endian
 
-    LogPrintf("transaction_hash = %s\n",GetHash().GetHex().c_str());
-    LogPrintf("hashBlock = %s\n",hashBlock.GetHex().c_str());
-    LogPrintf("auxpow transaction_hash = %s\n",GetHash().ToString().c_str());
+    LogPrint(BCLog::AUXPOW, "transaction_hash = %s\n", GetHash().GetHex());
+    LogPrint(BCLog::AUXPOW, "hashBlock = %s\n", hashBlock.GetHex());
+    LogPrint(BCLog::AUXPOW, "auxpow transaction_hash = %s\n", GetHash().ToString());
 
     // Check that we are in the parent block merkle tree
     if (CheckMerkleBranch(GetHash(), vMerkleBranch, nIndex)
-          != parentBlock.hashMerkleRoot)
+        != parentBlock.hashMerkleRoot)
         return error("Aux POW merkle root incorrect");
 
     const CScript script = tx->vin[0].scriptSig;
-    LogPrintf("script size = %lu\n",script.size());
+    LogPrint(BCLog::AUXPOW, "script size = %lu\n", script.size());
 
     // Check that the same work is not submitted twice to our chain.
-    //
-
     CScript::const_iterator pcHead =
         std::search(script.begin(), script.end(), UBEGIN(pchMergedMiningHeader), UEND(pchMergedMiningHeader));
 
-    LogPrintf("script:\n");
-    for (unsigned int i=0;i<script.size();i++) {
-      LogPrintf("%02x",script[i]);
-    }
-    LogPrintf("\n");
+    // Debug log the script bytes for troubleshooting
+    std::string scriptHex = HexStr(script.begin(), script.end());
+    LogPrint(BCLog::AUXPOW, "script: %s\n", scriptHex);
+    std::string headerHex = HexStr(UBEGIN(pchMergedMiningHeader), UEND(pchMergedMiningHeader));
+    LogPrint(BCLog::AUXPOW, "header: %s\n", headerHex);
+    std::string rootHashHex = HexStr(vchRootHash.begin(), vchRootHash.end());
+    LogPrint(BCLog::AUXPOW, "rootHash: %s\n", rootHashHex);
 
-    LogPrintf(parentBlock.ToString().c_str());
+    LogPrint(BCLog::AUXPOW, "parentBlock: %s\n", parentBlock.ToString());
+    
     CScript::const_iterator pc =
         std::search(script.begin(), script.end(), vchRootHash.begin(), vchRootHash.end());
 
@@ -158,15 +157,15 @@ CAuxPow::check (const uint256& hashAuxBlock, int nChainId,
 
     uint32_t nSize;
     memcpy(&nSize, &pc[0], 4);
-    nSize = le32toh (nSize);
-    const unsigned merkleHeight = vChainMerkleBranch.size ();
+    nSize = le32toh(nSize);
+    const unsigned merkleHeight = vChainMerkleBranch.size();
     if (nSize != (1u << merkleHeight))
         return error("Aux POW merkle branch size does not match parent coinbase");
 
     uint32_t nNonce;
     memcpy(&nNonce, &pc[4], 4);
-    nNonce = le32toh (nNonce);
-    if (nChainIndex != getExpectedIndex (nNonce, nChainId, merkleHeight))
+    nNonce = le32toh(nNonce);
+    if (nChainIndex != getExpectedIndex(nNonce, nChainId, merkleHeight))
         return error("Aux POW wrong index");
 
     return true;
@@ -224,17 +223,35 @@ CAuxPow::initAuxPow (CBlockHeader& header)
 
   /* Build a minimal coinbase script input for merge-mining.  */
   const uint256 blockHash = header.GetHash ();
-  valtype inputData(blockHash.begin (), blockHash.end ());
-  std::reverse (inputData.begin (), inputData.end ());
-  inputData.push_back (1);
-  inputData.insert (inputData.end (), 7, 0);
-
+  
+  // Create a fake merkle root as stand-in for the root hash
+  uint256 merkleRoot = blockHash;
+  
+  // vchRootHash is the 32-byte LE of the merkle root
+  valtype vchRootHash(merkleRoot.begin(), merkleRoot.end());
+  std::reverse(vchRootHash.begin(), vchRootHash.end());
+  
+  // Start with the merged-mining header
+  CScript scriptSig;
+  scriptSig << std::vector<unsigned char>(pchMergedMiningHeader, pchMergedMiningHeader+4);
+  
+  // Then add the merkle root hash
+  scriptSig << vchRootHash;
+  
+  // Finally add tree size (1) and nonce (0)
+  uint32_t nSize = 1;  // Tree size of 1 (encoded as little-endian)
+  uint32_t nNonce = 0; // Nonce of 0 (encoded as little-endian)
+  
+  // Add the size and nonce in little-endian format
+  scriptSig << nSize;
+  scriptSig << nNonce;
+  
   /* Fake a parent-block coinbase with just the required input
      script and no outputs.  */
   CMutableTransaction coinbase;
   coinbase.vin.resize (1);
   coinbase.vin[0].prevout.SetNull ();
-  coinbase.vin[0].scriptSig = (CScript () << inputData);
+  coinbase.vin[0].scriptSig = scriptSig;
   assert (coinbase.vout.empty ());
   CTransactionRef coinbaseRef = MakeTransactionRef (coinbase);
 
@@ -254,18 +271,16 @@ CAuxPow::initAuxPow (CBlockHeader& header)
   header.auxpow->parentBlock = parent;
 }
 
-std::string CAuxPow::ToString()
+std::string CAuxPow::ToString() const
 {
-
     std::stringstream s;
-    s << strprintf("CAuxPow(version=%d, hash=%s, hashPrevBlock=%s, hashMerkleRoot=%s, nTime=%u, nBits=%08x, nNonce=%u)\n"
-        vParentBlockHeader.nVersion.GetFullVersion(),
-        vParentBlockHeader.GetHash().ToString().c_str()
-        vParentBlockHeader.hashPrevBlock.ToString().c_str(),
-        vParentBlockHeader.hashMerkleRoot.ToString().c_str(),
-        vParentBlockHeader.nTime,
-        vParentBlockHeader.nBits,
-        vParentBlockHeader.nNonce,
-    );
+    s << strprintf("CAuxPow(version=%d, hash=%s, hashPrevBlock=%s, hashMerkleRoot=%s, nTime=%u, nBits=%08x, nNonce=%u)\n",
+        parentBlock.nVersion.GetFullVersion(),
+        parentBlock.GetHash().ToString().c_str(),
+        parentBlock.hashPrevBlock.ToString().c_str(),
+        parentBlock.hashMerkleRoot.ToString().c_str(),
+        parentBlock.nTime,
+        parentBlock.nBits,
+        parentBlock.nNonce);
     return s.str();
 }

@@ -23,7 +23,8 @@ expand_path() {
 BDB_PREFIX="$(expand_path ${1})/db4"; shift;
 BDB_VERSION='db-4.8.30.NC'
 BDB_HASH='12edc0df75bf9abd7f82f821795bcee50f42cb2e5f76a6a281b85732798364ef'
-BDB_URL="https://download.oracle.com/berkeley-db/${BDB_VERSION}.tar.gz"
+# Use alternative mirror
+BDB_URL="https://archive.debian.org/debian/pool/main/d/db4.8/db4.8_4.8.30.orig.tar.gz"
 
 check_exists() {
   command -v "$1" >/dev/null
