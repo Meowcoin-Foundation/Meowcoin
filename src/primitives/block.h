@@ -13,7 +13,8 @@
 #include "serialize.h"
 #include "uint256.h"
 #include <boost/shared_ptr.hpp>
-
+#include "tinyformat.h"
+#include "utilstrencodings.h"
 /** Nodes collect new transactions into a block, hash them into a hash tree,
  * and scan through nonce values to make the block's hash satisfy proof-of-work
  * requirements.  When they solve the proof-of-work, they broadcast the block
@@ -76,6 +77,7 @@ public:
                 auxpow.reset();
             }
         } else {
+            LogPrintf("KAWPOW block header serialization\n");
             READWRITE(nHeight);
             READWRITE(nNonce64);
             READWRITE(mix_hash);
