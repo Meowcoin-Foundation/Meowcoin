@@ -57,21 +57,18 @@ public:
 
     template <typename Stream, typename Operation>
     inline void SerializationOp(Stream& s, Operation ser_action) {
-        READWRITE(this->nVersion);
-        READWRITE(hashPrevBlock);
-        READWRITE(hashMerkleRoot);
-        READWRITE(nTime);
-        READWRITE(nBits);
+        // First serialize everything in CPureBlockHeader
+        READWRITE(*(CPureBlockHeader*)this);
+
         if (nTime < nKAWPOWActivationTime || this->nVersion.IsAuxpow()) {
-            READWRITE(nNonce);
+            // nNonce is already serialized in the base class, no need to do it again
+            
             if (this->nVersion.IsAuxpow())
             {
                 if (ser_action.ForRead())
-                    auxpow.reset (new CAuxPow());
+                    auxpow.reset(new CAuxPow());
                 assert(auxpow);
                 READWRITE(*auxpow);
-                LogPrintf(auxpow->parentBlock.ToString().c_str());
-                LogPrintf(this.ToString().c_str());
             } else if (ser_action.ForRead()) {
                 auxpow.reset();
             }
@@ -120,7 +117,7 @@ public:
      * the version accordingly.
      * @param apow Pointer to the auxpow to use or NULL.
      */
-    void SetAuxpow (CAuxPow* apow);
+    void SetAuxpow(CAuxPow* apow);
 };
 
 
