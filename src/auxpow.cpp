@@ -253,3 +253,19 @@ CAuxPow::initAuxPow (CBlockHeader& header)
   header.auxpow->nIndex = 0;
   header.auxpow->parentBlock = parent;
 }
+
+std::string CAuxPow::ToString()
+{
+
+    std::stringstream s;
+    s << strprintf("CAuxPow(version=%d, hash=%s, hashPrevBlock=%s, hashMerkleRoot=%s, nTime=%u, nBits=%08x, nNonce=%u)\n"
+        vParentBlockHeader.nVersion.GetFullVersion(),
+        vParentBlockHeader.GetHash().ToString().c_str()
+        vParentBlockHeader.hashPrevBlock.ToString().c_str(),
+        vParentBlockHeader.hashMerkleRoot.ToString().c_str(),
+        vParentBlockHeader.nTime,
+        vParentBlockHeader.nBits,
+        vParentBlockHeader.nNonce,
+    );
+    return s.str();
+}

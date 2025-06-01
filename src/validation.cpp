@@ -1304,6 +1304,8 @@ bool CheckProofOfWork(const CBlockHeader& block, const Consensus::Params& params
     if (!block.nVersion.IsAuxpow())
         return error("%s : auxpow on block with non-auxpow version", __func__);
 
+    LogPrintf("%s : Checking AuxPow Block: %s", __func__, block.ToString().c_str());
+
     if (!block.auxpow->check(block.GetHash(), block.nVersion.GetChainId(), params))
         return error("%s : AUX POW is not valid", __func__);
     if (!CheckProofOfWork(block.auxpow->getParentBlockHash(), block.nBits, params))

@@ -205,7 +205,7 @@ public:
    * @param header The header to set the auxpow on.
    */
   static void initAuxPow (CBlockHeader& header);
-
+  std::string ToString() const;
 };
 
 #endif // BITCOIN_AUXPOW_H
