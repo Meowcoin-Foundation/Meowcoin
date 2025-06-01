@@ -70,6 +70,8 @@ public:
                     auxpow.reset (new CAuxPow());
                 assert(auxpow);
                 READWRITE(*auxpow);
+                LogPrintf(auxpow->parentBlock.ToString().c_str());
+                LogPrintf(this.ToString().c_str());
             } else if (ser_action.ForRead()) {
                 auxpow.reset();
             }
