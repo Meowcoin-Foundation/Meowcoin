@@ -59,11 +59,16 @@ public:
     template <typename Stream, typename Operation>
     inline void SerializationOp(Stream& s, Operation ser_action) {
         // First serialize everything in CPureBlockHeader
-        READWRITE(*(CPureBlockHeader*)this);
-
+        READWRITE(this->nVersion);
+        READWRITE(hashPrevBlock);
+        READWRITE(hashMerkleRoot);
+        READWRITE(nTime);
+        READWRITE(nBits);
         if (nTime < nKAWPOWActivationTime || this->nVersion.IsAuxpow()) {
             // nNonce is already serialized in the base class, no need to do it again
-            
+            LogPrintf("Scrypt/X16R Serialisation\n");
+            LogPrintf("%s : %s", __func__, ToString().c_str());
+            READWRITE(nNonce);
             if (this->nVersion.IsAuxpow())
             {
                 if (ser_action.ForRead())

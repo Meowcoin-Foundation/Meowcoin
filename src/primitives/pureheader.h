@@ -14,11 +14,14 @@
  * from a base version, the modifier flags (like auxpow) and
  * also the auxpow chain ID.
  */
+/**
+ * Encapsulate a block version.  This takes care of building it up
+ * from a base version, the modifier flags (like auxpow) and
+ * also the auxpow chain ID.
+ */
 class CBlockVersion
 {
-
 private:
-
     /* Modifiers to the version.  */
     static const int32_t VERSION_AUXPOW = (1 << 8);
 
@@ -26,10 +29,9 @@ private:
     static const int32_t VERSION_CHAIN_START = (1 << 16);
 
     /** The version as integer.  Should not be accessed directly.  */
-    int32_t nVersion;
+    int nVersion;
 
 public:
-
     inline CBlockVersion()
     {
         SetNull();
@@ -38,7 +40,8 @@ public:
     ADD_SERIALIZE_METHODS;
 
     template <typename Stream, typename Operation>
-    inline void SerializationOp(Stream& s, Operation ser_action) {
+    inline void SerializationOp(Stream& s, Operation ser_action, int nType, int nVersion)
+    {
         READWRITE(this->nVersion);
     }
 
@@ -48,29 +51,12 @@ public:
     }
 
     /**
-     * Extract the base version (without modifiers and chain ID).
-     * @return The base version./
-     */
-    inline int32_t GetBaseVersion() const
-    {
-        return nVersion % VERSION_AUXPOW;
-    }
-
-    /**
-     * Set the base version (apart from chain ID and auxpow flag) to
-     * the one given.  This should only be called when auxpow is not yet
-     * set, to initialise a block!
-     * @param nBaseVersion The base version.
-     */
-    void SetBaseVersion(int32_t nBaseVersion, int32_t nChainId);
-
-    /**
      * Extract the chain ID.
      * @return The chain ID encoded in the version.
      */
     inline int32_t GetChainId() const
     {
-        return nVersion / VERSION_CHAIN_START;
+        return nVersion >> 16;
     }
 
     /**
@@ -115,7 +101,7 @@ public:
      * Set the auxpow flag.  This is used for testing.
      * @param auxpow Whether to mark auxpow as true.
      */
-    inline void SetAuxpow (bool auxpow)
+    inline void SetAuxpow(bool auxpow)
     {
         if (auxpow)
             nVersion |= VERSION_AUXPOW;
@@ -125,14 +111,35 @@ public:
 
     /**
      * Check whether this is a "legacy" block without chain ID.
-     * @return True iff it is.
+     * @return True if it is.
      */
     inline bool IsLegacy() const
     {
-        return nVersion == 4 || nVersion == 805306368 || nVersion == 1;
+        return nVersion == 1
+            || (nVersion == 2 && GetChainId() == 0);
     }
 
+    CBlockVersion& operator=(const CBlockVersion& other)
+    {
+        nVersion = other.nVersion;
+        return *this;
+    }
+
+    CBlockVersion& operator=(const int nBaseVersion)
+    {
+        nVersion = (nBaseVersion & 0x000000ff) | (nVersion & 0xffffff00);
+        return *this;
+    }
+
+    operator int() { return nVersion & 0x000000ff; }
+    friend inline bool operator==(const CBlockVersion a, const int b) { return (a.nVersion & 0x000000ff) == b; }
+    friend inline bool operator!=(const CBlockVersion a, const int b) { return (a.nVersion & 0x000000ff) != b; }
+    friend inline bool operator>(const CBlockVersion a, const int b) { return (a.nVersion & 0x000000ff) > b; }
+    friend inline bool operator<(const CBlockVersion a, const int b) { return (a.nVersion & 0x000000ff) < b; }
+    friend inline bool operator>=(const CBlockVersion a, const int b) { return (a.nVersion & 0x000000ff) >= b; }
+    friend inline bool operator<=(const CBlockVersion a, const int b) { return (a.nVersion & 0x000000ff) <= b; }
 };
+
 /**
  * A block header without auxpow information.  This "intermediate step"
  * in constructing the full header is useful, because it breaks the cyclic
