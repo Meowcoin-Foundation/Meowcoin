@@ -79,6 +79,8 @@ bool
 CAuxPow::check (const uint256& hashAuxBlock, int nChainId,
                 const Consensus::Params& params) const
 {
+    LogPrintf("check auxpow with parentBlock chainId = %d and vChainMerkleBranch size %d and nChainIndex %d\n",parentBlock.nVersion.GetChainId(),vChainMerkleBranch.size(),nChainIndex);
+
     if (nIndex != 0)
         return error("AuxPow is not a generate");
 
@@ -88,11 +90,19 @@ CAuxPow::check (const uint256& hashAuxBlock, int nChainId,
     if (vChainMerkleBranch.size() > 30)
         return error("Aux POW chain merkle branch too long");
 
+    LogPrintf("get nRootHash vChainMerkleBranch size %d\n",vChainMerkleBranch.size());
+
     // Check that the chain merkle root is in the coinbase
     const uint256 nRootHash
       = CheckMerkleBranch (hashAuxBlock, vChainMerkleBranch, nChainIndex);
+    LogPrintf("create vchRootHash: %s\n",nRootHash.GetHex().c_str());
+
     valtype vchRootHash(nRootHash.begin (), nRootHash.end ());
     std::reverse (vchRootHash.begin (), vchRootHash.end ()); // correct endian
+
+    LogPrintf("transaction_hash = %s\n",GetHash().GetHex().c_str());
+    LogPrintf("hashBlock = %s\n",hashBlock.GetHex().c_str());
+    LogPrintf("auxpow transaction_hash = %s\n",GetHash().ToString().c_str());
 
     // Check that we are in the parent block merkle tree
     if (CheckMerkleBranch(GetHash(), vMerkleBranch, nIndex)
@@ -100,12 +110,19 @@ CAuxPow::check (const uint256& hashAuxBlock, int nChainId,
         return error("Aux POW merkle root incorrect");
 
     const CScript script = tx->vin[0].scriptSig;
+    LogPrintf("script size = %lu\n",script.size());
 
     // Check that the same work is not submitted twice to our chain.
     //
 
     CScript::const_iterator pcHead =
         std::search(script.begin(), script.end(), UBEGIN(pchMergedMiningHeader), UEND(pchMergedMiningHeader));
+
+    LogPrintf("script:\n");
+    for (unsigned int i=0;i<script.size();i++) {
+      LogPrintf("%02x",script[i]);
+    }
+    LogPrintf("\n");
 
     LogPrintf(parentBlock.ToString().c_str());
     CScript::const_iterator pc =
