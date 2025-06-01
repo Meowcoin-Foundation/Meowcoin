@@ -210,7 +210,7 @@ public:
     uint32_t nStatus;
 
     //! block header
-    CBlockVersion nVersion;
+    int32_t nVersion;
     uint256 hashMerkleRoot;
     uint32_t nTime;
     uint32_t nBits;
@@ -242,7 +242,7 @@ public:
         nSequenceId = 0;
         nTimeMax = 0;
 
-        nVersion.SetNull();
+        nVersion       = 0;
         hashMerkleRoot = uint256();
         nTime          = 0;
         nBits          = 0;
@@ -367,7 +367,7 @@ public:
     /* Analyse the block version.  */
     inline int GetBaseVersion() const
     {
-        return nVersion.GetBaseVersion();
+        return CPureBlockHeader::GetBaseVersion(nVersion);
     }
 };
 

@@ -29,7 +29,7 @@ std::string CPureBlockHeader::ToString() const
 {
     std::stringstream s;
     s << strprintf("CBlock(ver=0x%08x, hashPrevBlock=%s, hashMerkleRoot=%s, nTime=%u, nBits=%08x, nNonce=%u)\n",
-                   nVersion.GetFullVersion(),
+                   nVersion.GetBaseVersion(),
                    hashPrevBlock.ToString(),
                    hashMerkleRoot.ToString(),
                    nTime, nBits, nNonce);

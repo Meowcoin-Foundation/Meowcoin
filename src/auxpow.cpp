@@ -85,7 +85,7 @@ CAuxPow::check (const uint256& hashAuxBlock, int nChainId,
     if (nIndex != 0)
         return error("AuxPow is not a generate");
 
-    if (params.fStrictChainId && parentBlock.nVersion.GetChainId() == nChainId)
+    if (params.fStrictChainId && parentBlock.GetChainId () == nChainId)
         return error("Aux POW parent has our chain ID");
 
     if (vChainMerkleBranch.size() > 30)
@@ -219,7 +219,7 @@ void
 CAuxPow::initAuxPow (CBlockHeader& header)
 {
   /* Set auxpow flag right now, since we take the block hash below.  */
-  header.nVersion.SetAuxpow(true);
+  header.SetAuxpowVersion(true);
 
   /* Build a minimal coinbase script input for merge-mining.  */
   const uint256 blockHash = header.GetHash ();
@@ -257,7 +257,7 @@ CAuxPow::initAuxPow (CBlockHeader& header)
 
   /* Build a fake parent block with the coinbase.  */
   CBlock parent;
-  parent.nVersion.SetGenesisVersion(1);
+  parent.nVersion = 1;
   parent.vtx.resize (1);
   parent.vtx[0] = coinbaseRef;
   parent.hashMerkleRoot = BlockMerkleRoot (parent);

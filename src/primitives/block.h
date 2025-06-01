@@ -60,6 +60,7 @@ public:
     inline void SerializationOp(Stream& s, Operation ser_action) {
         // First serialize everything in CPureBlockHeader
         READWRITE(this->nVersion);
+        nVersion = this->nVersion.GetBaseVersion();
         READWRITE(hashPrevBlock);
         READWRITE(hashMerkleRoot);
         READWRITE(nTime);

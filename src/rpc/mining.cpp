@@ -636,7 +636,6 @@ UniValue getblocktemplate(const JSONRPCRequest& request)
 
     UniValue aRules(UniValue::VARR);
     UniValue vbavailable(UniValue::VOBJ);
-    int64_t nBlockVersion = pblock->nVersion.GetBaseVersion();
     for (int j = 0; j < (int)Consensus::MAX_VERSION_BITS_DEPLOYMENTS; ++j) {
         Consensus::DeploymentPos pos = Consensus::DeploymentPos(j);
         ThresholdState state = VersionBitsState(pindexPrev, consensusParams, pos, versionbitscache);
@@ -647,7 +646,7 @@ UniValue getblocktemplate(const JSONRPCRequest& request)
                 break;
             case THRESHOLD_LOCKED_IN:
                 // Ensure bit is set in block version
-                nBlockVersion |= VersionBitsMask(consensusParams, pos);
+                pblock->nVersion |= VersionBitsMask(consensusParams, pos);
                 // FALL THROUGH to get vbavailable set...
             case THRESHOLD_STARTED:
             {
@@ -656,7 +655,7 @@ UniValue getblocktemplate(const JSONRPCRequest& request)
                 if (setClientRules.find(vbinfo.name) == setClientRules.end()) {
                     if (!vbinfo.gbt_force) {
                         // If the client doesn't support this, don't indicate it in the [default] version
-                        nBlockVersion &= ~VersionBitsMask(consensusParams, pos);
+                        pblock->nVersion &= ~VersionBitsMask(consensusParams, pos);
                     }
                 }
                 break;
@@ -677,7 +676,7 @@ UniValue getblocktemplate(const JSONRPCRequest& request)
             }
         }
     }
-    result.push_back(Pair("version", nBlockVersion));
+    result.push_back(Pair("version", pblock->nVersion));
     result.push_back(Pair("rules", aRules));
     result.push_back(Pair("vbavailable", vbavailable));
     result.push_back(Pair("vbrequired", int(0)));
@@ -1464,7 +1463,7 @@ UniValue AuxMiningCreateBlock(const CScript& scriptPubKey)
 
         // Finalise it by setting the version and building the merkle root
         IncrementExtraNonce(&newBlock->block, pindexPrev, nExtraNonce);
-        newBlock->block.nVersion.SetAuxpow(true);
+        newBlock->block.SetAuxpowVersion(true);
 
         // Save
         pblock = &newBlock->block;
@@ -1488,7 +1487,7 @@ UniValue AuxMiningCreateBlock(const CScript& scriptPubKey)
 
     UniValue result(UniValue::VOBJ);
     result.pushKV("hash", pblock->GetHash().GetHex());
-    result.pushKV("chainid", pblock->nVersion.GetChainId());
+    result.pushKV("chainid", pblock->GetChainId());
     result.pushKV("previousblockhash", pblock->hashPrevBlock.GetHex());
     result.pushKV("coinbasevalue", (int64_t)pblock->vtx[0]->vout[0].nValue);
     result.pushKV("bits", strprintf("%08x", pblock->nBits));

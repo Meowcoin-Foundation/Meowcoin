@@ -19,7 +19,7 @@ CBlockHeader CBlockIndex::GetBlockHeader(const Consensus::Params& consensusParam
     /* The CBlockIndex object's block header is missing the auxpow.
         So if this is an auxpow block, read it from disk instead.  We only
         have to read the actual *header*, not the full block.  */
-    if (block.nVersion.IsAuxpow())
+    if (block.IsAuxpow())
     {
         ReadBlockHeaderFromDisk(block, this, consensusParams);
         return block;

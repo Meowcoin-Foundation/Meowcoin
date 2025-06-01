@@ -1271,17 +1271,17 @@ bool CheckProofOfWork(const CBlockHeader& block, const Consensus::Params& params
        the chain ID is correct.  Legacy blocks are not allowed since
        the merge-mining start, which is checked in AcceptBlockHeader
        where the height is known.  */
-    if (!block.nVersion.IsLegacy() && params.fStrictChainId
-        && block.nVersion.GetChainId() != params.nAuxpowChainId)
+    if (!block.IsLegacy() && params.fStrictChainId
+        && block.GetChainId() != params.nAuxpowChainId)
         return error("%s : block does not have our chain ID"
                      " (got %d, expected %d, full nVersion %d)",
-                     __func__, block.nVersion.GetChainId(),
-                     params.nAuxpowChainId, block.nVersion.GetFullVersion());
+                     __func__, block.GetChainId(),
+                     params.nAuxpowChainId, block.nVersion);
 
     /* If there is no auxpow, just check the block hash.  */
     if (!block.auxpow)
     {
-        if (block.nVersion.IsAuxpow())
+        if (block.IsAuxpow())
             return error("%s : no auxpow on block with auxpow version",
                          __func__);
 
@@ -1301,12 +1301,12 @@ bool CheckProofOfWork(const CBlockHeader& block, const Consensus::Params& params
     }
 
     /* We have auxpow.  Check it.  */
-    if (!block.nVersion.IsAuxpow())
+    if (!block.IsAuxpow())
         return error("%s : auxpow on block with non-auxpow version", __func__);
 
     LogPrintf("%s : Checking AuxPow Block: %s", __func__, block.ToString().c_str());
 
-    if (!block.auxpow->check(block.GetHash(), block.nVersion.GetChainId(), params))
+    if (!block.auxpow->check(block.GetHash(), block.GetChainId(), params))
         return error("%s : AUX POW is not valid", __func__);
     if (!CheckProofOfWork(block.auxpow->getParentBlockHash(), block.nBits, params))
         return error("%s : AUX proof of work failed", __func__);
@@ -2399,8 +2399,8 @@ public:
 
     bool Condition(const CBlockIndex* pindex, const Consensus::Params& params) const override
     {
-        return ((pindex->nVersion.GetBaseVersion() & VERSIONBITS_TOP_MASK) == VERSIONBITS_TOP_BITS) &&
-               ((pindex->nVersion.GetBaseVersion() >> bit) & 1) != 0 &&
+        return ((pindex->GetBaseVersion() & VERSIONBITS_TOP_MASK) == VERSIONBITS_TOP_BITS) &&
+               ((pindex->GetBaseVersion() >> bit) & 1) != 0 &&
                ((ComputeBlockVersion(pindex->pprev, params) >> bit) & 1) == 0;
     }
 };
@@ -3201,7 +3201,7 @@ void static UpdateTip(CBlockIndex *pindexNew, const CChainParams& chainParams) {
         for (int i = 0; i < 100 && pindex != nullptr; i++)
         {
             int32_t nExpectedVersion = ComputeBlockVersion(pindex->pprev, chainParams.GetConsensus());
-            if (pindex->nVersion.GetBaseVersion() > nExpectedVersion)
+            if (pindex->nVersion > nExpectedVersion)
                 ++nUpgraded;
             pindex = pindex->pprev;
         }
@@ -3215,7 +3215,7 @@ void static UpdateTip(CBlockIndex *pindexNew, const CChainParams& chainParams) {
         }
     }
     LogPrintf("%s: new best=%s height=%d version=0x%08x log2_work=%.8g tx=%lu date='%s' progress=%f cache=%.1fMiB(%utxo)", __func__,
-      chainActive.Tip()->GetBlockHash().ToString(), chainActive.Height(), chainActive.Tip()->nVersion.GetBaseVersion(),
+      chainActive.Tip()->GetBlockHash().ToString(), chainActive.Height(), chainActive.Tip()->nVersion,
       log(chainActive.Tip()->nChainWork.getdouble())/log(2.0), (unsigned long)chainActive.Tip()->nChainTx,
       DateTimeStrFormat("%Y-%m-%d %H:%M:%S", chainActive.Tip()->GetBlockTime()),
       GuessVerificationProgress(chainParams.TxData(), chainActive.Tip()), pcoinsTip->DynamicMemoryUsage() * (1.0 / (1<<20)), pcoinsTip->GetCacheSize());
@@ -4241,7 +4241,7 @@ static bool ContextualCheckBlockHeader(const CBlockHeader& block, CValidationSta
     // Check proof of work
     const Consensus::Params& consensusParams = params.GetConsensus();
 
-    if (!consensusParams.AllowLegacyBlocks(nHeight) && block.nVersion.IsLegacy())
+    if (!consensusParams.AllowLegacyBlocks(nHeight) && block.IsLegacy())
         return state.DoS(100, error("%s : legacy block after auxpow start", __func__), REJECT_INVALID, "late-legacy-block");
 
     // Check proof of work
