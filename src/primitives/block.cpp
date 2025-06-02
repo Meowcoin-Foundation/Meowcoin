@@ -115,7 +115,7 @@ std::string CBlockHeader::ToString() const
 {
     std::stringstream s;
     s << strprintf("CBlock(ver=0x%08x, hashPrevBlock=%s, hashMerkleRoot=%s, nTime=%u, nBits=%08x, nNonce=%u, nNonce64=%u, nHeight=%u)\n",
-                   nVersion,
+                   nVersion.GetFullVersion(),
                    hashPrevBlock.ToString(),
                    hashMerkleRoot.ToString(),
                    nTime, nBits, nNonce, nNonce64, nHeight);
@@ -129,7 +129,7 @@ std::string CBlock::ToString() const
     std::stringstream s;
     s << strprintf("CBlock(hash=%s, ver=%d, hashPrevBlock=%s, hashMerkleRoot=%s, nTime=%u, nBits=%08x, nNonce=%u, nNonce64=%u, vtx=%u, auxpow=%s)\n",
         GetHash().ToString(),
-        nVersion,
+        nVersion.GetFullVersion(),
         hashPrevBlock.ToString(),
         hashMerkleRoot.ToString(),
         nTime, nBits, nNonce, nNonce64,
@@ -179,10 +179,10 @@ void CBlockHeader::SetAuxpow (CAuxPow* apow)
     if (apow)
     {
         auxpow.reset(apow);
-        SetAuxpowVersion(true);
+        nVersion.SetAuxpow(true);
     } else
     {
         auxpow.reset();
-        SetAuxpowVersion(false);
+        nVersion.SetAuxpow(false);
     }
 }

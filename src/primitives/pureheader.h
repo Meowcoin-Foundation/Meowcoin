@@ -70,6 +70,15 @@ public:
     }
 
     /**
+     * Extract the base version (without modifiers and chain ID).
+     * @return The base version./
+     */
+    inline int32_t GetBaseVersion() const
+    {
+        return nVersion % VERSION_AUXPOW;
+    }
+
+    /**
      * Extract the full version.  Used for RPC results and debug prints.
      * @return The full version.
      */
@@ -131,7 +140,20 @@ public:
         return *this;
     }
 
+    CBlockVersion& operator|(const int nBaseVersion)
+    {
+        nVersion |= nBaseVersion;
+        return *this;
+    }
+
+    CBlockVersion& operator&=(const int nBaseVersion)
+    {
+        nVersion &= nBaseVersion;
+        return *this;
+    }
+
     operator int() { return nVersion & 0x000000ff; }
+    friend inline bool operator|=(const CBlockVersion a, const int b) { return (a.nVersion & 0x000000ff) == b; }
     friend inline bool operator==(const CBlockVersion a, const int b) { return (a.nVersion & 0x000000ff) == b; }
     friend inline bool operator!=(const CBlockVersion a, const int b) { return (a.nVersion & 0x000000ff) != b; }
     friend inline bool operator>(const CBlockVersion a, const int b) { return (a.nVersion & 0x000000ff) > b; }
@@ -168,7 +190,6 @@ public:
     template <typename Stream, typename Operation>
     inline void SerializationOp(Stream& s, Operation ser_action) {
         READWRITE(this->nVersion);
-        nVersion = this->nVersion.GetBaseVersion();
         READWRITE(hashPrevBlock);
         READWRITE(hashMerkleRoot);
         READWRITE(nTime);

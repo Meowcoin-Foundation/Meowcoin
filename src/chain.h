@@ -210,7 +210,7 @@ public:
     uint32_t nStatus;
 
     //! block header
-    int32_t nVersion;
+    CBlockVersion nVersion;
     uint256 hashMerkleRoot;
     uint32_t nTime;
     uint32_t nBits;
@@ -363,12 +363,6 @@ public:
     //! Efficiently find an ancestor of this block.
     CBlockIndex* GetAncestor(int height);
     const CBlockIndex* GetAncestor(int height) const;
-
-    /* Analyse the block version.  */
-    inline int GetBaseVersion() const
-    {
-        return CPureBlockHeader::GetBaseVersion(nVersion);
-    }
 };
 
 arith_uint256 GetBlockProof(const CBlockIndex& block);

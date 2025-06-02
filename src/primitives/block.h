@@ -15,6 +15,7 @@
 #include <boost/shared_ptr.hpp>
 #include "tinyformat.h"
 #include "utilstrencodings.h"
+#include "util.h"
 /** Nodes collect new transactions into a block, hash them into a hash tree,
  * and scan through nonce values to make the block's hash satisfy proof-of-work
  * requirements.  When they solve the proof-of-work, they broadcast the block
@@ -60,7 +61,6 @@ public:
     inline void SerializationOp(Stream& s, Operation ser_action) {
         // First serialize everything in CPureBlockHeader
         READWRITE(this->nVersion);
-        nVersion = this->nVersion.GetBaseVersion();
         READWRITE(hashPrevBlock);
         READWRITE(hashMerkleRoot);
         READWRITE(nTime);

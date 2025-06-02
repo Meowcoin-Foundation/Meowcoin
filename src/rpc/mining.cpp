@@ -1463,7 +1463,7 @@ UniValue AuxMiningCreateBlock(const CScript& scriptPubKey)
 
         // Finalise it by setting the version and building the merkle root
         IncrementExtraNonce(&newBlock->block, pindexPrev, nExtraNonce);
-        newBlock->block.SetAuxpowVersion(true);
+        newBlock->block.nVersion.SetAuxpow(true);
 
         // Save
         pblock = &newBlock->block;
@@ -1487,7 +1487,7 @@ UniValue AuxMiningCreateBlock(const CScript& scriptPubKey)
 
     UniValue result(UniValue::VOBJ);
     result.pushKV("hash", pblock->GetHash().GetHex());
-    result.pushKV("chainid", pblock->GetChainId());
+    result.pushKV("chainid", pblock->nVersion.GetChainId());
     result.pushKV("previousblockhash", pblock->hashPrevBlock.GetHex());
     result.pushKV("coinbasevalue", (int64_t)pblock->vtx[0]->vout[0].nValue);
     result.pushKV("bits", strprintf("%08x", pblock->nBits));
