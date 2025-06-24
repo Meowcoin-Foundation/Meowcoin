@@ -1450,29 +1450,22 @@ UniValue AuxMiningCreateBlock(const CScript& scriptPubKey)
             pblock = nullptr;
         }
 
-        LogPrintf("AuxMiningCreateBlock: begin to create block\n");
         // Create new block with nonce = 0 and extraNonce = 1
         std::unique_ptr<CBlockTemplate> newBlock
             = BlockAssembler(GetParams()).CreateNewBlock(scriptPubKey);
         if (!newBlock)
             throw JSONRPCError(RPC_OUT_OF_MEMORY, "out of memory");
 
-        LogPrintf("AuxMiningCreateBlock: block created\n");
-
         // Update state only when CreateNewBlock succeeded
         nTransactionsUpdatedLast = mempool.GetTransactionsUpdated();
         pindexPrev = chainActive.Tip();
         nStart = GetTime();
 
-        LogPrintf("AuxMiningCreateBlock: incremented extranonce\n");
         // Finalise it by setting the version and building the merkle root
         IncrementExtraNonce(&newBlock->block, pindexPrev, nExtraNonce);
-        LogPrintf("AuxMiningCreateBlock: begin to set auxpow version\n");
         newBlock->block.nVersion.SetAuxpow(true);
-        LogPrintf("AuxMiningCreateBlock: auxpow version set\n");
 
         // Save
-        LogPrintf("AuxMiningCreateBlock: saving block to memory\n");
         pblock = &newBlock->block;
         mapNewBlock[pblock->GetHash()] = pblock;
         vNewBlockTemplate.push_back(std::move(newBlock));

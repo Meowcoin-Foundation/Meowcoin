@@ -79,9 +79,6 @@ bool
 CAuxPow::check (const uint256& hashAuxBlock, int nChainId,
                 const Consensus::Params& params) const
 {
-    LogPrint(BCLog::AUXPOW, "check auxpow with parentBlock chainId = %d and vChainMerkleBranch size %d and nChainIndex %d\n",
-             parentBlock.nVersion.GetChainId(), vChainMerkleBranch.size(), nChainIndex);
-
     if (nIndex != 0)
         return error("AuxPow is not a generate");
 
@@ -93,14 +90,9 @@ CAuxPow::check (const uint256& hashAuxBlock, int nChainId,
 
     // Check that the chain merkle root is in the coinbase
     const uint256 nRootHash = CheckMerkleBranch(hashAuxBlock, vChainMerkleBranch, nChainIndex);
-    LogPrint(BCLog::AUXPOW, "create vchRootHash: %s\n", nRootHash.GetHex());
 
     valtype vchRootHash(nRootHash.begin(), nRootHash.end());
     std::reverse(vchRootHash.begin(), vchRootHash.end()); // correct endian
-
-    LogPrint(BCLog::AUXPOW, "transaction_hash = %s\n", GetHash().GetHex());
-    LogPrint(BCLog::AUXPOW, "hashBlock = %s\n", hashBlock.GetHex());
-    LogPrint(BCLog::AUXPOW, "auxpow transaction_hash = %s\n", GetHash().ToString());
 
     // Check that we are in the parent block merkle tree
     if (CheckMerkleBranch(GetHash(), vMerkleBranch, nIndex)
@@ -112,7 +104,6 @@ CAuxPow::check (const uint256& hashAuxBlock, int nChainId,
         return error("Aux POW coinbase has no inputs");
 
     const CScript script = tx->vin[0].scriptSig;
-    LogPrint(BCLog::AUXPOW, "script size = %lu\n", script.size());
 
     // Check that the same work is not submitted twice to our chain.
     CScript::const_iterator pcHead =
@@ -120,14 +111,9 @@ CAuxPow::check (const uint256& hashAuxBlock, int nChainId,
 
     // Debug log the script bytes for troubleshooting
     std::string scriptHex = HexStr(script.begin(), script.end());
-    LogPrint(BCLog::AUXPOW, "script: %s\n", scriptHex);
     std::string headerHex = HexStr(UBEGIN(pchMergedMiningHeader), UEND(pchMergedMiningHeader));
-    LogPrint(BCLog::AUXPOW, "header: %s\n", headerHex);
     std::string rootHashHex = HexStr(vchRootHash.begin(), vchRootHash.end());
-    LogPrint(BCLog::AUXPOW, "rootHash: %s\n", rootHashHex);
 
-    LogPrint(BCLog::AUXPOW, "parentBlock: %s\n", parentBlock.ToString());
-    
     CScript::const_iterator pc =
         std::search(script.begin(), script.end(), vchRootHash.begin(), vchRootHash.end());
 

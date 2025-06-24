@@ -1304,8 +1304,6 @@ bool CheckProofOfWork(const CBlockHeader& block, const Consensus::Params& params
     if (!block.nVersion.IsAuxpow())
         return error("%s : auxpow on block with non-auxpow version", __func__);
 
-    LogPrintf("%s : Checking AuxPow Block: %s", __func__, block.ToString().c_str());
-
     if (!block.auxpow->check(block.GetHash(), block.nVersion.GetChainId(), params))
         return error("%s : AUX POW is not valid", __func__);
     if (!CheckProofOfWork(block.auxpow->getParentBlockHash(), block.nBits, params))
@@ -1413,7 +1411,7 @@ bool IsInitialBlockDownload()
     LOCK(cs_main);
     if (latchToFalse.load(std::memory_order_relaxed))
         return false;
-    return false;
+
     if (fImporting || fReindex)
     {
 //        LogPrintf("IsInitialBlockDownload (importing or reindex)\n");
@@ -4283,8 +4281,8 @@ static bool ContextualCheckBlockHeader(const CBlockHeader& block, CValidationSta
     //                              strprintf("rejected nVersion=0x%08x block", block.nVersion));
 
     // Reject outdated version blocks once assets are active.
-    //if (AreAssetsDeployed() && block.GetBaseVersion() < VERSIONBITS_TOP_BITS_ASSETS)
-    //    return state.Invalid(false, REJECT_OBSOLETE, strprintf("bad-version(0x%08x)", block.nVersion), strprintf("rejected nVersion=0x%08x block", block.nVersion));
+    if (AreAssetsDeployed() && block.GetBaseVersion() < VERSIONBITS_TOP_BITS_ASSETS)
+        return state.Invalid(false, REJECT_OBSOLETE, strprintf("bad-version(0x%08x)", block.nVersion), strprintf("rejected nVersion=0x%08x block", block.nVersion));
 
     return true;
 }

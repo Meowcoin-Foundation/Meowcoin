@@ -67,8 +67,6 @@ public:
         READWRITE(nBits);
         if (this->nTime < nKAWPOWActivationTime || this->nVersion.IsAuxpow()) {
             // nNonce is already serialized in the base class, no need to do it again
-            LogPrintf("Scrypt/X16R Serialisation\n");
-            LogPrintf("%s : %s\n", __func__, ToString().c_str());
             READWRITE(nNonce);
             if (this->nVersion.IsAuxpow())
             {
@@ -80,7 +78,6 @@ public:
                 auxpow.reset();
             }
         } else {
-            LogPrintf("KAWPOW block header serialization\n");
             READWRITE(nHeight);
             READWRITE(nNonce64);
             READWRITE(mix_hash);
