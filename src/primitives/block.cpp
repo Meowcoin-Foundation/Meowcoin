@@ -38,6 +38,10 @@ void BlockNetwork::SetNetwork(const std::string& net)
 
 uint256 CBlockHeader::GetHash() const
 {
+    if (this->nVersion.IsAuxpow()) {
+        return CPureBlockHeader::GetHash();
+    }
+
     if (nTime < nKAWPOWActivationTime) {
         uint32_t nTimeToUse = MAINNET_X16RV2ACTIVATIONTIME;
         if (bNetwork.fOnTestnet) {
@@ -49,9 +53,11 @@ uint256 CBlockHeader::GetHash() const
             return HashX16RV2(BEGIN(nVersion), END(nNonce), hashPrevBlock);
         }
         else {
-        return HashX16R(BEGIN(nVersion), END(nNonce), hashPrevBlock);
+            return HashX16R(BEGIN(nVersion), END(nNonce), hashPrevBlock);
         }
-    } if (nTime < nMEOWPOWActivationTime) {
+    }
+    
+    if (nTime < nMEOWPOWActivationTime) {
         return KAWPOWHash_OnlyMix(*this);
     } else {
         return MEOWPOWHash_OnlyMix(*this); //MEOWPOW to engage as the primary algo
@@ -72,7 +78,9 @@ uint256 CBlockHeader::GetHashFull(uint256& mix_hash) const
         }
 
         return HashX16R(BEGIN(nVersion), END(nNonce), hashPrevBlock);
-    } if (nTime < nMEOWPOWActivationTime) {
+    }
+    
+    if (nTime < nMEOWPOWActivationTime) {
         return KAWPOWHash(*this, mix_hash);
     } else {
         return MEOWPOWHash(*this, mix_hash); //MEOWPOW to engage as the primary algo
