@@ -124,8 +124,7 @@ public:
      */
     inline bool IsLegacy() const
     {
-        return nVersion == 1
-            || (nVersion == 2 && GetChainId() == 0);
+        return nVersion <= 4 || nVersion == 805306368;
     }
 
     CBlockVersion& operator=(const CBlockVersion& other)
