@@ -15,10 +15,17 @@ class CBlockHeader;
 class CBlockIndex;
 class uint256;
 
+enum class PowAlgo
+{
+    MEOWPOW = 0,
+    SCRYPT = 1,
+    NUM_ALGOS
+};
+
 unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHeader *pblock, const Consensus::Params&);
 unsigned int CalculateNextWorkRequired(const CBlockIndex* pindexLast, int64_t nFirstBlockTime, const Consensus::Params&);
 
 /** Check whether a block hash satisfies the proof-of-work requirement specified by nBits */
-bool CheckProofOfWork(uint256 hash, unsigned int nBits, const Consensus::Params&);
+bool CheckProofOfWork(uint256 hash, unsigned int nBits, PowAlgo algo, const Consensus::Params&);
 
 #endif // MEOWCOIN_POW_H

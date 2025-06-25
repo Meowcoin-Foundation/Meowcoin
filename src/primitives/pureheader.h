@@ -8,6 +8,7 @@
 
 #include "serialize.h"
 #include "uint256.h"
+#include "pow.h"
 
 /**
  * Encapsulate a block version.  This takes care of building it up
@@ -59,6 +60,13 @@ public:
         return nVersion >> 16;
     }
 
+    inline PowAlgo GetAlgo() const
+    {
+        if (IsAuxpow())
+            return PowAlgo::SCRYPT;
+        return PowAlgo::MEOWPOW;
+    }
+    
     /**
      * Set the chain ID.  This is used for the test suite.
      * @param ch The chain ID to set.

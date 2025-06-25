@@ -191,6 +191,7 @@ extern std::string HelpExampleRpc(const std::string& methodname, const std::stri
 
 
 void CheckIPFSTxidMessage(const std::string &message, int64_t expireTime);
+PowAlgo DecodeAlgoParam(const UniValue& param);
 
 bool StartRPC();
 void InterruptRPC();
