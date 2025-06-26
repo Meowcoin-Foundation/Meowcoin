@@ -1287,14 +1287,14 @@ bool CheckProofOfWork(const CBlockHeader& block, const Consensus::Params& params
 
         if (block.nTime >= nKAWPOWActivationTime) {
             uint256 mix_hash;
-            if (!CheckProofOfWork(block.GetHashFull(mix_hash), block.nBits, params))
+            if (!CheckProofOfWork(block.GetHashFull(mix_hash), block.nBits, block.nVersion.GetAlgo(), params))
                 return error("%s : non-AUX proof of work failed", __func__);
 
             if (mix_hash != block.mix_hash) {
                 return error("%s : non-AUX mix_hash proof of work check failed", __func__);
             }
         } else {
-            if (!CheckProofOfWork(block.GetHash(), block.nBits, params))
+            if (!CheckProofOfWork(block.GetHash(), block.nBits, block.nVersion.GetAlgo(), params))
                 return error("%s : non-AUX proof of work failed", __func__);
         }
         return true;
@@ -1306,7 +1306,7 @@ bool CheckProofOfWork(const CBlockHeader& block, const Consensus::Params& params
 
     if (!block.auxpow->check(block.GetHash(), block.nVersion.GetChainId(), params))
         return error("%s : AUX POW is not valid", __func__);
-    if (!CheckProofOfWork(block.auxpow->getParentBlockHash(), block.nBits, params))
+    if (!CheckProofOfWork(block.auxpow->getParentBlockHash(), block.nBits, block.nVersion.GetAlgo(), params))
         return error("%s : AUX proof of work failed", __func__);
 
     return true;

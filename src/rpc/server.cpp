@@ -191,7 +191,7 @@ std::vector<unsigned char> ParseHexO(const UniValue& o, std::string strKey)
 PowAlgo DecodeAlgoParam(const UniValue& param)
 {
     int val;
-   
+
     if (param.isNum()) {
         val = param.get_int();
     } else {
@@ -199,18 +199,18 @@ PowAlgo DecodeAlgoParam(const UniValue& param)
         const UniValue convVal(UniValue::VNUM, str);
         val = convVal.get_int();
     }
-   
+
     switch (val)
     {
-        case ALGO_MEOWPOW:
-        case ALGO_SCRYPT:
+        case 0:
+        case 1:
             return static_cast<PowAlgo>(val);
         default:
             throw JSONRPCError (RPC_INVALID_PARAMETER, "invalid algo selection");
     }
     assert(false);
 }
-   
+
 /**
  * Note: This interface may still be subject to change.
  */

@@ -9,6 +9,7 @@
 
 #include "amount.h"
 #include "rpc/protocol.h"
+#include "primitives/algos.h"
 #include "uint256.h"
 
 #include <list>
