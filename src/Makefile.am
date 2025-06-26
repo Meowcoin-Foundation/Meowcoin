@@ -399,6 +399,7 @@ libmeowcoin_consensus_a_SOURCES = \
   hash.cpp \
   hash.h \
   prevector.h \
+  primitives/algos.h \
   primitives/block.cpp \
   primitives/block.h \
   primitives/pureheader.cpp \

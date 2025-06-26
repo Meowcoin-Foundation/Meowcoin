@@ -7,6 +7,7 @@
 #ifndef MEOWCOIN_CONSENSUS_PARAMS_H
 #define MEOWCOIN_CONSENSUS_PARAMS_H
 
+#include "primitives/algos.h"
 #include "uint256.h"
 #include <map>
 #include <string>
@@ -68,9 +69,8 @@ struct Params {
     uint32_t nMinerConfirmationWindow;
     BIP9Deployment vDeployments[MAX_VERSION_BITS_DEPLOYMENTS];
     /** Proof of work parameters */
-    uint256 powLimit;
-    uint256 kawpowLimit;
-    uint256 meowpowLimit;
+    uint256 powLimit[static_cast<long unsigned int>(PowAlgo::NUM_ALGOS)];
+
     bool fPowAllowMinDifficultyBlocks;
     bool fPowNoRetargeting;
     int64_t nPowTargetSpacing;

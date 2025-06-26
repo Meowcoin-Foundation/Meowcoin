@@ -8,19 +8,12 @@
 #define MEOWCOIN_POW_H
 
 #include "consensus/params.h"
-
+#include "primitives/algos.h"
 #include <stdint.h>
 
 class CBlockHeader;
 class CBlockIndex;
 class uint256;
-
-enum class PowAlgo
-{
-    MEOWPOW = 0,
-    SCRYPT = 1,
-    NUM_ALGOS
-};
 
 unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHeader *pblock, const Consensus::Params&);
 unsigned int CalculateNextWorkRequired(const CBlockIndex* pindexLast, int64_t nFirstBlockTime, const Consensus::Params&);
