@@ -7,6 +7,7 @@
 #define MEOWCOIN_RPC_BLOCKCHAIN_H
 #include <map>
 #include <string>
+#include "primitives/algos.h"
 
 class CBlock;
 class CBlockIndex;

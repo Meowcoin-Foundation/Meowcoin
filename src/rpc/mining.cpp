@@ -144,7 +144,7 @@ UniValue generateBlocks(std::shared_ptr<CReserveScript> coinbaseScript, int nGen
         CAuxPow::initAuxPow(*pblock);
         CPureBlockHeader& miningHeader = pblock->auxpow->parentBlock;
         while (nMaxTries > 0 && miningHeader.nNonce < nInnerLoopCount && !CheckProofOfWork(miningHeader.GetHash(), pblock->nBits,
-                                                                                                  GetParams().GetConsensus())) {
+                                                                                                  PowAlgo::MEOWPOW, GetParams().GetConsensus())) {
             ++miningHeader.nNonce;
             --nMaxTries;
         }
@@ -981,7 +981,7 @@ static UniValue pprpcsb(const JSONRPCRequest& request) {
     }
 
     uint256 retMixHash;
-    if (!CheckProofOfWork(blockptr->GetHashFull(retMixHash), blockptr->nBits, GetParams().GetConsensus()))
+    if (!CheckProofOfWork(blockptr->GetHashFull(retMixHash), blockptr->nBits, PowAlgo::MEOWPOW, GetParams().GetConsensus()))
         throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "Block does not solve the boundary");
 
 

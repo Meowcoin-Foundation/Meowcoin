@@ -19,8 +19,8 @@ unsigned int static DarkGravityWave(const CBlockIndex* pindexLast, const CBlockH
     /* current difficulty formula, dash - DarkGravity v3, written by Evan Duffield - evan@dash.org */
     assert(pindexLast != nullptr);
 
-    unsigned int nProofOfWorkLimit = UintToArith256(params.powLimit).GetCompact();
-    const arith_uint256 bnPowLimit = UintToArith256(params.powLimit);
+    unsigned int nProofOfWorkLimit = UintToArith256(params.powLimit[static_cast<uint8_t>(PowAlgo::MEOWPOW)]).GetCompact();
+    const arith_uint256 bnPowLimit = UintToArith256(params.powLimit[static_cast<uint8_t>(PowAlgo::MEOWPOW)]);
     int64_t nPastBlocks = 180; // ~3hr
 
     // make sure we have at least (nPastBlocks + 1) blocks, otherwise just return powLimit
@@ -80,7 +80,7 @@ unsigned int static DarkGravityWave(const CBlockIndex* pindexLast, const CBlockH
     // change the DGW math.
  if (pblock->nTime >= nKAWPOWActivationTime && pblock->nTime < nMEOWPOWActivationTime) {
         if (nKAWPOWBlocksFound != nPastBlocks) {
-            const arith_uint256 bnKawPowLimit = UintToArith256(params.kawpowLimit);
+            const arith_uint256 bnKawPowLimit = UintToArith256(params.powLimit[static_cast<uint8_t>(PowAlgo::MEOWPOW)]);
             return bnKawPowLimit.GetCompact();
         }
     }
@@ -88,7 +88,7 @@ unsigned int static DarkGravityWave(const CBlockIndex* pindexLast, const CBlockH
     //Meowpow
     if (pblock->nTime >= nMEOWPOWActivationTime) {
         if (nMEOWPOWBlocksFound != nPastBlocks) {
-            const arith_uint256 bnMeowPowLimit = UintToArith256(params.meowpowLimit);
+            const arith_uint256 bnMeowPowLimit = UintToArith256(params.powLimit[static_cast<uint8_t>(PowAlgo::MEOWPOW)]);
             return bnMeowPowLimit.GetCompact();
         }
     }
@@ -118,7 +118,7 @@ unsigned int static DarkGravityWave(const CBlockIndex* pindexLast, const CBlockH
 unsigned int GetNextWorkRequiredBTC(const CBlockIndex* pindexLast, const CBlockHeader *pblock, const Consensus::Params& params)
 {
     assert(pindexLast != nullptr);
-    unsigned int nProofOfWorkLimit = UintToArith256(params.powLimit).GetCompact();
+    unsigned int nProofOfWorkLimit = UintToArith256(params.powLimit[static_cast<uint8_t>(PowAlgo::MEOWPOW)]).GetCompact();
 
     // Only change once per difficulty adjustment interval
     if ((pindexLast->nHeight+1) % params.DifficultyAdjustmentInterval() != 0)
@@ -198,7 +198,7 @@ unsigned int GetNextWorkRequired_LWMA(const CBlockIndex* pindexLast, const CBloc
 
     const int64_t height = pindexLast->nHeight;
     const PowAlgo algo = pindexLast->nVersion.GetAlgo();
-    const arith_uint256 powLimit = UintToArith256(params.powLimit[algo]);
+    const arith_uint256 powLimit = UintToArith256(params.powLimit[static_cast<uint8_t>(algo)]);
 
     // New coins just "give away" first N blocks. It's better to guess
     // this value instead of using powLimit, but err on high side to not get stuck.
@@ -213,7 +213,7 @@ unsigned int GetNextWorkRequired_LWMA(const CBlockIndex* pindexLast, const CBloc
     std::vector<const CBlockIndex*> SameAlgoBlocks;
     for (int c = height-1; SameAlgoBlocks.size() < (N + 1); c--){
 		const CBlockIndex* block = pindexLast->GetAncestor(c); // -1 after execution
-		if (block->GetBlockHeader(params).GetAlgo() == algo){
+		if (block->GetBlockHeader(params).nVersion.GetAlgo() == algo){
 			SameAlgoBlocks.push_back(block);
 		}
 
@@ -286,7 +286,7 @@ unsigned int CalculateNextWorkRequired(const CBlockIndex* pindexLast, int64_t nF
         nActualTimespan = params.nPowTargetTimespan*4;
 
     // Retarget
-    const arith_uint256 bnPowLimit = UintToArith256(params.powLimit);
+    const arith_uint256 bnPowLimit = UintToArith256(params.powLimit[static_cast<uint8_t>(PowAlgo::MEOWPOW)]);
     arith_uint256 bnNew;
     bnNew.SetCompact(pindexLast->nBits);
     bnNew *= nActualTimespan;
@@ -307,7 +307,7 @@ bool CheckProofOfWork(uint256 hash, unsigned int nBits, PowAlgo algo, const Cons
     bnTarget.SetCompact(nBits, &fNegative, &fOverflow);
 
     // Check range
-    if (fNegative || bnTarget == 0 || fOverflow || bnTarget > UintToArith256(params.powLimit[algo]))
+    if (fNegative || bnTarget == 0 || fOverflow || bnTarget > UintToArith256(params.powLimit[static_cast<uint8_t>(algo)]))
         return false;
 
     // Check proof of work matches claimed amount
