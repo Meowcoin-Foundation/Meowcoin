@@ -127,7 +127,8 @@ public:
         consensus.powLimit[static_cast<uint8_t>(PowAlgo::SCRYPT)] = uint256S("00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.nPowTargetTimespan = 2016 * 60; // 1.4 days
         consensus.nPowTargetSpacing = 1 * 60;
-		consensus.fPowAllowMinDifficultyBlocks = false;
+        consensus.nLwmaAveragingWindow = 576;
+        consensus.fPowAllowMinDifficultyBlocks = false;
         consensus.fPowNoRetargeting = false;
         consensus.nRuleChangeActivationThreshold = 1613; // Approx 80% of 2016
         consensus.nMinerConfirmationWindow = 2016; // nPowTargetTimespan / nPowTargetSpacing
@@ -312,6 +313,7 @@ public:
         consensus.powLimit[static_cast<uint8_t>(PowAlgo::SCRYPT)] = uint256S("00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.nPowTargetTimespan = 2016 * 60; // 1.4 days
         consensus.nPowTargetSpacing = 1 * 60;
+        consensus.nLwmaAveragingWindow = 576;
         consensus.fPowAllowMinDifficultyBlocks = false;
         consensus.fPowNoRetargeting = false;
         consensus.nRuleChangeActivationThreshold = 1613; // Approx 65% for testchains
@@ -478,6 +480,7 @@ public:
         consensus.powLimit[static_cast<uint8_t>(PowAlgo::SCRYPT)] = uint256S("00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.nPowTargetTimespan = 2016 * 60; // 1.4 days
         consensus.nPowTargetSpacing = 1 * 60;
+        consensus.nLwmaAveragingWindow = 576;
         consensus.fPowAllowMinDifficultyBlocks = true;
         consensus.fPowNoRetargeting = true;
         consensus.nRuleChangeActivationThreshold = 108; // 75% for testchains
