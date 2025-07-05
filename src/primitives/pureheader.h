@@ -87,6 +87,14 @@ public:
     }
 
     /**
+     * Set the base version (apart from chain ID and auxpow flag) to
+     * the one given.  This should only be called when auxpow is not yet
+     * set, to initialise a block!
+     * @param nBaseVersion The base version.
+     */
+    void SetBaseVersion(int32_t nBaseVersion, int32_t nChainId);
+
+    /**
      * Extract the full version.  Used for RPC results and debug prints.
      * @return The full version.
      */
@@ -134,39 +142,6 @@ public:
     {
         return nVersion <= 4 || nVersion == 805306368;
     }
-
-    CBlockVersion& operator=(const CBlockVersion& other)
-    {
-        nVersion = other.nVersion;
-        return *this;
-    }
-
-    CBlockVersion& operator=(const int nBaseVersion)
-    {
-        nVersion = (nBaseVersion & 0x000000ff) | (nVersion & 0xffffff00);
-        return *this;
-    }
-
-    CBlockVersion& operator|(const int nBaseVersion)
-    {
-        nVersion |= nBaseVersion;
-        return *this;
-    }
-
-    CBlockVersion& operator&=(const int nBaseVersion)
-    {
-        nVersion &= nBaseVersion;
-        return *this;
-    }
-
-    operator int() { return nVersion & 0x000000ff; }
-    friend inline bool operator|=(const CBlockVersion a, const int b) { return (a.nVersion & 0x000000ff) == b; }
-    friend inline bool operator==(const CBlockVersion a, const int b) { return (a.nVersion & 0x000000ff) == b; }
-    friend inline bool operator!=(const CBlockVersion a, const int b) { return (a.nVersion & 0x000000ff) != b; }
-    friend inline bool operator>(const CBlockVersion a, const int b) { return (a.nVersion & 0x000000ff) > b; }
-    friend inline bool operator<(const CBlockVersion a, const int b) { return (a.nVersion & 0x000000ff) < b; }
-    friend inline bool operator>=(const CBlockVersion a, const int b) { return (a.nVersion & 0x000000ff) >= b; }
-    friend inline bool operator<=(const CBlockVersion a, const int b) { return (a.nVersion & 0x000000ff) <= b; }
 };
 
 /**

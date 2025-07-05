@@ -645,9 +645,12 @@ UniValue getblocktemplate(const JSONRPCRequest& request)
                 // Not exposed to GBT at all
                 break;
             case THRESHOLD_LOCKED_IN:
+            {
                 // Ensure bit is set in block version
-                pblock->nVersion |= VersionBitsMask(consensusParams, pos);
+                const int32_t nChainId = consensusParams.nAuxpowChainId;
+                pblock->nVersion.SetBaseVersion(pblock->nVersion.GetBaseVersion() | VersionBitsMask(consensusParams, pos), nChainId);
                 // FALL THROUGH to get vbavailable set...
+            }
             case THRESHOLD_STARTED:
             {
                 const struct VBDeploymentInfo& vbinfo = VersionBitsDeploymentInfo[pos];
@@ -655,7 +658,8 @@ UniValue getblocktemplate(const JSONRPCRequest& request)
                 if (setClientRules.find(vbinfo.name) == setClientRules.end()) {
                     if (!vbinfo.gbt_force) {
                         // If the client doesn't support this, don't indicate it in the [default] version
-                        pblock->nVersion &= ~VersionBitsMask(consensusParams, pos);
+                        const int32_t nChainId = consensusParams.nAuxpowChainId;
+                        pblock->nVersion.SetBaseVersion(pblock->nVersion.GetBaseVersion() & ~VersionBitsMask(consensusParams, pos), nChainId);
                     }
                 }
                 break;
@@ -676,7 +680,7 @@ UniValue getblocktemplate(const JSONRPCRequest& request)
             }
         }
     }
-    result.push_back(Pair("version", pblock->nVersion));
+    result.push_back(Pair("version", pblock->nVersion.GetFullVersion()));
     result.push_back(Pair("rules", aRules));
     result.push_back(Pair("vbavailable", vbavailable));
     result.push_back(Pair("vbrequired", int(0)));

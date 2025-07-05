@@ -247,7 +247,7 @@ CAuxPow::initAuxPow (CBlockHeader& header)
 
   /* Build a fake parent block with the coinbase.  */
   CBlock parent;
-  parent.nVersion = 1;
+  parent.nVersion.SetGenesisVersion(1);
   parent.vtx.resize (1);
   parent.vtx[0] = coinbaseRef;
   parent.hashMerkleRoot = BlockMerkleRoot (parent);
@@ -259,18 +259,4 @@ CAuxPow::initAuxPow (CBlockHeader& header)
   assert (header.auxpow->vMerkleBranch.empty ());
   header.auxpow->nIndex = 0;
   header.auxpow->parentBlock = parent;
-}
-
-std::string CAuxPow::ToString() const
-{
-    std::stringstream s;
-    s << strprintf("CAuxPow(version=%d, hash=%s, hashPrevBlock=%s, hashMerkleRoot=%s, nTime=%u, nBits=%08x, nNonce=%u)\n",
-        parentBlock.nVersion.GetFullVersion(),
-        parentBlock.GetHash().ToString().c_str(),
-        parentBlock.hashPrevBlock.ToString().c_str(),
-        parentBlock.hashMerkleRoot.ToString().c_str(),
-        parentBlock.nTime,
-        parentBlock.nBits,
-        parentBlock.nNonce);
-    return s.str();
 }

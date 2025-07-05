@@ -12,7 +12,8 @@
 #include "primitives/transaction.h"
 #include "serialize.h"
 #include "uint256.h"
-
+#include "util.h"
+#include "utilstrencodings.h"
 #include <vector>
 
 class CBlock;
@@ -205,7 +206,19 @@ public:
    * @param header The header to set the auxpow on.
    */
   static void initAuxPow (CBlockHeader& header);
-  std::string ToString() const;
+  inline std::string ToString() const
+  {
+      std::stringstream s;
+      s << strprintf("CAuxPow(version=%d, hash=%s, hashPrevBlock=%s, hashMerkleRoot=%s, nTime=%u, nBits=%08x, nNonce=%u)\n",
+          parentBlock.nVersion.GetFullVersion(),
+          parentBlock.GetHash().ToString().c_str(),
+          parentBlock.hashPrevBlock.ToString().c_str(),
+          parentBlock.hashMerkleRoot.ToString().c_str(),
+          parentBlock.nTime,
+          parentBlock.nBits,
+          parentBlock.nNonce);
+      return s.str();
+  }
 };
 
 #endif // BITCOIN_AUXPOW_H
