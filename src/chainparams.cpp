@@ -360,10 +360,10 @@ public:
         consensus.fStrictChainId = true;
         consensus.nLegacyBlocksBefore = 200;
 
-        pchMessageStart[0] = 0x6d; 
-        pchMessageStart[1] = 0x65; 
-        pchMessageStart[2] = 0x77; 
-        pchMessageStart[3] = 0x63; 
+        pchMessageStart[0] = 0x6e;
+        pchMessageStart[1] = 0x66;
+        pchMessageStart[2] = 0x78;
+        pchMessageStart[3] = 0x64;
         nDefaultPort = 4569;
         nPruneAfterHeight = 1000;
 
