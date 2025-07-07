@@ -172,7 +172,7 @@ public:
         // By default assume that the signatures in ancestors of this block are valid. Block# 1040000
         consensus.defaultAssumeValid = uint256S("0x0000000000043a9280011ff1382e99ade4d90d51821cc4dadfb20bd1a0905b1c"); // Block 50000
 
-        consensus.nAuxpowChainId = 0x56;
+        consensus.nAuxpowChainId = 9;
         consensus.nAuxpowStartHeight = 1367694;
         consensus.fStrictChainId = true;
         consensus.nLegacyBlocksBefore = INT_MAX;
@@ -355,7 +355,7 @@ public:
         // By default assume that the signatures in ancestors of this block are valid.
         consensus.defaultAssumeValid = uint256S("0x000000eaab417d6dfe9bd75119972e1d07ecfe8ff655bef7c2acb3d9a0eeed81");
 
-        consensus.nAuxpowChainId = 0x0001;
+        consensus.nAuxpowChainId = 99;
         consensus.nAuxpowStartHeight = 100;
         consensus.fStrictChainId = true;
         consensus.nLegacyBlocksBefore = 200;
@@ -522,7 +522,7 @@ public:
         // By default assume that the signatures in ancestors of this block are valid.
         consensus.defaultAssumeValid = uint256S("0x00");
 
-        consensus.nAuxpowChainId = 0x0001;
+        consensus.nAuxpowChainId = 999;
         consensus.nAuxpowStartHeight = 19200;
         consensus.fStrictChainId = true;
         consensus.nLegacyBlocksBefore = 19200;
