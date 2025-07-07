@@ -9,6 +9,7 @@
 #include "serialize.h"
 #include "uint256.h"
 #include "pow.h"
+#include "versionbits.h"
 
 /**
  * Encapsulate a block version.  This takes care of building it up
@@ -57,7 +58,7 @@ public:
      */
     inline int32_t GetChainId() const
     {
-        return nVersion >> 16;
+        return (nVersion & ~VERSIONBITS_TOP_MASK) / VERSION_CHAIN_START;
     }
 
     inline PowAlgo GetAlgo() const
@@ -131,7 +132,7 @@ public:
         if (auxpow)
             nVersion |= VERSION_AUXPOW;
         else
-            nVersion &= ~VERSION_AUXPOW;
+            nVersion &= VERSION_AUXPOW;
     }
 
     /**
