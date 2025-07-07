@@ -22,27 +22,12 @@
  */
 class CBlockVersion
 {
-public:
-    /** The chain ID for the auxpow chain.  This is used to identify
-     * the auxpow chain in the version field.
-     */
-    static const int32_t CHAINID = 9; // Meowcoin chain ID
 private:
-    static const int32_t VERSIONAUXPOW_TOP_MASK = (1 << 28) + (1 << 29) + (1 << 30);
-    static const uint8_t VERSION_START_BIT = 16;
-
-
     /* Modifiers to the version.  */
     static const int32_t VERSION_AUXPOW = (1 << 8);
 
     /** Bits above are reserved for the auxpow chain ID.  */
     static const int32_t VERSION_CHAIN_START = (1 << 16);
-
-    // mask to get Chain ID from version field, chainid is 16 in SYS so 0x001f mask should be OK
-    static const int32_t MASK_AUXPOW_CHAINID_SHIFTED = (0x001f << VERSION_START_BIT);
-
-    // shifted Chain ID in version field
-    static const int32_t VERSION_AUXPOW_CHAINID_SHIFTED = (CHAINID << VERSION_START_BIT);
 
     /** The version as integer.  Should not be accessed directly.  */
     int nVersion;
@@ -72,7 +57,7 @@ public:
      */
     inline int32_t GetChainId() const
     {
-        return (nVersion & MASK_AUXPOW_CHAINID_SHIFTED) >> VERSION_START_BIT;
+        return nVersion >> 16;
     }
 
     inline PowAlgo GetAlgo() const
@@ -98,7 +83,7 @@ public:
      */
     inline int32_t GetBaseVersion() const
     {
-        return (nVersion & ~VERSION_AUXPOW) & ~VERSION_AUXPOW_CHAINID_SHIFTED;
+        return nVersion % VERSION_AUXPOW;
     }
 
     /**
