@@ -13,9 +13,10 @@
 
 void CBlockVersion::SetBaseVersion(int32_t nBaseVersion, int32_t nChainId)
 {
-    assert(nBaseVersion >= 1 && nBaseVersion < VERSION_AUXPOW);
+    const int32_t withoutTopMask = nBaseVersion & ~VERSIONAUXPOW_TOP_MASK;
+    assert(withoutTopMask >= 0 && withoutTopMask < VERSION_CHAIN_START);
     assert(!IsAuxpow());
-    nVersion = nBaseVersion | (nChainId * VERSION_CHAIN_START);
+    nVersion = nBaseVersion | (nChainId << VERSION_START_BIT);
 }
 
 
