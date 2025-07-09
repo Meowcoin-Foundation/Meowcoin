@@ -15,6 +15,8 @@ static const int32_t VERSIONBITS_LAST_OLD_BLOCK_VERSION = 5;
 static const int32_t VERSIONBITS_TOP_BITS = 0x20000000UL;
 /** What bits to set in the version for versionbits blocks after assets is active */
 static const int32_t VERSIONBITS_TOP_BITS_ASSETS = 0x30000000UL;
+/** What bits to set in the version for versionbits blocks after auxpow is active */
+static const int32_t VERSIONBITS_TOP_BITS_ASSETS_POST_AUXPOW_FORK = VERSIONBITS_TOP_BITS;
 /** What bitmask determines whether versionbits is in use */
 static const int32_t VERSIONBITS_TOP_MASK = 0xE0000000UL;
 /** Total bits available for versionbits */
