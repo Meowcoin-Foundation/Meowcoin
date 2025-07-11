@@ -2367,11 +2367,7 @@ int32_t ComputeBlockVersion(const CBlockIndex* pindexPrev, const Consensus::Para
 
     /** If the assets are deployed now. We need to use the correct block version */
     if (AreAssetsDeployed()) {
-        if (pindexPrev->nHeight >= params.nAuxpowStartHeight) {
-            nVersion = VERSIONBITS_TOP_BITS_ASSETS_POST_AUXPOW_FORK;
-        } else {
-            nVersion = VERSIONBITS_TOP_BITS_ASSETS;
-        }
+        nVersion = VERSIONBITS_TOP_BITS_ASSETS;
     }
 
     for (int i = 0; i < (int)Consensus::MAX_VERSION_BITS_DEPLOYMENTS; i++) {
@@ -4286,11 +4282,9 @@ static bool ContextualCheckBlockHeader(const CBlockHeader& block, CValidationSta
     //                              strprintf("rejected nVersion=0x%08x block", block.nVersion));
 
     // Reject outdated version blocks once assets are active.
-    if (AreAssetsDeployed() && nHeight < consensusParams.nAuxpowStartHeight && block.nVersion.GetBaseVersion() < VERSIONBITS_TOP_BITS_ASSETS)
+    if (AreAssetsDeployed() && block.nVersion.GetBaseVersion() < VERSIONBITS_TOP_BITS_ASSETS)
         return state.Invalid(false, REJECT_OBSOLETE, strprintf("bad-version(0x%08x)", block.nVersion.GetBaseVersion()), strprintf("rejected nVersion=0x%08x block", block.nVersion.GetBaseVersion()));
 
-    if (nHeight >= consensusParams.nAuxpowStartHeight && block.nVersion.GetBaseVersion() < VERSIONBITS_TOP_BITS_ASSETS_POST_AUXPOW_FORK)
-        return state.Invalid(false, REJECT_OBSOLETE, strprintf("bad-version(0x%08x)", block.nVersion.GetBaseVersion()), strprintf("rejected nVersion=0x%08x block", block.nVersion.GetBaseVersion()));
     return true;
 }
 
