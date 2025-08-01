@@ -355,10 +355,10 @@ public:
         // By default assume that the signatures in ancestors of this block are valid.
         consensus.defaultAssumeValid = uint256S("0x000000eaab417d6dfe9bd75119972e1d07ecfe8ff655bef7c2acb3d9a0eeed81");
 
-        consensus.nAuxpowChainId = 99;
+        consensus.nAuxpowChainId = 9;
         consensus.nAuxpowStartHeight = 100;
         consensus.fStrictChainId = true;
-        consensus.nLegacyBlocksBefore = 200;
+        consensus.nLegacyBlocksBefore = 100;
 
         pchMessageStart[0] = 0x6e;
         pchMessageStart[1] = 0x66;
@@ -522,7 +522,7 @@ public:
         // By default assume that the signatures in ancestors of this block are valid.
         consensus.defaultAssumeValid = uint256S("0x00");
 
-        consensus.nAuxpowChainId = 999;
+        consensus.nAuxpowChainId = 9;
         consensus.nAuxpowStartHeight = 19200;
         consensus.fStrictChainId = true;
         consensus.nLegacyBlocksBefore = 19200;
