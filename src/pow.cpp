@@ -350,7 +350,7 @@ unsigned int GetNextWorkRequired_LWMA_MultiAlgo(const CBlockIndex* pindexLast, c
 unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHeader *pblock, const Consensus::Params& params)
 {
     if (params.IsAuxpowActive(pindexLast->nHeight + 1)) {
-        return GetNextWorkRequired_LWMA(pindexLast, pblock, params);
+        return GetNextWorkRequired_LWMA_MultiAlgo(pindexLast, pblock, params);
     }
 
     if (IsDGWActive(pindexLast->nHeight + 1)) {
