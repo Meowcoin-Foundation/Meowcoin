@@ -1306,6 +1306,8 @@ bool CheckProofOfWork(const CBlockHeader& block, const Consensus::Params& params
 
     if (!block.auxpow->check(block.GetHash(), block.nVersion.GetChainId(), params))
         return error("%s : AUX POW is not valid", __func__);
+
+    LogPrintf("%s : Checking Proof of Work for block. Algo: %s. Parent Block: %s", __func__, block.nVersion.GetAlgoName(), block.auxpow->parentBlock.ToString());
     if (!CheckProofOfWork(block.auxpow->getParentBlockHash(), block.nBits, block.nVersion.GetAlgo(), params))
         return error("%s : AUX proof of work failed", __func__);
 
@@ -1412,6 +1414,7 @@ bool IsInitialBlockDownload()
     if (latchToFalse.load(std::memory_order_relaxed))
         return false;
 
+    return false;
     if (fImporting || fReindex)
     {
 //        LogPrintf("IsInitialBlockDownload (importing or reindex)\n");
@@ -4217,7 +4220,7 @@ std::vector<unsigned char> GenerateCoinbaseCommitment(CBlock& block, const CBloc
 /** Context-dependent validity checks.
  *  By "context", we mean only the previous block headers, but not the UTXO
  *  set; UTXO-related validity checks are done in ConnectBlock(). */
-static bool ContextualCheckBlockHeader(const CBlockHeader& block, CValidationState& state, const CChainParams& params, const CBlockIndex* pindexPrev, int64_t nAdjustedTime)
+static bool ContextualCheckBlockHeader(const CBlockHeader& block, CValidationState& state, const CChainParams& params, const CBlockIndex* pindexPrev, int64_t nAdjustedTime, bool fIsAuxPow = false)
 {
     assert(pindexPrev != nullptr);
     const int nHeight = pindexPrev->nHeight + 1;
@@ -4244,7 +4247,7 @@ static bool ContextualCheckBlockHeader(const CBlockHeader& block, CValidationSta
         return state.DoS(100, error("%s : legacy block after auxpow start", __func__), REJECT_INVALID, "late-legacy-block");
 
     // Check proof of work
-    if (block.nBits != GetNextWorkRequired(pindexPrev, &block, consensusParams, block.nVersion.IsAuxpow()))
+    if (block.nBits != GetNextWorkRequired(pindexPrev, &block, consensusParams, fIsAuxPow))
         return state.DoS(100, false, REJECT_INVALID, "bad-diffbits", false, "incorrect proof of work");
 
     // Check against checkpoints
@@ -4575,7 +4578,7 @@ bool ProcessNewBlock(const CChainParams& chainparams, const std::shared_ptr<cons
     return true;
 }
 
-bool TestBlockValidity(CValidationState& state, const CChainParams& chainparams, const CBlock& block, CBlockIndex* pindexPrev, bool fCheckPOW, bool fCheckMerkleRoot)
+bool TestBlockValidity(CValidationState& state, const CChainParams& chainparams, const CBlock& block, CBlockIndex* pindexPrev, bool fCheckPOW, bool fCheckMerkleRoot, bool fIsAuxPow)
 {
     AssertLockHeld(cs_main);
     assert(pindexPrev && pindexPrev == chainActive.Tip());
@@ -4589,7 +4592,7 @@ bool TestBlockValidity(CValidationState& state, const CChainParams& chainparams,
     /** MEWC END */
 
     // NOTE: CheckBlockHeader is called by CheckBlock
-    if (!ContextualCheckBlockHeader(block, state, chainparams, pindexPrev, GetAdjustedTime()))
+    if (!ContextualCheckBlockHeader(block, state, chainparams, pindexPrev, GetAdjustedTime(), fIsAuxPow))
         return error("%s: Consensus::ContextualCheckBlockHeader: %s", __func__, FormatStateMessage(state));
     if (!CheckBlock(block, state, chainparams.GetConsensus(), fCheckPOW, fCheckMerkleRoot))
         return error("%s: Consensus::CheckBlock: %s", __func__, FormatStateMessage(state));

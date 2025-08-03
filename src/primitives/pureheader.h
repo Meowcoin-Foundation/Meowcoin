@@ -81,7 +81,15 @@ public:
             return PowAlgo::SCRYPT;
         return PowAlgo::MEOWPOW;
     }
-    
+
+    inline std::string GetAlgoName() const
+    {
+        if (GetAlgo() == PowAlgo::SCRYPT) {
+            return "scrypt";
+        }
+        return "meowpow";
+    }
+
     /**
      * Set the chain ID.  This is used for the test suite.
      * @param ch The chain ID to set.
