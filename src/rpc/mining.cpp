@@ -1456,7 +1456,7 @@ UniValue AuxMiningCreateBlock(const CScript& scriptPubKey)
 
         // Create new block with nonce = 0 and extraNonce = 1
         std::unique_ptr<CBlockTemplate> newBlock
-            = BlockAssembler(GetParams()).CreateNewBlock(scriptPubKey);
+            = BlockAssembler(GetParams()).CreateNewBlock(scriptPubKey, true, true);
         if (!newBlock)
             throw JSONRPCError(RPC_OUT_OF_MEMORY, "out of memory");
 
