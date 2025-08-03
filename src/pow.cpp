@@ -268,7 +268,7 @@ unsigned int GetNextWorkRequired_LWMA(const CBlockIndex* pindexLast, const CBloc
 //  node time" rule (70 minutes in BCH, ZEC, & BTC) should be reduced to FTL/2 
 //  to prevent 33% Sybil attack that can manipulate difficulty via timestamps. See:
 // https://github.com/zcash/zcash/issues/4021
-unsigned int GetNextWorkRequired_LWMA_MultiAlgo(const CBlockIndex* pindexLast, const CBlockHeader* pblock, const Consensus::Params& params)
+unsigned int GetNextWorkRequired_LWMA_MultiAlgo(const CBlockIndex* pindexLast, const CBlockHeader* pblock, const Consensus::Params& params, bool fIsAuxPow)
 {
     assert(pindexLast != nullptr);
     const int64_t T = params.nPowTargetSpacing;
@@ -291,7 +291,10 @@ unsigned int GetNextWorkRequired_LWMA_MultiAlgo(const CBlockIndex* pindexLast, c
     // Define a k that will be used to get a proper average after weighting the solvetimes.
     const int64_t k = N * (N + 1) * T / 2;
     const int64_t height = pindexLast->nHeight;
-    const PowAlgo algo = pindexLast->nVersion.GetAlgo();
+    PowAlgo algo = pblock->nVersion.GetAlgo();
+    if (fIsAuxPow) {
+        algo = PowAlgo::SCRYPT;
+    }
     const arith_uint256 powLimit = UintToArith256(params.powLimit[static_cast<uint8_t>(algo)]);
 
     arith_uint256 avgTarget, nextTarget;
@@ -347,10 +350,10 @@ unsigned int GetNextWorkRequired_LWMA_MultiAlgo(const CBlockIndex* pindexLast, c
     return nextTarget.GetCompact();
 }
 
-unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHeader *pblock, const Consensus::Params& params)
+unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHeader *pblock, const Consensus::Params& params, bool fIsAuxPow)
 {
     if (params.IsAuxpowActive(pindexLast->nHeight + 1)) {
-        return GetNextWorkRequired_LWMA_MultiAlgo(pindexLast, pblock, params);
+        return GetNextWorkRequired_LWMA_MultiAlgo(pindexLast, pblock, params, fIsAuxPow);
     }
 
     if (IsDGWActive(pindexLast->nHeight + 1)) {
