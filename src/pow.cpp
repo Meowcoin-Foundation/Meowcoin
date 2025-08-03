@@ -207,6 +207,12 @@ unsigned int GetNextWorkRequired_LWMA_MultiAlgo(const CBlockIndex* pindexLast, c
     }
     const arith_uint256 powLimit = UintToArith256(params.powLimit[static_cast<uint8_t>(algo)]);
 
+    // New coins just "give away" first N blocks. It's better to guess
+    // this value instead of using powLimit, but err on high side to not get stuck.
+    if (height < N) {
+        return powLimit.GetCompact();
+    }
+
     arith_uint256 avgTarget, nextTarget;
     int64_t thisTimestamp, previousTimestamp;
     int64_t sumWeightedSolvetimes = 0, j = 0;
@@ -214,12 +220,12 @@ unsigned int GetNextWorkRequired_LWMA_MultiAlgo(const CBlockIndex* pindexLast, c
     std::vector<const CBlockIndex*> SameAlgoBlocks;
     for (int c = height-1; SameAlgoBlocks.size() < (N + 1); c--){
         const CBlockIndex* block = pindexLast->GetAncestor(c); // -1 after execution
-        if (block->GetBlockHeader(params).nVersion.GetAlgo() == algo){
-            SameAlgoBlocks.push_back(block);
-        }
-
         if (c < N){
             return powLimit.GetCompact();
+        }
+        
+        if (block->GetBlockHeader(params).nVersion.GetAlgo() == algo){
+            SameAlgoBlocks.push_back(block);
         }
     }
 
