@@ -357,14 +357,18 @@ unsigned int GetNextWorkRequired_LWMA_MultiAlgo(const CBlockIndex* pindexLast, c
 
 unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHeader *pblock, const Consensus::Params& params, bool fIsAuxPow)
 {
+    LogPrintf("DEBUG: GetNextWorkRequired - height=%d, IsAuxpowActive=%d, algo=%d\n", pindexLast->nHeight + 1, params.IsAuxpowActive(pindexLast->nHeight + 1), static_cast<int>(algo));
+    
     if (params.IsAuxpowActive(pindexLast->nHeight + 1)) {
         return GetNextWorkRequired_LWMA_MultiAlgo(pindexLast, pblock, params, fIsAuxPow);
     }
 
     if (IsDGWActive(pindexLast->nHeight + 1)) {
+        LogPrintf("DEBUG: GetNextWorkRequired - Using DarkGravityWave\n");
         return DarkGravityWave(pindexLast, pblock, params);
     }
     else {
+        LogPrintf("DEBUG: GetNextWorkRequired - Using BTC\n");
         return GetNextWorkRequiredBTC(pindexLast, pblock, params);
     }
 

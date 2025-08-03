@@ -1469,6 +1469,12 @@ UniValue AuxMiningCreateBlock(const CScript& scriptPubKey)
         IncrementExtraNonce(&newBlock->block, pindexPrev, nExtraNonce);
         newBlock->block.nVersion.SetAuxpow(true);
 
+        // For AuxPoW blocks, we need to use SCRYPT difficulty instead of MEOWPOW
+        // The block was created with MEOWPOW difficulty, so we need to recalculate with SCRYPT
+        LogPrintf("DEBUG: AuxMiningCreateBlock - Before recalc: nBits=%08x\n", newBlock->block.nBits);
+        newBlock->block.nBits = GetNextWorkRequired(pindexPrev, &newBlock->block, GetParams().GetConsensus(), PowAlgo::SCRYPT);
+        LogPrintf("DEBUG: AuxMiningCreateBlock - After recalc: nBits=%08x\n", newBlock->block.nBits);
+
         // Save
         pblock = &newBlock->block;
         mapNewBlock[pblock->GetHash()] = pblock;
