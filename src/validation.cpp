@@ -1310,7 +1310,7 @@ bool CheckProofOfWork(const CBlockHeader& block, const Consensus::Params& params
     LogPrintf("%s : Checking Proof of Work for block. Algo: %s. Parent Block: %s", __func__, block.nVersion.GetAlgoName(), block.auxpow->parentBlock.ToString());
     if (!CheckProofOfWork(block.auxpow->getParentBlockHash(), block.nBits, block.nVersion.GetAlgo(), params))
         return error("%s : AUX proof of work failed", __func__);
-
+    LogPrintf("%s : Proof of Work Passed for block. Algo: %s. Parent Block: %s", __func__, block.nVersion.GetAlgoName(), block.auxpow->parentBlock.ToString());
     return true;
 }
 
