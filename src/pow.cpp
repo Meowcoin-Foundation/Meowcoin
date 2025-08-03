@@ -198,7 +198,7 @@ unsigned int GetNextWorkRequired_LWMA(const CBlockIndex* pindexLast, const CBloc
 
     const int64_t height = pindexLast->nHeight;
     const arith_uint256 powLimit = UintToArith256(params.powLimit[static_cast<uint8_t>(PowAlgo::MEOWPOW)]);
-
+    LogPrintf("GetNextWorkRequired_LWMA: Using MeowPow\n");
     // New coins just "give away" first N blocks. It's better to guess
     // this value instead of using powLimit, but err on high side to not get stuck.
     if (height < N) {
@@ -294,6 +294,11 @@ unsigned int GetNextWorkRequired_LWMA_MultiAlgo(const CBlockIndex* pindexLast, c
     PowAlgo algo = pblock->nVersion.GetAlgo();
     if (fIsAuxPow) {
         algo = PowAlgo::SCRYPT;
+    }
+    if (algo == PowAlgo::SCRYPT) {
+        LogPrintf("GetNextWorkRequired_LWMA_MultiAlgo: Using Scrypt\n");
+    } else {
+        LogPrintf("GetNextWorkRequired_LWMA_MultiAlgo: Using MeowPow\n");
     }
     const arith_uint256 powLimit = UintToArith256(params.powLimit[static_cast<uint8_t>(algo)]);
 

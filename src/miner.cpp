@@ -214,15 +214,22 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
 
 
     // Fill in header
+    LogPrintf("CreateNewBlock(): Filling in Header. IsAuxPow: %s\n", fIsAuxPow);
     pblock->hashPrevBlock  = pindexPrev->GetBlockHash();
+    LogPrintf("CreateNewBlock(): Set Prev Hash. IsAuxPow: %s\n", fIsAuxPow);
     UpdateTime(pblock, chainparams.GetConsensus(), pindexPrev, fIsAuxPow);
+    LogPrintf("CreateNewBlock(): Updated nTime. IsAuxPow: %s\n", fIsAuxPow);
     pblock->nBits          = GetNextWorkRequired(pindexPrev, pblock, chainparams.GetConsensus(), fIsAuxPow);
+    LogPrintf("CreateNewBlock(): Updated nBits. IsAuxPow: %s\n", fIsAuxPow);
     pblock->nNonce         = 0;
+    LogPrintf("CreateNewBlock(): Updated nNonce. IsAuxPow: %s\n", fIsAuxPow);
     pblock->nNonce64         = 0;
+    LogPrintf("CreateNewBlock(): Updated nNonce64. IsAuxPow: %s\n", fIsAuxPow);
     pblock->nHeight          = nHeight;
     pblocktemplate->vTxSigOpsCost[0] = WITNESS_SCALE_FACTOR * GetLegacySigOpCount(*pblock->vtx[0]);
 
     CValidationState state;
+    LogPrintf("CreateNewBlock(): Validating Block with TestBlockValidity. IsAuxPow: %s\n", fIsAuxPow);
     if (!TestBlockValidity(state, chainparams, *pblock, pindexPrev, false, false)) {
         if (state.IsTransactionError()) {
             if (gArgs.GetBoolArg("-autofixmempool", false)) {
