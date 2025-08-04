@@ -250,25 +250,10 @@ unsigned int GetNextWorkRequired_LWMA_MultiAlgo(const CBlockIndex* pindexLast, c
     const int64_t height = pindexLast->nHeight;
     PowAlgo algo = pblock->nVersion.GetAlgo();
     
-    // For AuxPoW blocks, we need to be smarter about algorithm selection
+    // For AuxPoW blocks, always use SCRYPT difficulty
     if (fIsAuxPow) {
-        // Check if we have enough SCRYPT blocks in recent history
-        int scryptBlocks = 0;
-        for (int c = height-1; c >= std::max(0L, height-100); c--) {
-            const CBlockIndex* block = pindexLast->GetAncestor(c);
-            if (block && block->GetBlockHeader(params).nVersion.GetAlgo() == PowAlgo::SCRYPT) {
-                scryptBlocks++;
-            }
-        }
-        
-        if (scryptBlocks >= 10) {
-            algo = PowAlgo::SCRYPT;
-            LogPrintf("GetNextWorkRequired_LWMA_MultiAlgo: Using SCRYPT for AuxPoW (found %d SCRYPT blocks)\n", scryptBlocks);
-        } else {
-            // Fall back to MEOWPOW if not enough SCRYPT blocks
-            algo = PowAlgo::MEOWPOW;
-            LogPrintf("GetNextWorkRequired_LWMA_MultiAlgo: Falling back to MEOWPOW for AuxPoW (only %d SCRYPT blocks)\n", scryptBlocks);
-        }
+        algo = PowAlgo::SCRYPT;
+        LogPrintf("GetNextWorkRequired_LWMA_MultiAlgo: Using SCRYPT for AuxPoW (merge mining)\n");
     }
     
     if (algo == PowAlgo::SCRYPT) {
