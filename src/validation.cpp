@@ -4246,7 +4246,10 @@ static bool ContextualCheckBlockHeader(const CBlockHeader& block, CValidationSta
         return state.DoS(100, error("%s : legacy block after auxpow start", __func__), REJECT_INVALID, "late-legacy-block");
 
     // Check proof of work
-    if (block.nBits != GetNextWorkRequired(pindexPrev, &block, consensusParams, fIsAuxPow))
+    unsigned int expectedBits = GetNextWorkRequired(pindexPrev, &block, consensusParams, fIsAuxPow);
+    LogPrintf("DEBUG: ContextualCheckBlockHeader - height=%d, block.nBits=%08x, expectedBits=%08x, fIsAuxPow=%s\n", 
+              nHeight, block.nBits, expectedBits, fIsAuxPow ? "true" : "false");
+    if (block.nBits != expectedBits)
         return state.DoS(100, false, REJECT_INVALID, "bad-diffbits", false, "incorrect proof of work");
 
     // Check against checkpoints

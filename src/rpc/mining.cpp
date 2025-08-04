@@ -564,7 +564,8 @@ UniValue getblocktemplate(const JSONRPCRequest& request)
             script = CScript() << OP_TRUE;
         }
 
-        pblocktemplate = BlockAssembler(GetParams()).CreateNewBlock(script, fSupportsSegwit);
+        // getblocktemplate should always create MEOWPOW blocks (not AuxPoW)
+        pblocktemplate = BlockAssembler(GetParams()).CreateNewBlock(script, fSupportsSegwit, false);
         if (!pblocktemplate)
             throw JSONRPCError(RPC_OUT_OF_MEMORY, "Out of memory");
 

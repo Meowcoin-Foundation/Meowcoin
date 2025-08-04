@@ -228,44 +228,35 @@ unsigned int DarkGravityWave3(const CBlockIndex* pindexLast, const CBlockHeader 
 unsigned int GetNextWorkRequired_LWMA_MultiAlgo(const CBlockIndex* pindexLast, const CBlockHeader* pblock, const Consensus::Params& params, bool fIsAuxPow)
 {
     assert(pindexLast != nullptr);
+    
+    LogPrintf("LWMA_DEBUG: === START LWMA_MultiAlgo ===\n");
+    LogPrintf("LWMA_DEBUG: pindexLast->nHeight=%d, fIsAuxPow=%s\n", pindexLast->nHeight, fIsAuxPow ? "true" : "false");
+    
     const int64_t T = params.nPowTargetSpacing;
-
-    // For T=600 use N=288 (takes 2 days to fully respond to hashrate changes) and has
-    //  a StdDev of N^(-0.5) which will often be the change in difficulty in N/4 blocks when hashrate is
-    // constant. 10% of blocks will have an error >2x the StdDev above or below where D should be.
-    //  This N=288 is like N=144 in ASERT which is N=144*ln(2)=100 in
-    // terms of BCH's ASERT.  BCH's ASERT uses N=288 which is like 2*288/ln(2) = 831 = N for
-    // LWMA. ASERT and LWMA are almost indistinguishable once this adjustment to N is used. In other words,
-    // 831/144 = 5.8 means my N=144 recommendation for T=600 is 5.8 times faster but SQRT(5.8) less
-    // stability than BCH's ASERT. The StdDev for 288 is 6%, so 12% accidental variation will be see in 10% of blocks.
-    // Twice 288 is 576 which will have 4.2% StdDev and be 2x slower. This is reasonable for T=300 or less.
-    // For T = 60, N=1,000 will have 3% StdDev & maybe plenty fast, but require 1M multiplications & additions per
-    // 1,000 blocks for validation which might be a consideration. I would not go over N=576 and prefer 360
-    // so that it can respond in 6 hours to hashrate changes.
-
     const int64_t N = params.nLwmaAveragingWindow;
-
-    // Define a k that will be used to get a proper average after weighting the solvetimes.
     const int64_t k = N * (N + 1) * T / 2;
     const int64_t height = pindexLast->nHeight;
     PowAlgo algo = pblock->nVersion.GetAlgo();
     
+    LogPrintf("LWMA_DEBUG: T=%d, N=%d, k=%d, height=%d, original_algo=%d\n", 
+              (int)T, (int)N, (int)k, (int)height, static_cast<int>(algo));
+    
     // For AuxPoW blocks, always use SCRYPT difficulty
     if (fIsAuxPow) {
         algo = PowAlgo::SCRYPT;
-        LogPrintf("GetNextWorkRequired_LWMA_MultiAlgo: Using SCRYPT for AuxPoW (merge mining)\n");
+        LogPrintf("LWMA_DEBUG: Forcing SCRYPT for AuxPoW (merge mining)\n");
     }
     
-    if (algo == PowAlgo::SCRYPT) {
-        LogPrintf("GetNextWorkRequired_LWMA_MultiAlgo: Using Scrypt\n");
-    } else {
-        LogPrintf("GetNextWorkRequired_LWMA_MultiAlgo: Using MeowPow\n");
-    }
+    LogPrintf("LWMA_DEBUG: Final algo=%d (%s)\n", static_cast<int>(algo), 
+              algo == PowAlgo::SCRYPT ? "SCRYPT" : "MEOWPOW");
+    
     const arith_uint256 powLimit = UintToArith256(params.powLimit[static_cast<uint8_t>(algo)]);
+    LogPrintf("LWMA_DEBUG: powLimit for algo %d = %08x\n", static_cast<int>(algo), powLimit.GetCompact());
 
     // New coins just "give away" first N blocks. It's better to guess
     // this value instead of using powLimit, but err on high side to not get stuck.
     if (height < N) {
+        LogPrintf("LWMA_DEBUG: Height %d < N %d, returning powLimit: %08x\n", (int)height, (int)N, powLimit.GetCompact());
         return powLimit.GetCompact();
     }
 
@@ -276,33 +267,45 @@ unsigned int GetNextWorkRequired_LWMA_MultiAlgo(const CBlockIndex* pindexLast, c
     std::vector<const CBlockIndex*> SameAlgoBlocks;
     int searchLimit = std::min(height, N * 10); // Search up to 10x N blocks back
     
+    LogPrintf("LWMA_DEBUG: Searching for %d blocks of algo %d, searchLimit=%d\n", (int)N, static_cast<int>(algo), searchLimit);
+    
     for (int c = height-1; c >= 0 && SameAlgoBlocks.size() < (N + 1) && (height - c) <= searchLimit; c--){
         const CBlockIndex* block = pindexLast->GetAncestor(c);
         if (!block) {
+            LogPrintf("LWMA_DEBUG: GetAncestor(%d) returned null, breaking\n", c);
             break;
         }
         
-        if (block->GetBlockHeader(params).nVersion.GetAlgo() == algo){
+        PowAlgo blockAlgo = block->GetBlockHeader(params).nVersion.GetAlgo();
+        if (blockAlgo == algo){
             SameAlgoBlocks.push_back(block);
+            LogPrintf("LWMA_DEBUG: Found matching block at height %d, algo=%d, total_found=%d\n", 
+                      block->nHeight, static_cast<int>(blockAlgo), (int)SameAlgoBlocks.size());
         }
     }
     
+    LogPrintf("LWMA_DEBUG: Found %d blocks of algo %d, need %d\n", 
+              (int)SameAlgoBlocks.size(), static_cast<int>(algo), (int)N);
+    
     // If we don't have enough blocks of this algorithm, fall back to a reasonable difficulty
     if (SameAlgoBlocks.size() < N) {
-        LogPrintf("GetNextWorkRequired_LWMA_MultiAlgo: Only found %d blocks of algorithm %d, need %d\n", 
+        LogPrintf("LWMA_DEBUG: INSUFFICIENT BLOCKS - Only found %d blocks of algorithm %d, need %d\n", 
                   (int)SameAlgoBlocks.size(), static_cast<int>(algo), (int)N);
         
         // For AuxPoW (SCRYPT), use a reasonable difficulty that's not the maximum
         if (algo == PowAlgo::SCRYPT) {
             // Use a difficulty that's reasonable for SCRYPT - not the maximum
             arith_uint256 reasonableTarget = powLimit / 1000;
-            LogPrintf("GetNextWorkRequired_LWMA_MultiAlgo: Using reasonable SCRYPT difficulty: %08x\n", reasonableTarget.GetCompact());
+            LogPrintf("LWMA_DEBUG: Using reasonable SCRYPT difficulty: %08x (powLimit/1000)\n", reasonableTarget.GetCompact());
             return reasonableTarget.GetCompact();
         }
         
+        LogPrintf("LWMA_DEBUG: Using maximum difficulty fallback: %08x\n", powLimit.GetCompact());
         return powLimit.GetCompact();
     }
 
+    LogPrintf("LWMA_DEBUG: SUFFICIENT BLOCKS - Proceeding with LWMA calculation\n");
+    
     // Loop through N most recent blocks.
     for (int64_t i = N; i > 0; i--) {
         const CBlockIndex* block = SameAlgoBlocks[i-1];
@@ -329,13 +332,21 @@ unsigned int GetNextWorkRequired_LWMA_MultiAlgo(const CBlockIndex* pindexLast, c
         arith_uint256 target;
         target.SetCompact(block->nBits);
         avgTarget += target / N / k; // Dividing by k here prevents an overflow below.
+        
+        LogPrintf("LWMA_DEBUG: Block %d: height=%d, time=%d, solvetime=%d, nBits=%08x, weight=%d\n", 
+                  (int)i, block->nHeight, (int)block->GetBlockTime(), (int)solvetime, block->nBits, (int)j);
     }
+    
     nextTarget = avgTarget * sumWeightedSolvetimes;
+    LogPrintf("LWMA_DEBUG: sumWeightedSolvetimes=%d, avgTarget=%08x, nextTarget=%08x\n", 
+              (int)sumWeightedSolvetimes, avgTarget.GetCompact(), nextTarget.GetCompact());
 
     if (nextTarget > powLimit) {
+        LogPrintf("LWMA_DEBUG: nextTarget > powLimit, clamping to powLimit: %08x\n", powLimit.GetCompact());
         nextTarget = powLimit;
     }
 
+    LogPrintf("LWMA_DEBUG: === END LWMA_MultiAlgo - Returning: %08x ===\n", nextTarget.GetCompact());
     return nextTarget.GetCompact();
 }
 
@@ -380,9 +391,7 @@ unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHead
 {
     LogPrintf("DEBUG: GetNextWorkRequired - height=%d, IsAuxpowActive=%d, algo=%d\n", pindexLast->nHeight + 1, params.IsAuxpowActive(pindexLast->nHeight + 1), static_cast<int>(pblock->nVersion.GetAlgo()));
     if (params.IsAuxpowActive(pindexLast->nHeight + 1)) {
-        if (pblock->nVersion.IsAuxpow()) {
-            fIsAuxPow = true;
-        }
+        // Don't override fIsAuxPow parameter - let the caller decide
         LogPrintf("DEBUG: GetNextWorkRequired - Using LWMA. IsAuxPow: %s\n", fIsAuxPow ? "true" : "false");
         return GetNextWorkRequired_LWMA_MultiAlgo(pindexLast, pblock, params, fIsAuxPow);
     }

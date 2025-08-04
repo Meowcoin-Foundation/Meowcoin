@@ -230,7 +230,7 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
 
     CValidationState state;
     LogPrintf("CreateNewBlock(): Validating Block with TestBlockValidity. IsAuxPow: %s\n", fIsAuxPow);
-    if (!TestBlockValidity(state, chainparams, *pblock, pindexPrev, false, false, true)) {
+    if (!TestBlockValidity(state, chainparams, *pblock, pindexPrev, false, false, fIsAuxPow)) {
         if (state.IsTransactionError()) {
             if (gArgs.GetBoolArg("-autofixmempool", false)) {
                 {
