@@ -356,7 +356,7 @@ public:
         consensus.defaultAssumeValid = uint256S("0x000000eaab417d6dfe9bd75119972e1d07ecfe8ff655bef7c2acb3d9a0eeed81");
 
         consensus.nAuxpowChainId = 9;
-        consensus.nAuxpowStartHeight = 100;
+        consensus.nAuxpowStartHeight = 600;
         consensus.fStrictChainId = true;
         consensus.nLegacyBlocksBefore = 100;
 
