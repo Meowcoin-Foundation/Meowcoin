@@ -391,9 +391,10 @@ unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHead
 {
     LogPrintf("DEBUG: GetNextWorkRequired - height=%d, IsAuxpowActive=%d, algo=%d\n", pindexLast->nHeight + 1, params.IsAuxpowActive(pindexLast->nHeight + 1), static_cast<int>(pblock->nVersion.GetAlgo()));
     if (params.IsAuxpowActive(pindexLast->nHeight + 1)) {
-        // Don't override fIsAuxPow parameter - let the caller decide
-        LogPrintf("DEBUG: GetNextWorkRequired - Using LWMA. IsAuxPow: %s\n", fIsAuxPow ? "true" : "false");
-        return GetNextWorkRequired_LWMA_MultiAlgo(pindexLast, pblock, params, fIsAuxPow);
+        // FIX: Use the block's version to determine if it's AuxPoW, not the parameter
+        bool fIsAuxPowBlock = pblock->nVersion.IsAuxpow();
+        LogPrintf("DEBUG: GetNextWorkRequired - Using LWMA. IsAuxPow: %s, block.IsAuxpow(): %s\n", fIsAuxPow ? "true" : "false", fIsAuxPowBlock ? "true" : "false");
+        return GetNextWorkRequired_LWMA_MultiAlgo(pindexLast, pblock, params, fIsAuxPowBlock);
     }
 
     if (IsDGWActive(pindexLast->nHeight + 1)) {

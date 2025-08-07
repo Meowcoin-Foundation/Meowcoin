@@ -1341,8 +1341,6 @@ static bool WriteBlockToDisk(const CBlock& block, CDiskBlockPos& pos, const CMes
 template<typename T>
 static bool ReadBlockOrHeader(T& block, const CDiskBlockPos& pos, const Consensus::Params& consensusParams)
 {
-    block.SetNull();
-
     // Open history file to read
     CAutoFile filein(OpenBlockFile(pos, true), SER_DISK, CLIENT_VERSION);
     if (filein.IsNull())
@@ -4246,9 +4244,9 @@ static bool ContextualCheckBlockHeader(const CBlockHeader& block, CValidationSta
         return state.DoS(100, error("%s : legacy block after auxpow start", __func__), REJECT_INVALID, "late-legacy-block");
 
     // Check proof of work
-    unsigned int expectedBits = GetNextWorkRequired(pindexPrev, &block, consensusParams, fIsAuxPow);
-    LogPrintf("DEBUG: ContextualCheckBlockHeader - height=%d, block.nBits=%08x, expectedBits=%08x, fIsAuxPow=%s\n", 
-              nHeight, block.nBits, expectedBits, fIsAuxPow ? "true" : "false");
+    // Use the block's version to determine if it's AuxPoW, not the parameter
+    bool fIsAuxPowBlock = block.nVersion.IsAuxpow();
+    unsigned int expectedBits = GetNextWorkRequired(pindexPrev, &block, consensusParams, fIsAuxPowBlock);
     if (block.nBits != expectedBits)
         return state.DoS(100, false, REJECT_INVALID, "bad-diffbits", false, "incorrect proof of work");
 
@@ -4376,6 +4374,24 @@ static bool ContextualCheckBlock(const CBlock& block, CValidationState& state, c
 static bool AcceptBlockHeader(const CBlockHeader& block, CValidationState& state, const CChainParams& chainparams, CBlockIndex** ppindex)
 {
     AssertLockHeld(cs_main);
+    
+    // DEBUG: Trace header acceptance
+    bool fIsAuxPowBlock = block.nVersion.IsAuxpow();
+    
+    // FIX: Set block height for AuxPoW blocks if it's 0
+    int blockHeight = block.nHeight;
+    if (fIsAuxPowBlock && blockHeight == 0) {
+        // Find the previous block to calculate height
+        BlockMap::iterator mi = mapBlockIndex.find(block.hashPrevBlock);
+        if (mi != mapBlockIndex.end()) {
+            CBlockIndex* pindexPrev = (*mi).second;
+            blockHeight = pindexPrev->nHeight + 1;
+            LogPrintf("DEBUG: Fixed AuxPoW header height: %d -> %d\n", 0, blockHeight);
+        }
+    }
+    
+    LogPrintf("DEBUG: AcceptBlockHeader - ENTRY: height=%d, hash=%s, IsAuxPow=%s\n",
+              blockHeight, block.GetHash().ToString(), fIsAuxPowBlock ? "true" : "false");
     // Check for duplicate
     uint256 hash = block.GetHash();
     BlockMap::iterator miSelf = mapBlockIndex.find(hash);
