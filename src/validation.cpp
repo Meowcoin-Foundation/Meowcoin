@@ -1307,10 +1307,8 @@ bool CheckProofOfWork(const CBlockHeader& block, const Consensus::Params& params
     if (!block.auxpow->check(block.GetHash(), block.nVersion.GetChainId(), params))
         return error("%s : AUX POW is not valid", __func__);
 
-    LogPrintf("%s : Checking Proof of Work for block. Algo: %s. Parent Block: %s", __func__, block.nVersion.GetAlgoName(), block.auxpow->parentBlock.ToString());
     if (!CheckProofOfWork(block.auxpow->getParentBlockHash(), block.nBits, block.nVersion.GetAlgo(), params))
         return error("%s : AUX proof of work failed", __func__);
-    LogPrintf("%s : Proof of Work Passed for block. Algo: %s. Parent Block: %s", __func__, block.nVersion.GetAlgoName(), block.auxpow->parentBlock.ToString());
     return true;
 }
 
@@ -1341,6 +1339,7 @@ static bool WriteBlockToDisk(const CBlock& block, CDiskBlockPos& pos, const CMes
 template<typename T>
 static bool ReadBlockOrHeader(T& block, const CDiskBlockPos& pos, const Consensus::Params& consensusParams)
 {
+    block.SetNull();
     // Open history file to read
     CAutoFile filein(OpenBlockFile(pos, true), SER_DISK, CLIENT_VERSION);
     if (filein.IsNull())
@@ -4374,24 +4373,6 @@ static bool ContextualCheckBlock(const CBlock& block, CValidationState& state, c
 static bool AcceptBlockHeader(const CBlockHeader& block, CValidationState& state, const CChainParams& chainparams, CBlockIndex** ppindex)
 {
     AssertLockHeld(cs_main);
-    
-    // DEBUG: Trace header acceptance
-    bool fIsAuxPowBlock = block.nVersion.IsAuxpow();
-    
-    // FIX: Set block height for AuxPoW blocks if it's 0
-    int blockHeight = block.nHeight;
-    if (fIsAuxPowBlock && blockHeight == 0) {
-        // Find the previous block to calculate height
-        BlockMap::iterator mi = mapBlockIndex.find(block.hashPrevBlock);
-        if (mi != mapBlockIndex.end()) {
-            CBlockIndex* pindexPrev = (*mi).second;
-            blockHeight = pindexPrev->nHeight + 1;
-            LogPrintf("DEBUG: Fixed AuxPoW header height: %d -> %d\n", 0, blockHeight);
-        }
-    }
-    
-    LogPrintf("DEBUG: AcceptBlockHeader - ENTRY: height=%d, hash=%s, IsAuxPow=%s\n",
-              blockHeight, block.GetHash().ToString(), fIsAuxPowBlock ? "true" : "false");
     // Check for duplicate
     uint256 hash = block.GetHash();
     BlockMap::iterator miSelf = mapBlockIndex.find(hash);

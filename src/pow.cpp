@@ -225,130 +225,98 @@ unsigned int DarkGravityWave3(const CBlockIndex* pindexLast, const CBlockHeader 
 //  node time" rule (70 minutes in BCH, ZEC, & BTC) should be reduced to FTL/2 
 //  to prevent 33% Sybil attack that can manipulate difficulty via timestamps. See:
 // https://github.com/zcash/zcash/issues/4021
-unsigned int GetNextWorkRequired_LWMA_MultiAlgo(const CBlockIndex* pindexLast, const CBlockHeader* pblock, const Consensus::Params& params, bool fIsAuxPow)
+unsigned int GetNextWorkRequired_LWMA_MultiAlgo(
+    const CBlockIndex* pindexLast,
+    const CBlockHeader* pblock,
+    const Consensus::Params& params,
+    bool fIsAuxPow)
 {
     assert(pindexLast != nullptr);
-    
-    LogPrintf("LWMA_DEBUG: === START LWMA_MultiAlgo ===\n");
-    LogPrintf("LWMA_DEBUG: pindexLast->nHeight=%d, fIsAuxPow=%s\n", pindexLast->nHeight, fIsAuxPow ? "true" : "false");
-    
-    const int64_t T = params.nPowTargetSpacing;
+
+    // Base chain design target (e.g., 60s for the whole chain)
+    const int64_t T_chain = params.nPowTargetSpacing;
+
+    // Number of parallel algos contributing blocks
+    const int64_t ALGOS = 2; // MeowPow + AuxPoW
+
+    // Effective per-algo target to achieve ~T_chain overall:
+    // with 2 algos ~50/50, set per-algo to 2 * T_chain = 120s
+    const int64_t T = T_chain * ALGOS;
+
     const int64_t N = params.nLwmaAveragingWindow;
-    const int64_t k = N * (N + 1) * T / 2;
+    const int64_t k = N * (N + 1) * T / 2;   // includes per-algo T (now 120s)
     const int64_t height = pindexLast->nHeight;
+
     PowAlgo algo = pblock->nVersion.GetAlgo();
-    
-    LogPrintf("LWMA_DEBUG: T=%d, N=%d, k=%d, height=%d, original_algo=%d\n", 
-              (int)T, (int)N, (int)k, (int)height, static_cast<int>(algo));
-    
-    // For AuxPoW blocks, always use SCRYPT difficulty
     if (fIsAuxPow) {
-        algo = PowAlgo::SCRYPT;
-        LogPrintf("LWMA_DEBUG: Forcing SCRYPT for AuxPoW (merge mining)\n");
+        algo = PowAlgo::SCRYPT; // AuxPoW always uses Scrypt difficulty
     }
-    
-    LogPrintf("LWMA_DEBUG: Final algo=%d (%s)\n", static_cast<int>(algo), 
-              algo == PowAlgo::SCRYPT ? "SCRYPT" : "MEOWPOW");
-    
-    const arith_uint256 powLimit = UintToArith256(params.powLimit[static_cast<uint8_t>(algo)]);
-    LogPrintf("LWMA_DEBUG: powLimit for algo %d = %08x\n", static_cast<int>(algo), powLimit.GetCompact());
 
-    // New coins just "give away" first N blocks. It's better to guess
-    // this value instead of using powLimit, but err on high side to not get stuck.
+    const arith_uint256 powLimit =
+        UintToArith256(params.powLimit[static_cast<uint8_t>(algo)]);
+
     if (height < N) {
-        LogPrintf("LWMA_DEBUG: Height %d < N %d, returning powLimit: %08x\n", (int)height, (int)N, powLimit.GetCompact());
         return powLimit.GetCompact();
     }
 
-    arith_uint256 avgTarget, nextTarget;
-    int64_t thisTimestamp, previousTimestamp;
-    int64_t sumWeightedSolvetimes = 0, j = 0;
+    // Gather last N+1 blocks of the SAME algo
+    std::vector<const CBlockIndex*> sameAlgo;
+    sameAlgo.reserve(N + 1);
 
-    std::vector<const CBlockIndex*> SameAlgoBlocks;
-    int searchLimit = std::min(height, N * 10); // Search up to 10x N blocks back
-    
-    LogPrintf("LWMA_DEBUG: Searching for %d blocks of algo %d, searchLimit=%d\n", (int)N, static_cast<int>(algo), searchLimit);
-    
-    for (int c = height-1; c >= 0 && SameAlgoBlocks.size() < (N + 1) && (height - c) <= searchLimit; c--){
-        const CBlockIndex* block = pindexLast->GetAncestor(c);
-        if (!block) {
-            LogPrintf("LWMA_DEBUG: GetAncestor(%d) returned null, breaking\n", c);
-            break;
-        }
-        
-        PowAlgo blockAlgo = block->GetBlockHeader(params).nVersion.GetAlgo();
-        if (blockAlgo == algo){
-            SameAlgoBlocks.push_back(block);
-            LogPrintf("LWMA_DEBUG: Found matching block at height %d, algo=%d, total_found=%d\n", 
-                      block->nHeight, static_cast<int>(blockAlgo), (int)SameAlgoBlocks.size());
-        }
+    int searchLimit = std::min<int64_t>(height, N * 10);
+    for (int64_t h = height; h >= 0
+         && (int)sameAlgo.size() < (N + 1)
+         && (height - h) <= searchLimit; --h) {
+        const CBlockIndex* bi = pindexLast->GetAncestor(h);
+        if (!bi) break;
+        PowAlgo bialgo = bi->GetBlockHeader(params).nVersion.GetAlgo();
+        if (bialgo == algo) sameAlgo.push_back(bi);
     }
-    
-    LogPrintf("LWMA_DEBUG: Found %d blocks of algo %d, need %d\n", 
-              (int)SameAlgoBlocks.size(), static_cast<int>(algo), (int)N);
-    
-    // If we don't have enough blocks of this algorithm, fall back to a reasonable difficulty
-    if (SameAlgoBlocks.size() < N) {
-        LogPrintf("LWMA_DEBUG: INSUFFICIENT BLOCKS - Only found %d blocks of algorithm %d, need %d\n", 
-                  (int)SameAlgoBlocks.size(), static_cast<int>(algo), (int)N);
-        
-        // For AuxPoW (SCRYPT), use a reasonable difficulty that's not the maximum
-        if (algo == PowAlgo::SCRYPT) {
-            // Use a difficulty that's reasonable for SCRYPT - not the maximum
-            arith_uint256 reasonableTarget = powLimit / 1000;
-            LogPrintf("LWMA_DEBUG: Using reasonable SCRYPT difficulty: %08x (powLimit/1000)\n", reasonableTarget.GetCompact());
-            return reasonableTarget.GetCompact();
-        }
-        
-        LogPrintf("LWMA_DEBUG: Using maximum difficulty fallback: %08x\n", powLimit.GetCompact());
+
+    if ((int)sameAlgo.size() < (N + 1)) {
+        if (!sameAlgo.empty()) return sameAlgo.front()->nBits;
         return powLimit.GetCompact();
     }
 
-    LogPrintf("LWMA_DEBUG: SUFFICIENT BLOCKS - Proceeding with LWMA calculation\n");
-    
-    // Loop through N most recent blocks.
-    for (int64_t i = N; i > 0; i--) {
-        const CBlockIndex* block = SameAlgoBlocks[i-1];
-        const CBlockIndex* blockPreviousTimestamp = SameAlgoBlocks[i-1];
-        previousTimestamp = blockPreviousTimestamp->GetBlockTime();
+    std::reverse(sameAlgo.begin(), sameAlgo.end()); // oldest -> newest
 
-        // Prevent solvetimes from being negative in a safe way. It must be done like this.
-        // Do not attempt anything like  if (solvetime < 1) {solvetime=1;}
-        // The +1 ensures new coins do not calculate nextTarget = 0.
-        thisTimestamp = (block->GetBlockTime() > previousTimestamp) ?
-                            block->GetBlockTime() :
-                            previousTimestamp + 1;
+    arith_uint256 sumTargets;                 // Σ target_i
+    int64_t sumWeightedSolvetimes = 0;        // Σ i * solvetime_i
 
-        // 6*T limit prevents large drops in diff from long solvetimes which would cause oscillations.
-        int64_t solvetime = std::min(6 * T, thisTimestamp - previousTimestamp);
+    int64_t prevTs = sameAlgo[0]->GetBlockTime();
 
-        // The following is part of "preventing negative solvetimes".
-        previousTimestamp = thisTimestamp;
+    for (int64_t i = 1; i <= N; ++i) {
+        const CBlockIndex* blk = sameAlgo[i];
 
-        // Give linearly higher weight to more recent solvetimes.
-        j++;
-        sumWeightedSolvetimes += solvetime * j;
+        int64_t ts = blk->GetBlockTime();
+        if (ts <= prevTs) ts = prevTs + 1;
 
-        arith_uint256 target;
-        target.SetCompact(block->nBits);
-        avgTarget += target / N / k; // Dividing by k here prevents an overflow below.
-        
-        LogPrintf("LWMA_DEBUG: Block %d: height=%d, time=%d, solvetime=%d, nBits=%08x, weight=%d\n", 
-                  (int)i, block->nHeight, (int)block->GetBlockTime(), (int)solvetime, block->nBits, (int)j);
-    }
-    
-    nextTarget = avgTarget * sumWeightedSolvetimes;
-    LogPrintf("LWMA_DEBUG: sumWeightedSolvetimes=%d, avgTarget=%08x, nextTarget=%08x\n", 
-              (int)sumWeightedSolvetimes, avgTarget.GetCompact(), nextTarget.GetCompact());
+        int64_t st = ts - prevTs;
+        prevTs = ts;
 
-    if (nextTarget > powLimit) {
-        LogPrintf("LWMA_DEBUG: nextTarget > powLimit, clamping to powLimit: %08x\n", powLimit.GetCompact());
-        nextTarget = powLimit;
+        // Clamp relative to the per-algo target (now 120s)
+        if (st < 1) st = 1;
+        if (st > 6 * T) st = 6 * T;
+
+        sumWeightedSolvetimes += (int64_t)i * st;
+
+        arith_uint256 tgt; tgt.SetCompact(blk->nBits);
+        sumTargets += tgt;
     }
 
-    LogPrintf("LWMA_DEBUG: === END LWMA_MultiAlgo - Returning: %08x ===\n", nextTarget.GetCompact());
+    arith_uint256 avgTarget = sumTargets / N;
+
+    // LWMA-1 with k = N*(N+1)*T/2  (T is per-algo target)
+    arith_uint256 nextTarget = avgTarget;
+    if (sumWeightedSolvetimes < 1) sumWeightedSolvetimes = 1;
+    nextTarget *= (uint64_t)sumWeightedSolvetimes;
+    nextTarget /= (uint64_t)k;
+
+    if (nextTarget > powLimit) nextTarget = powLimit;
+
     return nextTarget.GetCompact();
 }
+
 
 unsigned int GetNextWorkRequiredBTC(const CBlockIndex* pindexLast, const CBlockHeader *pblock, const Consensus::Params& params)
 {
@@ -389,20 +357,16 @@ unsigned int GetNextWorkRequiredBTC(const CBlockIndex* pindexLast, const CBlockH
 
 unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHeader *pblock, const Consensus::Params& params, bool fIsAuxPow)
 {
-    LogPrintf("DEBUG: GetNextWorkRequired - height=%d, IsAuxpowActive=%d, algo=%d\n", pindexLast->nHeight + 1, params.IsAuxpowActive(pindexLast->nHeight + 1), static_cast<int>(pblock->nVersion.GetAlgo()));
     if (params.IsAuxpowActive(pindexLast->nHeight + 1)) {
         // FIX: Use the block's version to determine if it's AuxPoW, not the parameter
         bool fIsAuxPowBlock = pblock->nVersion.IsAuxpow();
-        LogPrintf("DEBUG: GetNextWorkRequired - Using LWMA. IsAuxPow: %s, block.IsAuxpow(): %s\n", fIsAuxPow ? "true" : "false", fIsAuxPowBlock ? "true" : "false");
         return GetNextWorkRequired_LWMA_MultiAlgo(pindexLast, pblock, params, fIsAuxPowBlock);
     }
 
     if (IsDGWActive(pindexLast->nHeight + 1)) {
-        LogPrintf("DEBUG: GetNextWorkRequired - Using DarkGravityWave\n");
         return DarkGravityWave(pindexLast, pblock, params);
     }
     else {
-        LogPrintf("DEBUG: GetNextWorkRequired - Using BTC\n");
         return GetNextWorkRequiredBTC(pindexLast, pblock, params);
     }
 

@@ -124,10 +124,10 @@ public:
         consensus.nSegwitEnabled = true;
         consensus.nCSVEnabled = true;
         consensus.powLimit[static_cast<uint8_t>(PowAlgo::MEOWPOW)] = uint256S("00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
-        consensus.powLimit[static_cast<uint8_t>(PowAlgo::SCRYPT)] = uint256S("00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+        consensus.powLimit[static_cast<uint8_t>(PowAlgo::SCRYPT)] = uint256S("0000000000ffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.nPowTargetTimespan = 2016 * 60; // 1.4 days
         consensus.nPowTargetSpacing = 1 * 60;
-        consensus.nLwmaAveragingWindow = 576;
+        consensus.nLwmaAveragingWindow = 180;
         consensus.fPowAllowMinDifficultyBlocks = false;
         consensus.fPowNoRetargeting = false;
         consensus.nRuleChangeActivationThreshold = 1613; // Approx 80% of 2016
@@ -173,7 +173,7 @@ public:
         consensus.defaultAssumeValid = uint256S("0x0000000000043a9280011ff1382e99ade4d90d51821cc4dadfb20bd1a0905b1c"); // Block 50000
 
         consensus.nAuxpowChainId = 9;
-        consensus.nAuxpowStartHeight = 1367694;
+        consensus.nAuxpowStartHeight = 1614560;
         consensus.fStrictChainId = true;
         consensus.nLegacyBlocksBefore = INT_MAX;
         /**
@@ -311,10 +311,10 @@ public:
         consensus.nCSVEnabled = true;
         consensus.powLimit[static_cast<uint8_t>(PowAlgo::MEOWPOW)] = uint256S("00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         // Testnet Low Starting Difficulty for AuxPoW
-        consensus.powLimit[static_cast<uint8_t>(PowAlgo::SCRYPT)] = uint256S("00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+        consensus.powLimit[static_cast<uint8_t>(PowAlgo::SCRYPT)] = uint256S("0000000000ffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.nPowTargetTimespan = 2016 * 60; // 1.4 days
         consensus.nPowTargetSpacing = 1 * 60;
-        consensus.nLwmaAveragingWindow = 576;
+        consensus.nLwmaAveragingWindow = 180;
         consensus.fPowAllowMinDifficultyBlocks = false;
         consensus.fPowNoRetargeting = false;
         consensus.nRuleChangeActivationThreshold = 1613; // Approx 65% for testchains
@@ -357,7 +357,7 @@ public:
         consensus.defaultAssumeValid = uint256S("0x000000eaab417d6dfe9bd75119972e1d07ecfe8ff655bef7c2acb3d9a0eeed81");
 
         consensus.nAuxpowChainId = 9;
-        consensus.nAuxpowStartHeight = 600;
+        consensus.nAuxpowStartHeight = 181;
         consensus.fStrictChainId = true;
         consensus.nLegacyBlocksBefore = 100;
 
@@ -481,7 +481,7 @@ public:
         consensus.powLimit[static_cast<uint8_t>(PowAlgo::SCRYPT)] = uint256S("00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.nPowTargetTimespan = 2016 * 60; // 1.4 days
         consensus.nPowTargetSpacing = 1 * 60;
-        consensus.nLwmaAveragingWindow = 576;
+        consensus.nLwmaAveragingWindow = 180;
         consensus.fPowAllowMinDifficultyBlocks = true;
         consensus.fPowNoRetargeting = true;
         consensus.nRuleChangeActivationThreshold = 108; // 75% for testchains
