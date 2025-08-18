@@ -124,7 +124,7 @@ public:
         consensus.nSegwitEnabled = true;
         consensus.nCSVEnabled = true;
         consensus.powLimit[static_cast<uint8_t>(PowAlgo::MEOWPOW)] = uint256S("00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
-        consensus.powLimit[static_cast<uint8_t>(PowAlgo::SCRYPT)] = uint256S("0000000000ffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+        consensus.powLimit[static_cast<uint8_t>(PowAlgo::SCRYPT)] = uint256S("00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.nPowTargetTimespan = 2016 * 60; // 1.4 days
         consensus.nPowTargetSpacing = 1 * 60;
         consensus.nLwmaAveragingWindow = 180;
@@ -311,7 +311,7 @@ public:
         consensus.nCSVEnabled = true;
         consensus.powLimit[static_cast<uint8_t>(PowAlgo::MEOWPOW)] = uint256S("00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         // Testnet Low Starting Difficulty for AuxPoW
-        consensus.powLimit[static_cast<uint8_t>(PowAlgo::SCRYPT)] = uint256S("0000000000ffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+        consensus.powLimit[static_cast<uint8_t>(PowAlgo::SCRYPT)] = uint256S("00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.nPowTargetTimespan = 2016 * 60; // 1.4 days
         consensus.nPowTargetSpacing = 1 * 60;
         consensus.nLwmaAveragingWindow = 180;
