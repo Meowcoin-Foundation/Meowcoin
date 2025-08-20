@@ -1285,7 +1285,6 @@ bool static ProcessHeadersMessage(CNode *pfrom, CConnman *connman, const std::ve
 {
     const CNetMsgMaker msgMaker(pfrom->GetSendVersion());
     size_t nCount = headers.size();
-
     if (nCount == 0) {
         // Nothing interesting. Stop asking this peers for more headers.
         return true;
@@ -2156,28 +2155,48 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
 
         // we must use CBlocks, as CBlockHeaders won't include the 0x00 nTx count at the end
         std::vector<CBlock> vHeaders;
-        int nLimit = MAX_HEADERS_RESULTS;
+        unsigned nCount = 0;
+        unsigned nSize = 0;
         LogPrint(BCLog::NET, "getheaders %d to %s from peer=%d\n", (pindex ? pindex->nHeight : -1), hashStop.IsNull() ? "end" : hashStop.ToString(), pfrom->GetId());
         for (; pindex; pindex = chainActive.Next(pindex))
         {
-            vHeaders.push_back(pindex->GetBlockHeader());
-            if (--nLimit <= 0 || pindex->GetBlockHash() == hashStop)
+            const CBlockHeader header = pindex->GetBlockHeader(chainparams.GetConsensus());
+            ++nCount;
+            nSize += GetSerializeSize(header, SER_NETWORK, PROTOCOL_VERSION);
+            vHeaders.push_back(header);
+            if (nCount >= MAX_HEADERS_RESULTS
+                  || pindex->GetBlockHash() == hashStop)
+                break;
+            if (pfrom->nVersion >= SIZE_HEADERS_LIMIT_VERSION
+                  && nSize >= THRESHOLD_HEADERS_SIZE)
                 break;
         }
-        // pindex can be nullptr either if we sent chainActive.Tip() OR
-        // if our peer has chainActive.Tip() (and thus we are sending an empty
-        // headers message). In both cases it's safe to update
-        // pindexBestHeaderSent to be our tip.
-        //
-        // It is important that we simply reset the BestHeaderSent value here,
-        // and not max(BestHeaderSent, newHeaderSent). We might have announced
-        // the currently-being-connected tip using a compact block, which
-        // resulted in the peer sending a headers request, which we respond to
-        // without the new block. By resetting the BestHeaderSent, we ensure we
-        // will re-announce the new block via headers (or compact blocks again)
-        // in the SendMessages logic.
-        nodestate->pindexBestHeaderSent = pindex ? pindex : chainActive.Tip();
-        connman->PushMessage(pfrom, msgMaker.Make(NetMsgType::HEADERS, vHeaders));
+
+        /* Check maximum headers size before pushing the message
+           if the peer enforces it.  This should not fail since we
+           break above in the loop at the threshold and the threshold
+           should be small enough in comparison to the hard max size.
+           Do it nevertheless to be sure.  */
+        if (pfrom->nVersion >= SIZE_HEADERS_LIMIT_VERSION && nSize > MAX_HEADERS_SIZE)
+          LogPrintf("ERROR: not pushing 'headers', too large\n");
+        else
+        {
+          LogPrint(BCLog::NET, "pushing %u headers, %u bytes\n", nCount, nSize);
+          // pindex can be nullptr either if we sent chainActive.Tip() OR
+          // if our peer has chainActive.Tip() (and thus we are sending an empty
+          // headers message). In both cases it's safe to update
+          // pindexBestHeaderSent to be our tip.
+          //
+          // It is important that we simply reset the BestHeaderSent value here,
+          // and not max(BestHeaderSent, newHeaderSent). We might have announced
+          // the currently-being-connected tip using a compact block, which
+          // resulted in the peer sending a headers request, which we respond to
+          // without the new block. By resetting the BestHeaderSent, we ensure we
+          // will re-announce the new block via headers (or compact blocks again)
+          // in the SendMessages logic.
+          nodestate->pindexBestHeaderSent = pindex ? pindex : chainActive.Tip();
+          connman->PushMessage(pfrom, msgMaker.Make(NetMsgType::HEADERS, vHeaders));
+        }
     }
 
 
@@ -2684,12 +2703,20 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
         if (nCount > MAX_HEADERS_RESULTS) {
             LOCK(cs_main);
             Misbehaving(pfrom->GetId(), 20);
-            return error("headers message size = %u", nCount);
+            return error("headers message count = %u", nCount);
         }
         headers.resize(nCount);
+        unsigned nSize = 0;
         for (unsigned int n = 0; n < nCount; n++) {
             vRecv >> headers[n];
             ReadCompactSize(vRecv); // ignore tx count; assume it is 0.
+
+            nSize += GetSerializeSize(headers[n], SER_NETWORK, PROTOCOL_VERSION);
+            if (pfrom->nVersion >= SIZE_HEADERS_LIMIT_VERSION
+                  && nSize > MAX_HEADERS_SIZE) {
+                Misbehaving(pfrom->GetId(), 20);
+                return error("headers message size = %u", nSize);
+            }
         }
 
         // Headers received via a HEADERS message should be valid, and reflect
@@ -3436,14 +3463,14 @@ bool PeerLogicValidation::SendMessages(CNode* pto, std::atomic<bool>& interruptM
                     pBestIndex = pindex;
                     if (fFoundStartingHeader) {
                         // add this to the headers message
-                        vHeaders.push_back(pindex->GetBlockHeader());
+                        vHeaders.push_back(pindex->GetBlockHeader(consensusParams));
                     } else if (PeerHasHeader(&state, pindex)) {
                         continue; // keep looking for the first new block
                     } else if (pindex->pprev == nullptr || PeerHasHeader(&state, pindex->pprev)) {
                         // Peer doesn't have this header but they do have the prior one.
                         // Start sending headers.
                         fFoundStartingHeader = true;
-                        vHeaders.push_back(pindex->GetBlockHeader());
+                        vHeaders.push_back(pindex->GetBlockHeader(consensusParams));
                     } else {
                         // Peer doesn't have this header or the prior one -- nothing will
                         // connect, so bail out.

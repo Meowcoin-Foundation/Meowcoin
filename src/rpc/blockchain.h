@@ -7,6 +7,7 @@
 #define MEOWCOIN_RPC_BLOCKCHAIN_H
 #include <map>
 #include <string>
+#include "primitives/algos.h"
 
 class CBlock;
 class CBlockIndex;
@@ -26,6 +27,7 @@ extern std::map<std::string, CBlock> mapMEWCMEOWBlockTemplates;
  * difficulty (4295032833 hashes).
  */
 double GetDifficulty(const CBlockIndex* blockindex = nullptr);
+double GetDifficulty(PowAlgo algo);
 
 /** Callback for when block tip changed. */
 void RPCNotifyBlockChange(bool ibd, const CBlockIndex *);

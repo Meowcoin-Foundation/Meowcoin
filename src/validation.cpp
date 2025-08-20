@@ -7,6 +7,7 @@
 #include "validation.h"
 
 #include "arith_uint256.h"
+#include "auxpow.h"
 #include "chain.h"
 #include "chainparams.h"
 #include "checkpoints.h"
@@ -1264,6 +1265,53 @@ bool GetTransaction(const uint256 &hash, CTransactionRef &txOut, const Consensus
 // CBlock and CBlockIndex
 //
 
+bool CheckProofOfWork(const CBlockHeader& block, const Consensus::Params& params)
+{
+    /* Except for legacy blocks with full version 1, ensure that
+       the chain ID is correct.  Legacy blocks are not allowed since
+       the merge-mining start, which is checked in AcceptBlockHeader
+       where the height is known.  */
+    if (!block.nVersion.IsLegacy() && params.fStrictChainId
+        && block.nVersion.GetChainId() != params.nAuxpowChainId)
+        return error("%s : block does not have our chain ID"
+                     " (got %d, expected %d, full nVersion %d)",
+                     __func__, block.nVersion.GetChainId(),
+                     params.nAuxpowChainId, block.nVersion.GetFullVersion());
+
+    /* If there is no auxpow, just check the block hash.  */
+    if (!block.auxpow)
+    {
+        if (block.nVersion.IsAuxpow())
+            return error("%s : no auxpow on block with auxpow version",
+                         __func__);
+
+        if (block.nTime >= nKAWPOWActivationTime) {
+            uint256 mix_hash;
+            if (!CheckProofOfWork(block.GetHashFull(mix_hash), block.nBits, block.nVersion.GetAlgo(), params))
+                return error("%s : non-AUX proof of work failed", __func__);
+
+            if (mix_hash != block.mix_hash) {
+                return error("%s : non-AUX mix_hash proof of work check failed", __func__);
+            }
+        } else {
+            if (!CheckProofOfWork(block.GetHash(), block.nBits, block.nVersion.GetAlgo(), params))
+                return error("%s : non-AUX proof of work failed", __func__);
+        }
+        return true;
+    }
+
+    /* We have auxpow.  Check it.  */
+    if (!block.nVersion.IsAuxpow())
+        return error("%s : auxpow on block with non-auxpow version", __func__);
+
+    if (!block.auxpow->check(block.GetHash(), block.nVersion.GetChainId(), params))
+        return error("%s : AUX POW is not valid", __func__);
+
+    if (!CheckProofOfWork(block.auxpow->getParentBlockHash(), block.nBits, block.nVersion.GetAlgo(), params))
+        return error("%s : AUX proof of work failed", __func__);
+    return true;
+}
+
 static bool WriteBlockToDisk(const CBlock& block, CDiskBlockPos& pos, const CMessageHeader::MessageStartChars& messageStart)
 {
     // Open history file to append
@@ -1285,10 +1333,13 @@ static bool WriteBlockToDisk(const CBlock& block, CDiskBlockPos& pos, const CMes
     return true;
 }
 
-bool ReadBlockFromDisk(CBlock& block, const CDiskBlockPos& pos, const Consensus::Params& consensusParams)
+/* Generic implementation of block reading that can handle
+   both a block and its header.  */
+
+template<typename T>
+static bool ReadBlockOrHeader(T& block, const CDiskBlockPos& pos, const Consensus::Params& consensusParams)
 {
     block.SetNull();
-
     // Open history file to read
     CAutoFile filein(OpenBlockFile(pos, true), SER_DISK, CLIENT_VERSION);
     if (filein.IsNull())
@@ -1303,20 +1354,36 @@ bool ReadBlockFromDisk(CBlock& block, const CDiskBlockPos& pos, const Consensus:
     }
 
     // Check the header
-    if (!CheckProofOfWork(block.GetHash(), block.nBits, consensusParams))
+    if (!CheckProofOfWork(block, consensusParams))
         return error("ReadBlockFromDisk: Errors in block header at %s", pos.ToString());
 
     return true;
 }
 
-bool ReadBlockFromDisk(CBlock& block, const CBlockIndex* pindex, const Consensus::Params& consensusParams)
+template<typename T>
+static bool ReadBlockOrHeader(T& block, const CBlockIndex* pindex, const Consensus::Params& consensusParams)
 {
-    if (!ReadBlockFromDisk(block, pindex->GetBlockPos(), consensusParams))
+    if (!ReadBlockOrHeader(block, pindex->GetBlockPos(), consensusParams))
         return false;
     if (block.GetHash() != pindex->GetBlockHash())
         return error("ReadBlockFromDisk(CBlock&, CBlockIndex*): GetHash() doesn't match index for %s at %s",
                 pindex->ToString(), pindex->GetBlockPos().ToString());
     return true;
+}
+
+bool ReadBlockFromDisk(CBlock& block, const CDiskBlockPos& pos, const Consensus::Params& consensusParams)
+{
+    return ReadBlockOrHeader(block, pos, consensusParams);
+}
+
+bool ReadBlockFromDisk(CBlock& block, const CBlockIndex* pindex, const Consensus::Params& consensusParams)
+{
+    return ReadBlockOrHeader(block, pindex, consensusParams);
+}
+
+bool ReadBlockHeaderFromDisk(CBlockHeader& block, const CBlockIndex* pindex, const Consensus::Params& consensusParams)
+{
+    return ReadBlockOrHeader(block, pindex, consensusParams);
 }
 
 CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams)
@@ -1343,6 +1410,7 @@ bool IsInitialBlockDownload()
     LOCK(cs_main);
     if (latchToFalse.load(std::memory_order_relaxed))
         return false;
+
     if (fImporting || fReindex)
     {
 //        LogPrintf("IsInitialBlockDownload (importing or reindex)\n");
@@ -2297,8 +2365,9 @@ int32_t ComputeBlockVersion(const CBlockIndex* pindexPrev, const Consensus::Para
     int32_t nVersion = VERSIONBITS_TOP_BITS;
 
     /** If the assets are deployed now. We need to use the correct block version */
-    if (AreAssetsDeployed())
+    if (AreAssetsDeployed()) {
         nVersion = VERSIONBITS_TOP_BITS_ASSETS;
+    }
 
     for (int i = 0; i < (int)Consensus::MAX_VERSION_BITS_DEPLOYMENTS; i++) {
         ThresholdState state = VersionBitsState(pindexPrev, params, (Consensus::DeploymentPos)i, versionbitscache);
@@ -2328,8 +2397,8 @@ public:
 
     bool Condition(const CBlockIndex* pindex, const Consensus::Params& params) const override
     {
-        return ((pindex->nVersion & VERSIONBITS_TOP_MASK) == VERSIONBITS_TOP_BITS) &&
-               ((pindex->nVersion >> bit) & 1) != 0 &&
+        return ((pindex->nVersion.GetBaseVersion() & VERSIONBITS_TOP_MASK) == VERSIONBITS_TOP_BITS) &&
+               ((pindex->nVersion.GetBaseVersion() >> bit) & 1) != 0 &&
                ((ComputeBlockVersion(pindex->pprev, params) >> bit) & 1) == 0;
     }
 };
@@ -3130,7 +3199,7 @@ void static UpdateTip(CBlockIndex *pindexNew, const CChainParams& chainParams) {
         for (int i = 0; i < 100 && pindex != nullptr; i++)
         {
             int32_t nExpectedVersion = ComputeBlockVersion(pindex->pprev, chainParams.GetConsensus());
-            if (pindex->nVersion > nExpectedVersion)
+            if (pindex->nVersion.GetBaseVersion() > nExpectedVersion)
                 ++nUpgraded;
             pindex = pindex->pprev;
         }
@@ -3144,7 +3213,7 @@ void static UpdateTip(CBlockIndex *pindexNew, const CChainParams& chainParams) {
         }
     }
     LogPrintf("%s: new best=%s height=%d version=0x%08x log2_work=%.8g tx=%lu date='%s' progress=%f cache=%.1fMiB(%utxo)", __func__,
-      chainActive.Tip()->GetBlockHash().ToString(), chainActive.Height(), chainActive.Tip()->nVersion,
+      chainActive.Tip()->GetBlockHash().ToString(), chainActive.Height(), chainActive.Tip()->nVersion.GetBaseVersion(),
       log(chainActive.Tip()->nChainWork.getdouble())/log(2.0), (unsigned long)chainActive.Tip()->nChainTx,
       DateTimeStrFormat("%Y-%m-%d %H:%M:%S", chainActive.Tip()->GetBlockTime()),
       GuessVerificationProgress(chainParams.TxData(), chainActive.Tip()), pcoinsTip->DynamicMemoryUsage() * (1.0 / (1<<20)), pcoinsTip->GetCacheSize());
@@ -3985,7 +4054,7 @@ static bool CheckBlockHeader(const CBlockHeader& block, CValidationState& state,
     if (fCheckPOW && block.nTime >= nKAWPOWActivationTime) {
         CBlockIndex* pcheckpoint = Checkpoints::GetLastCheckpoint(GetParams().Checkpoints());
         if (fCheckPOW && pcheckpoint && block.nHeight <= (uint32_t)pcheckpoint->nHeight) {
-           if (!CheckProofOfWork(block.GetHash(), block.nBits, consensusParams)) {
+           if (!CheckProofOfWork(block, consensusParams)) {
                return state.DoS(50, false, REJECT_INVALID, "high-hash", false, "proof of work failed with mix_hash only check");
            }
 
@@ -3993,16 +4062,9 @@ static bool CheckBlockHeader(const CBlockHeader& block, CValidationState& state,
         }
     }
 
-    uint256 mix_hash;
     // Check proof of work matches claimed amount
-    if (fCheckPOW && !CheckProofOfWork(block.GetHashFull(mix_hash), block.nBits, consensusParams)) {
+    if (fCheckPOW && !CheckProofOfWork(block, consensusParams)) {
         return state.DoS(50, false, REJECT_INVALID, "high-hash", false, "proof of work failed");
-    }
-
-    if (fCheckPOW && block.nTime >= nKAWPOWActivationTime) {
-        if (mix_hash != block.mix_hash) {
-            return state.DoS(50, false, REJECT_INVALID, "invalid-mix-hash", false, "mix_hash validity failed");
-        }
     }
 
     return true;
@@ -4154,7 +4216,7 @@ std::vector<unsigned char> GenerateCoinbaseCommitment(CBlock& block, const CBloc
 /** Context-dependent validity checks.
  *  By "context", we mean only the previous block headers, but not the UTXO
  *  set; UTXO-related validity checks are done in ConnectBlock(). */
-static bool ContextualCheckBlockHeader(const CBlockHeader& block, CValidationState& state, const CChainParams& params, const CBlockIndex* pindexPrev, int64_t nAdjustedTime)
+static bool ContextualCheckBlockHeader(const CBlockHeader& block, CValidationState& state, const CChainParams& params, const CBlockIndex* pindexPrev, int64_t nAdjustedTime, bool fIsAuxPow = false)
 {
     assert(pindexPrev != nullptr);
     const int nHeight = pindexPrev->nHeight + 1;
@@ -4176,7 +4238,15 @@ static bool ContextualCheckBlockHeader(const CBlockHeader& block, CValidationSta
 
     // Check proof of work
     const Consensus::Params& consensusParams = params.GetConsensus();
-    if (block.nBits != GetNextWorkRequired(pindexPrev, &block, consensusParams))
+
+    if (!consensusParams.AllowLegacyBlocks(nHeight) && block.nVersion.IsLegacy())
+        return state.DoS(100, error("%s : legacy block after auxpow start", __func__), REJECT_INVALID, "late-legacy-block");
+
+    // Check proof of work
+    // Use the block's version to determine if it's AuxPoW, not the parameter
+    bool fIsAuxPowBlock = block.nVersion.IsAuxpow();
+    unsigned int expectedBits = GetNextWorkRequired(pindexPrev, &block, consensusParams, fIsAuxPowBlock);
+    if (block.nBits != expectedBits)
         return state.DoS(100, false, REJECT_INVALID, "bad-diffbits", false, "incorrect proof of work");
 
     // Check against checkpoints
@@ -4207,15 +4277,15 @@ static bool ContextualCheckBlockHeader(const CBlockHeader& block, CValidationSta
 
     // Reject outdated version blocks when 95% (75% on testnet) of the network has upgraded:
     // check for version 2, 3 and 4 upgrades
-    // if((block.nVersion < 2 && nHeight >= consensusParams.BIP34Height) ||
-    //    (block.nVersion < 3 && nHeight >= consensusParams.BIP66Height) ||
-    //    (block.nVersion < 4 && nHeight >= consensusParams.BIP65Height))
+    // if((block.GetBaseVersion() < 2 && nHeight >= consensusParams.BIP34Height) ||
+    //    (block.GetBaseVersion() < 3 && nHeight >= consensusParams.BIP66Height) ||
+    //    (block.GetBaseVersion() < 4 && nHeight >= consensusParams.BIP65Height))
     //         return state.Invalid(false, REJECT_OBSOLETE, strprintf("bad-version(0x%08x)", block.nVersion),
     //                              strprintf("rejected nVersion=0x%08x block", block.nVersion));
 
     // Reject outdated version blocks once assets are active.
-    if (AreAssetsDeployed() && block.nVersion < VERSIONBITS_TOP_BITS_ASSETS)
-        return state.Invalid(false, REJECT_OBSOLETE, strprintf("bad-version(0x%08x)", block.nVersion), strprintf("rejected nVersion=0x%08x block", block.nVersion));
+    if (AreAssetsDeployed() && block.nVersion.GetBaseVersion() < VERSIONBITS_TOP_BITS_ASSETS)
+        return state.Invalid(false, REJECT_OBSOLETE, strprintf("bad-version(0x%08x)", block.nVersion.GetBaseVersion()), strprintf("rejected nVersion=0x%08x block", block.nVersion.GetBaseVersion()));
 
     return true;
 }
@@ -4507,7 +4577,7 @@ bool ProcessNewBlock(const CChainParams& chainparams, const std::shared_ptr<cons
     return true;
 }
 
-bool TestBlockValidity(CValidationState& state, const CChainParams& chainparams, const CBlock& block, CBlockIndex* pindexPrev, bool fCheckPOW, bool fCheckMerkleRoot)
+bool TestBlockValidity(CValidationState& state, const CChainParams& chainparams, const CBlock& block, CBlockIndex* pindexPrev, bool fCheckPOW, bool fCheckMerkleRoot, bool fIsAuxPow)
 {
     AssertLockHeld(cs_main);
     assert(pindexPrev && pindexPrev == chainActive.Tip());
@@ -4521,7 +4591,7 @@ bool TestBlockValidity(CValidationState& state, const CChainParams& chainparams,
     /** MEWC END */
 
     // NOTE: CheckBlockHeader is called by CheckBlock
-    if (!ContextualCheckBlockHeader(block, state, chainparams, pindexPrev, GetAdjustedTime()))
+    if (!ContextualCheckBlockHeader(block, state, chainparams, pindexPrev, GetAdjustedTime(), fIsAuxPow))
         return error("%s: Consensus::ContextualCheckBlockHeader: %s", __func__, FormatStateMessage(state));
     if (!CheckBlock(block, state, chainparams.GetConsensus(), fCheckPOW, fCheckMerkleRoot))
         return error("%s: Consensus::CheckBlock: %s", __func__, FormatStateMessage(state));

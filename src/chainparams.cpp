@@ -34,7 +34,7 @@ static CBlock CreateGenesisBlock(const char* pszTimestamp, const CScript& genesi
     genesis.nTime    = nTime;
     genesis.nBits    = nBits;
     genesis.nNonce   = nNonce;
-    genesis.nVersion = nVersion;
+    genesis.nVersion.SetGenesisVersion(nVersion);
     genesis.vtx.push_back(MakeTransactionRef(std::move(txNew)));
     genesis.hashPrevBlock.SetNull();
     genesis.hashMerkleRoot = BlockMerkleRoot(genesis);
@@ -123,12 +123,12 @@ public:
         consensus.nBIP66Enabled = true;
         consensus.nSegwitEnabled = true;
         consensus.nCSVEnabled = true;
-        consensus.powLimit = uint256S("00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
-        consensus.kawpowLimit = uint256S("00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"); // Estimated starting diff for first 180 kawpow blocks
-        consensus.meowpowLimit = uint256S("00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"); // Estimated starting diff for first 180 kawpow blocks
+        consensus.powLimit[static_cast<uint8_t>(PowAlgo::MEOWPOW)] = uint256S("00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+        consensus.powLimit[static_cast<uint8_t>(PowAlgo::SCRYPT)] = uint256S("00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.nPowTargetTimespan = 2016 * 60; // 1.4 days
         consensus.nPowTargetSpacing = 1 * 60;
-		consensus.fPowAllowMinDifficultyBlocks = false;
+        consensus.nLwmaAveragingWindow = 180;
+        consensus.fPowAllowMinDifficultyBlocks = false;
         consensus.fPowNoRetargeting = false;
         consensus.nRuleChangeActivationThreshold = 1613; // Approx 80% of 2016
         consensus.nMinerConfirmationWindow = 2016; // nPowTargetTimespan / nPowTargetSpacing
@@ -172,6 +172,10 @@ public:
         // By default assume that the signatures in ancestors of this block are valid. Block# 1040000
         consensus.defaultAssumeValid = uint256S("0x0000000000043a9280011ff1382e99ade4d90d51821cc4dadfb20bd1a0905b1c"); // Block 50000
 
+        consensus.nAuxpowChainId = 9;
+        consensus.nAuxpowStartHeight = 1614560;
+        consensus.fStrictChainId = true;
+        consensus.nLegacyBlocksBefore = INT_MAX;
         /**
          * The message start string is designed to be unlikely to occur in normal data.
          * The characters are rarely used upper ASCII, not valid as UTF-8, and produce
@@ -187,7 +191,7 @@ public:
         uint32_t nGenesisTime = 1661730843;
 
         genesis = CreateGenesisBlock(nGenesisTime, 351574, 0x1e00ffff, 4, 5000 * COIN);
-
+        std::cout << "Genesis " << genesis.ToString() << std::endl;
         consensus.hashGenesisBlock = genesis.GetX16RHash();
 
         assert(consensus.hashGenesisBlock == uint256S("0x000000edd819220359469c54f2614b5602ebc775ea67a64602f354bdaa320f70"));
@@ -305,11 +309,12 @@ public:
         consensus.nBIP66Enabled = true;
         consensus.nSegwitEnabled = true;
         consensus.nCSVEnabled = true;
-        consensus.powLimit = uint256S("00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
-        consensus.kawpowLimit = uint256S("00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
-        consensus.meowpowLimit = uint256S("00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+        consensus.powLimit[static_cast<uint8_t>(PowAlgo::MEOWPOW)] = uint256S("00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+        // Testnet Low Starting Difficulty for AuxPoW
+        consensus.powLimit[static_cast<uint8_t>(PowAlgo::SCRYPT)] = uint256S("00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.nPowTargetTimespan = 2016 * 60; // 1.4 days
         consensus.nPowTargetSpacing = 1 * 60;
+        consensus.nLwmaAveragingWindow = 180;
         consensus.fPowAllowMinDifficultyBlocks = false;
         consensus.fPowNoRetargeting = false;
         consensus.nRuleChangeActivationThreshold = 1613; // Approx 65% for testchains
@@ -351,11 +356,15 @@ public:
         // By default assume that the signatures in ancestors of this block are valid.
         consensus.defaultAssumeValid = uint256S("0x000000eaab417d6dfe9bd75119972e1d07ecfe8ff655bef7c2acb3d9a0eeed81");
 
+        consensus.nAuxpowChainId = 9;
+        consensus.nAuxpowStartHeight = 181;
+        consensus.fStrictChainId = true;
+        consensus.nLegacyBlocksBefore = 100;
 
-        pchMessageStart[0] = 0x6d; 
-        pchMessageStart[1] = 0x65; 
-        pchMessageStart[2] = 0x77; 
-        pchMessageStart[3] = 0x63; 
+        pchMessageStart[0] = 0x6e;
+        pchMessageStart[1] = 0x66;
+        pchMessageStart[2] = 0x78;
+        pchMessageStart[3] = 0x64;
         nDefaultPort = 4569;
         nPruneAfterHeight = 1000;
 
@@ -468,11 +477,11 @@ public:
         consensus.nSegwitEnabled = true;
         consensus.nCSVEnabled = true;
         consensus.nSubsidyHalvingInterval = 150;
-        consensus.powLimit = uint256S("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
-        consensus.kawpowLimit = uint256S("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
-        consensus.meowpowLimit = uint256S("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+        consensus.powLimit[static_cast<uint8_t>(PowAlgo::MEOWPOW)] = uint256S("00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+        consensus.powLimit[static_cast<uint8_t>(PowAlgo::SCRYPT)] = uint256S("00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.nPowTargetTimespan = 2016 * 60; // 1.4 days
         consensus.nPowTargetSpacing = 1 * 60;
+        consensus.nLwmaAveragingWindow = 180;
         consensus.fPowAllowMinDifficultyBlocks = true;
         consensus.fPowNoRetargeting = true;
         consensus.nRuleChangeActivationThreshold = 108; // 75% for testchains
@@ -513,6 +522,11 @@ public:
 
         // By default assume that the signatures in ancestors of this block are valid.
         consensus.defaultAssumeValid = uint256S("0x00");
+
+        consensus.nAuxpowChainId = 9;
+        consensus.nAuxpowStartHeight = 19200;
+        consensus.fStrictChainId = true;
+        consensus.nLegacyBlocksBefore = 19200;
 
         pchMessageStart[0] = 0x44;
         pchMessageStart[1] = 0x52; 

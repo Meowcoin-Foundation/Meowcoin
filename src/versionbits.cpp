@@ -206,7 +206,7 @@ protected:
 
     bool Condition(const CBlockIndex* pindex, const Consensus::Params& params) const override
     {
-        return ((pindex->nVersion & Mask(params)) != 0);
+        return ((pindex->nVersion.GetBaseVersion() & Mask(params)) != 0);
     }
 
 public:

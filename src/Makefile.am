@@ -137,6 +137,7 @@ MEOWCOIN_CORE_H = \
   assets/snapshotrequestdb.h \
   assets/assetsnapshotdb.h \
   assets/rewards.h \
+  auxpow.h \
   base58.h \
   bloom.h \
   blockencodings.h \
@@ -189,6 +190,7 @@ MEOWCOIN_CORE_H = \
   rpc/client.h \
   rpc/mining.h \
   rpc/protocol.h \
+  rpc/rawtransaction.h \
   rpc/safemode.h \
   rpc/server.h \
   rpc/register.h \
@@ -340,12 +342,13 @@ crypto_libmeowcoin_crypto_a_SOURCES = \
   crypto/hmac_sha512.cpp \
   crypto/hmac_sha512.h \
   crypto/ripemd160.cpp \
+  crypto/ripemd160.h \
   crypto/sha1.cpp \
   crypto/sha1.h \
   crypto/sha256.cpp \
   crypto/sha256.h \
-  crypto/sha512.h \
   crypto/sha512.cpp \
+  crypto/sha512.h \
   crypto/ethash/include/ethash/ethash.h \
   crypto/ethash/include/ethash/ethash.hpp \
   crypto/ethash/include/ethash/hash_types.h \
@@ -354,7 +357,6 @@ crypto_libmeowcoin_crypto_a_SOURCES = \
   crypto/ethash/include/ethash/keccak.hpp \
   crypto/ethash/include/ethash/progpow.hpp \
   crypto/ethash/include/ethash/meowpow.hpp \
-  crypto/ethash/include/ethash/version.h \
   crypto/ethash/lib/ethash/bit_manipulation.h \
   crypto/ethash/lib/ethash/builtins.h \
   crypto/ethash/lib/ethash/endianness.hpp \
@@ -367,11 +369,17 @@ crypto_libmeowcoin_crypto_a_SOURCES = \
   crypto/ethash/lib/ethash/progpow.cpp \
   crypto/ethash/lib/ethash/meowpow.cpp \
   crypto/ethash/lib/keccak/keccak.c \
-  crypto/ethash/lib/keccak/keccakf1600.c \
   crypto/ethash/lib/keccak/keccakf800.c \
+  crypto/ethash/lib/keccak/keccakf1600.c \
   crypto/ethash/lib/support/attributes.h \
   crypto/ethash/helpers.hpp \
-  crypto/ethash/progpow_test_vectors.hpp
+  crypto/ethash/progpow_test_vectors.hpp \
+  crypto/scrypt.cpp \
+  crypto/scrypt.h
+
+if USE_SSE2
+crypto_libmeowcoin_crypto_a_SOURCES += crypto/scrypt-sse2.cpp
+endif
 
 if USE_ASM
 crypto_libmeowcoin_crypto_a_SOURCES += crypto/sha256_sse4.cpp
@@ -391,8 +399,11 @@ libmeowcoin_consensus_a_SOURCES = \
   hash.cpp \
   hash.h \
   prevector.h \
+  primitives/algos.h \
   primitives/block.cpp \
   primitives/block.h \
+  primitives/pureheader.cpp \
+  primitives/pureheader.h \
   primitives/transaction.cpp \
   primitives/transaction.h \
   pubkey.cpp \
@@ -421,6 +432,7 @@ libmeowcoin_consensus_a_SOURCES = \
 libmeowcoin_common_a_CPPFLAGS = $(AM_CPPFLAGS) $(MEOWCOIN_INCLUDES)
 libmeowcoin_common_a_CXXFLAGS = $(AM_CXXFLAGS) $(PIE_FLAGS)
 libmeowcoin_common_a_SOURCES = \
+  auxpow.cpp \
   base58.cpp \
   chainparams.cpp \
   coins.cpp \

@@ -5,6 +5,38 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include "chain.h"
+#include "validation.h"
+
+
+/* Moved here from the header, because we need auxpow and the logic
+   becomes more involved.  */
+CBlockHeader CBlockIndex::GetBlockHeader(const Consensus::Params& consensusParams) const
+{
+    CBlockHeader block;
+
+    block.nVersion       = nVersion;
+
+    /* The CBlockIndex object's block header is missing the auxpow.
+        So if this is an auxpow block, read it from disk instead.  We only
+        have to read the actual *header*, not the full block.  */
+    if (block.nVersion.IsAuxpow())
+    {
+        ReadBlockHeaderFromDisk(block, this, consensusParams);
+        return block;
+    }
+
+    if (pprev)
+        block.hashPrevBlock = pprev->GetBlockHash();
+    block.hashMerkleRoot = hashMerkleRoot;
+    block.nTime          = nTime;
+    block.nBits          = nBits;
+    block.nNonce         = nNonce;
+    block.nHeight        = nHeight;
+    block.nNonce64       = nNonce64;
+    block.mix_hash       = mix_hash;
+
+    return block;
+}
 
 /**
  * CChain implementation

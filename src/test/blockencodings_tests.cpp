@@ -33,7 +33,7 @@ BOOST_FIXTURE_TEST_SUITE(blockencodings_tests, RegtestingSetup)
 
         block.vtx.resize(3);
         block.vtx[0] = MakeTransactionRef(tx);
-        block.nVersion = 42;
+        block.nVersion.SetGenesisVersion(42);
         block.hashPrevBlock = InsecureRand256();
         block.nBits = 0x207fffff;
 
@@ -52,7 +52,7 @@ BOOST_FIXTURE_TEST_SUITE(blockencodings_tests, RegtestingSetup)
         bool mutated;
         block.hashMerkleRoot = BlockMerkleRoot(block, &mutated);
         assert(!mutated);
-        while (!CheckProofOfWork(block.GetHash(), block.nBits, GetParams().GetConsensus())) ++block.nNonce;
+        while (!CheckProofOfWork(block.GetHash(), block.nBits, block.nVersion.GetAlgo(), GetParams().GetConsensus())) ++block.nNonce;
         return block;
     }
 
@@ -298,14 +298,14 @@ BOOST_FIXTURE_TEST_SUITE(blockencodings_tests, RegtestingSetup)
         CBlock block;
         block.vtx.resize(1);
         block.vtx[0] = MakeTransactionRef(std::move(coinbase));
-        block.nVersion = 42;
+        block.nVersion.SetGenesisVersion(42);
         block.hashPrevBlock = InsecureRand256();
         block.nBits = 0x207fffff;
 
         bool mutated;
         block.hashMerkleRoot = BlockMerkleRoot(block, &mutated);
         assert(!mutated);
-        while (!CheckProofOfWork(block.GetHash(), block.nBits, GetParams().GetConsensus())) ++block.nNonce;
+        while (!CheckProofOfWork(block.GetHash(), block.nBits, block.nVersion.GetAlgo(), GetParams().GetConsensus())) ++block.nNonce;
 
         // Test simple header round-trip with only coinbase
         {

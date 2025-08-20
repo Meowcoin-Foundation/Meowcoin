@@ -221,38 +221,40 @@ void OpenDebugLog()
 
 struct CLogCategoryDesc
 {
-    uint32_t flag;
+    BCLog::LogFlags flag;
     std::string category;
 };
 
-const CLogCategoryDesc LogCategories[] =
-        {
-                {BCLog::NONE,        "0"},
-                {BCLog::NET,         "net"},
-                {BCLog::TOR,         "tor"},
-                {BCLog::MEMPOOL,     "mempool"},
-                {BCLog::HTTP,        "http"},
-                {BCLog::BENCH,       "bench"},
-                {BCLog::ZMQ,         "zmq"},
-                {BCLog::DB,          "db"},
-                {BCLog::RPC,         "rpc"},
-                {BCLog::ESTIMATEFEE, "estimatefee"},
-                {BCLog::ADDRMAN,     "addrman"},
-                {BCLog::SELECTCOINS, "selectcoins"},
-                {BCLog::REINDEX,     "reindex"},
-                {BCLog::CMPCTBLOCK,  "cmpctblock"},
-                {BCLog::RAND,        "rand"},
-                {BCLog::PRUNE,       "prune"},
-                {BCLog::PROXY,       "proxy"},
-                {BCLog::MEMPOOLREJ,  "mempoolrej"},
-                {BCLog::LIBEVENT,    "libevent"},
-                {BCLog::COINDB,      "coindb"},
-                {BCLog::QT,          "qt"},
-                {BCLog::LEVELDB,     "leveldb"},
-                {BCLog::REWARDS,     "rewards"},
-                {BCLog::ALL,         "1"},
-                {BCLog::ALL,         "all"},
-        };
+static CLogCategoryDesc LogCategories[] =
+{
+    {BCLog::NONE, "0"},
+    {BCLog::NONE, "none"},
+    {BCLog::NET, "net"},
+    {BCLog::TOR, "tor"},
+    {BCLog::MEMPOOL, "mempool"},
+    {BCLog::HTTP, "http"},
+    {BCLog::BENCH, "bench"},
+    {BCLog::ZMQ, "zmq"},
+    {BCLog::DB, "db"},
+    {BCLog::RPC, "rpc"},
+    {BCLog::ESTIMATEFEE, "estimatefee"},
+    {BCLog::ADDRMAN, "addrman"},
+    {BCLog::SELECTCOINS, "selectcoins"},
+    {BCLog::REINDEX, "reindex"},
+    {BCLog::CMPCTBLOCK, "cmpctblock"},
+    {BCLog::RAND, "rand"},
+    {BCLog::PRUNE, "prune"},
+    {BCLog::PROXY, "proxy"},
+    {BCLog::MEMPOOLREJ, "mempoolrej"},
+    {BCLog::LIBEVENT, "libevent"},
+    {BCLog::COINDB, "coindb"},
+    {BCLog::QT, "qt"},
+    {BCLog::LEVELDB, "leveldb"},
+    {BCLog::REWARDS, "rewards"},
+    {BCLog::AUXPOW, "auxpow"},
+    {BCLog::ALL, "1"},
+    {BCLog::ALL, "all"},
+};
 
 bool GetLogCategory(uint32_t *f, const std::string *str)
 {
