@@ -5,6 +5,7 @@ on:
     branches:
       - master
       - Meow_*
+      - develop
   pull_request:
     branches:
       - master
