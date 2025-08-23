@@ -1,8 +1,8 @@
 package=boost
-$(package)_version=1_71_0
-$(package)_download_path=https://boostorg.jfrog.io/artifactory/main/release/$(subst _,.,$($(package)_version))/source/
+$(package)_version=1_82_0
+$(package)_download_path=https://archives.boost.io/release/1.82.0/source/
 $(package)_file_name=boost_$($(package)_version).tar.bz2
-$(package)_sha256_hash=d73a8da01e8bf8c7eda40b4c84915071a8c8a0df4a6734537ddde4a8580524ee
+$(package)_sha256_hash=a6e1ab9b0860e6a2881dd7b21fe9f737a095e5f33a3a874afc6a345228597ee6
 $(package)_dependencies=native_b2
 
 define $(package)_set_vars
@@ -23,7 +23,7 @@ else
 $(package)_toolset_$(host_os)=gcc
 endif
 $(package)_config_libraries=chrono,filesystem,program_options,system,thread,test
-$(package)_cxxflags=-std=c++17 -fvisibility=hidden
+$(package)_cxxflags=-std=c++20 -fvisibility=hidden
 $(package)_cxxflags_linux=-fPIC
 $(package)_cxxflags_android=-fPIC
 endef
