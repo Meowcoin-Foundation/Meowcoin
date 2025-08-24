@@ -64,7 +64,7 @@ jobs:
     steps:
     - if: ${{ needs.check-jobs.outputs.should_skip != 'true' }}
       name: Checkout the Code
-      uses: actions/checkout@v1
+      uses: actions/checkout@v4
 
     - if: ${{ needs.check-jobs.outputs.should_skip != 'true' }}
       name: Install Build Tools
@@ -72,7 +72,7 @@ jobs:
 
     - if: ${{ needs.check-jobs.outputs.should_skip != 'true' }}
       name: Cache dependencies.
-      uses: actions/cache@v2
+      uses: actions/cache@v4
       with:
        path: |
         ${{ GITHUB.WORKSPACE }}/depends/built
