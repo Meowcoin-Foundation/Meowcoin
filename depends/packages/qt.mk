@@ -11,8 +11,7 @@ $(package)_patches=fix_qt_pkgconfig.patch mac-qmake.conf fix_no_printer.patch no
 $(package)_patches+= fix_android_qmake_conf.patch fix_android_jni_static.patch dont_hardcode_pwd.patch
 $(package)_patches+= drop_lrelease_dependency.patch no_sdk_version_check.patch
 $(package)_patches+= fix_lib_paths.patch fix_android_pch.patch
-$(package)_patches+= qtbase-moc-ignore-gcc-macro.patch fix_qfloat16_limits.patch fix_qendian_limits.patch fix_qendian_limits.patch fix_qbytearraymatcher_limits.patchfix_qendian_limits.patch fix_qbytearraymatcher_limits.patch \
-  patch -p1 -i $($(package)_patch_dir)/fix_qbytearraymatcher_limits.patch
+$(package)_patches+= qtbase-moc-ignore-gcc-macro.patch fix_qfloat16_limits.patch fix_qendian_limits.patch fix_qbytearraymatcher_limits.patch
 
 $(package)_qttranslations_file_name=qttranslations-$($(package)_suffix)
 $(package)_qttranslations_sha256_hash=577b0668a777eb2b451c61e8d026d79285371597ce9df06b6dee6c814164b7c3
@@ -232,8 +231,7 @@ define $(package)_preprocess_cmds
   patch -p1 -i $($(package)_patch_dir)/fix_lib_paths.patch && \
   patch -p1 -i $($(package)_patch_dir)/qtbase-moc-ignore-gcc-macro.patch && \
   patch -p1 -i $($(package)_patch_dir)/fix_qfloat16_limits.patch && \
-  patch -p1 -i $($(package)_patch_dir)/fix_qendian_limits.patch fix_qendian_limits.patch fix_qbytearraymatcher_limits.patchfix_qendian_limits.patch fix_qbytearraymatcher_limits.patch \
-  patch -p1 -i $($(package)_patch_dir)/fix_qbytearraymatcher_limits.patch && \
+  patch -p1 -i $($(package)_patch_dir)/fix_qendian_limits.patch && \
   sed -i.old "s|updateqm.commands = \$$$$\$$$$LRELEASE|updateqm.commands = $($(package)_extract_dir)/qttools/bin/lrelease|" qttranslations/translations/translations.pro && \
   mkdir -p qtbase/mkspecs/macx-clang-linux &&\
   cp -f qtbase/mkspecs/macx-clang/qplatformdefs.h qtbase/mkspecs/macx-clang-linux/ &&\
