@@ -1,9 +1,9 @@
 PACKAGE=qt
-$(package)_version=5.12.11
-$(package)_download_path=https://download.qt.io/archive/qt/5.12/$($(package)_version)/submodules
-$(package)_suffix=everywhere-src-$($(package)_version).tar.xz
+$(package)_version=5.15.11
+$(package)_download_path=https://download.qt.io/official_releases/qt/5.15/$($(package)_version)/submodules
+$(package)_suffix=everywhere-opensource-src-$($(package)_version).tar.xz
 $(package)_file_name=qtbase-$($(package)_suffix)
-$(package)_sha256_hash=1c1b4e33137ca77881074c140d54c3c9747e845a31338cfe8680f171f0bc3a39
+$(package)_sha256_hash=425ad301acd91ca66c10c0dabee0704e2d0cd2801a6b670115800cbb95f84846
 $(package)_dependencies=openssl
 $(package)_linux_dependencies=freetype fontconfig libxcb libxkbcommon
 $(package)_qt_libs=corelib network widgets gui plugins testlib
@@ -230,7 +230,6 @@ define $(package)_preprocess_cmds
   patch -p1 -i $($(package)_patch_dir)/no_sdk_version_check.patch && \
   patch -p1 -i $($(package)_patch_dir)/fix_lib_paths.patch && \
   patch -p1 -i $($(package)_patch_dir)/qtbase-moc-ignore-gcc-macro.patch && \
-  patch -p1 -i $($(package)_patch_dir)/fix_qendian_limits.patch && \
   sed -i.old "s|updateqm.commands = \$$$$\$$$$LRELEASE|updateqm.commands = $($(package)_extract_dir)/qttools/bin/lrelease|" qttranslations/translations/translations.pro && \
   mkdir -p qtbase/mkspecs/macx-clang-linux &&\
   cp -f qtbase/mkspecs/macx-clang/qplatformdefs.h qtbase/mkspecs/macx-clang-linux/ &&\
