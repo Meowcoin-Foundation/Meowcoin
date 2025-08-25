@@ -135,6 +135,9 @@ $(package)_config_opts_linux += -no-feature-vulkan
 $(package)_config_opts_linux += -dbus-runtime
 $(package)_config_opts_arm_linux = OPENSSL_LIBS="-lssl -lcrypto -pthread -ldl"
 $(package)_config_opts_arm_linux += -platform linux-g++ -xplatform bitcoin-linux-g++
+$(package)_config_opts_arm_linux += QMAKE_CFLAGS="-I$(host_prefix)/include"
+$(package)_config_opts_arm_linux += QMAKE_CXXFLAGS="-I$(host_prefix)/include"
+$(package)_config_opts_arm_linux += QMAKE_LFLAGS="-L$(host_prefix)/lib"
 $(package)_config_opts_i686_linux  = -xplatform linux-g++-32
 $(package)_config_opts_x86_64_linux = OPENSSL_LIBS="-lssl -lcrypto -pthread -ldl"
 $(package)_config_opts_x86_64_linux += -xplatform linux-g++-64
