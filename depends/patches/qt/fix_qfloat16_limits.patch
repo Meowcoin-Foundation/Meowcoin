@@ -1,11 +1,10 @@
 Add limits include to qfloat16.h for GCC 11+ compatibility on Ubuntu 22.04+ toolchains.
 
-diff --git a/qtbase/src/corelib/global/qfloat16.h b/qtbase/src/corelib/global/qfloat16.h
---- a/qtbase/src/corelib/global/qfloat16.h
-+++ b/qtbase/src/corelib/global/qfloat16.h
-@@ -46,6 +46,7 @@
- #include "qglobal.h"
- #include "qmetatype.h"
+diff --git a/src/corelib/global/qfloat16.h b/src/corelib/global/qfloat16.h
+--- a/src/corelib/global/qfloat16.h
++++ b/src/corelib/global/qfloat16.h
+@@ -44,6 +44,7 @@
+ #include <QtCore/qglobal.h>
+ #include <QtCore/qmetatype.h>
 +#include <limits>
- 
- QT_BEGIN_NAMESPACE 
+ #include <string.h> 
