@@ -46,7 +46,6 @@ $(package)_config_opts += -no-iconv
 $(package)_config_opts += -no-kms
 $(package)_config_opts += -no-linuxfb
 $(package)_config_opts += -no-libudev
-$(package)_config_opts += -no-mtdev
 $(package)_config_opts += -openssl-linked
 $(package)_config_opts += -no-dtls
 $(package)_config_opts += -no-openvg
@@ -105,6 +104,7 @@ $(package)_config_opts += -no-feature-undoview
 $(package)_config_opts += -no-feature-vnc
 $(package)_config_opts += -no-feature-wizard
 $(package)_config_opts += -no-feature-xml
+$(package)_config_opts += QMAKE_CXXFLAGS="-Wno-deprecated-copy"
 
 $(package)_config_opts_darwin = -no-dbus
 $(package)_config_opts_darwin += -no-opengl
