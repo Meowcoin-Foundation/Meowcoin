@@ -29,7 +29,7 @@ env:
 jobs:
   check-jobs:
       # continue-on-error: true # Uncomment once integration is finished
-    runs-on: Meowcoin-Build-Master # Meowcoin Runner 22.04
+    runs-on: MeowcoinBuildMaster # Meowcoin Runner 22.04
     # Map a step output to a job output
     outputs:
       should_skip: ${{ steps.skip_check.outputs.should_skip }}
@@ -55,7 +55,7 @@ jobs:
 
   build:
     needs: check-jobs
-    runs-on: Meowcoin-Build-Master
+    runs-on: MeowcoinBuildMaster # Meowcoin Runner 22.04
     strategy:
       matrix:
        OS: [ 'windows', 'linux', 'aarch64']
