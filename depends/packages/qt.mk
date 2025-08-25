@@ -107,6 +107,7 @@ $(package)_config_opts += -no-feature-xml
 $(package)_config_opts += -no-openssl
 $(package)_config_opts += QMAKE_CXXFLAGS="-Wno-deprecated-copy"
 $(package)_config_opts += QMAKE_CFLAGS="-Wno-deprecated-copy"
+$(package)_config_opts += QMAKE_CXXFLAGS+="-Wno-deprecated-copy"
 
 $(package)_config_opts_darwin = -no-dbus
 $(package)_config_opts_darwin += -no-opengl
@@ -248,7 +249,7 @@ define $(package)_preprocess_cmds
   cp -r qtbase/mkspecs/linux-arm-gnueabi-g++ qtbase/mkspecs/bitcoin-linux-g++ && \
   sed -i.old "s/arm-linux-gnueabi-/$(host)-/g" qtbase/mkspecs/bitcoin-linux-g++/qmake.conf && \
   echo "!host_build: QMAKE_CFLAGS     += $($(package)_cflags) $($(package)_cppflags)" >> qtbase/mkspecs/common/gcc-base.conf && \
-  echo "!host_build: QMAKE_CXXFLAGS   += $($(package)_cxxflags) $($(package)_cppflags) -Wno-deprecated-copy" >> qtbase/mkspecs/common/gcc-base.conf && \
+  echo "QMAKE_CXXFLAGS   += $($(package)_cxxflags) $($(package)_cppflags) -Wno-deprecated-copy" >> qtbase/mkspecs/common/gcc-base.conf && \
   echo "!host_build: QMAKE_LFLAGS     += $($(package)_ldflags)" >> qtbase/mkspecs/common/gcc-base.conf && \
   sed -i.old "s|QMAKE_CFLAGS           += |!host_build: QMAKE_CFLAGS            = $($(package)_cflags) $($(package)_cppflags) |" qtbase/mkspecs/win32-g++/qmake.conf && \
   sed -i.old "s|QMAKE_CXXFLAGS         += |!host_build: QMAKE_CXXFLAGS            = $($(package)_cxxflags) $($(package)_cppflags) -Wno-deprecated-copy |" qtbase/mkspecs/win32-g++/qmake.conf && \
