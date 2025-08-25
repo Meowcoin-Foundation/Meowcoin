@@ -1,18 +1,8 @@
-diff --git a/src/corelib/global/qendian.h b/src/corelib/global/qendian.h
-index 0000000..0000001 100644
---- a/src/corelib/global/qendian.h
-+++ b/src/corelib/global/qendian.h
-@@ -1,7 +1,22 @@
- /* This file is part of the QtCore module of the Qt Toolkit.
-    (license header omitted for brevity)
- */
--#include "qglobal.h"
--#include "qfloat16.h"
-+#include "qglobal.h"
-+#include "qfloat16.h"
-+
-+// Needed for std::numeric_limits with GCC 11+ (Ubuntu 22.04 toolchains), and
-+// to avoid Windows headers' min/max macros poisoning std::min/std::max.
+--- src/corelib/global/qendian.h
++++ src/corelib/global/qendian.h
+@@ -41,6 +41,16 @@
+ #include "qglobal.h"
+ #include "qfloat16.h"
 +#include <limits>
 +#if defined(_WIN32)
 +#  ifdef max
@@ -22,5 +12,5 @@ index 0000000..0000001 100644
 +#    undef min
 +#  endif
 +#endif
-+
- /* existing content continues */
+
+ QT_BEGIN_NAMESPACE
