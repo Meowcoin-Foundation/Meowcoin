@@ -137,18 +137,29 @@ $(package)_config_opts_linux += -no-feature-vulkan
 $(package)_config_opts_linux += -dbus-runtime
 $(package)_config_opts_arm_linux = OPENSSL_LIBS="-lssl -lcrypto -pthread -ldl"
 $(package)_config_opts_arm_linux += -platform linux-g++ -xplatform bitcoin-linux-g++
-$(package)_config_opts_arm_linux += QMAKE_CFLAGS="-I$(CURDIR)/$(host_prefix)/include"
-$(package)_config_opts_arm_linux += QMAKE_CXXFLAGS="-I$(CURDIR)/$(host_prefix)/include"
-$(package)_config_opts_arm_linux += QMAKE_LFLAGS="-L$(CURDIR)/$(host_prefix)/lib"
+$(package)_config_opts_arm_linux += -I $(host_prefix)/include
+$(package)_config_opts_arm_linux += -L $(host_prefix)/lib
 $(package)_config_opts_i686_linux  = -xplatform linux-g++-32
 $(package)_config_opts_x86_64_linux = OPENSSL_LIBS="-lssl -lcrypto -pthread -ldl"
 $(package)_config_opts_x86_64_linux += -xplatform linux-g++-64
+$(package)_config_opts_x86_64_linux += -I $(host_prefix)/include
+$(package)_config_opts_x86_64_linux += -L $(host_prefix)/lib
 $(package)_config_opts_aarch64_linux = OPENSSL_LIBS="-lssl -lcrypto -pthread -ldl"
 $(package)_config_opts_aarch64_linux += -xplatform linux-aarch64-gnu-g++
+$(package)_config_opts_aarch64_linux += -I $(host_prefix)/include
+$(package)_config_opts_aarch64_linux += -L $(host_prefix)/lib
 $(package)_config_opts_powerpc64_linux = -platform linux-g++ -xplatform bitcoin-linux-g++
+$(package)_config_opts_powerpc64_linux += -I $(host_prefix)/include
+$(package)_config_opts_powerpc64_linux += -L $(host_prefix)/lib
 $(package)_config_opts_powerpc64le_linux = -platform linux-g++ -xplatform bitcoin-linux-g++
+$(package)_config_opts_powerpc64le_linux += -I $(host_prefix)/include
+$(package)_config_opts_powerpc64le_linux += -L $(host_prefix)/lib
 $(package)_config_opts_riscv64_linux = -platform linux-g++ -xplatform bitcoin-linux-g++
+$(package)_config_opts_riscv64_linux += -I $(host_prefix)/include
+$(package)_config_opts_riscv64_linux += -L $(host_prefix)/lib
 $(package)_config_opts_s390x_linux = -platform linux-g++ -xplatform bitcoin-linux-g++
+$(package)_config_opts_s390x_linux += -I $(host_prefix)/include
+$(package)_config_opts_s390x_linux += -L $(host_prefix)/lib
 
 $(package)_config_opts_mingw32 = -no-opengl
 $(package)_config_opts_mingw32 += -xplatform win32-g++
@@ -247,9 +258,9 @@ define $(package)_preprocess_cmds
   cp -f $($(package)_patch_dir)/mac-qmake.conf qtbase/mkspecs/macx-clang-linux/qmake.conf && \
   cp -r qtbase/mkspecs/linux-arm-gnueabi-g++ qtbase/mkspecs/bitcoin-linux-g++ && \
   sed -i.old "s/arm-linux-gnueabi-/$(host)-/g" qtbase/mkspecs/bitcoin-linux-g++/qmake.conf && \
-  echo "!host_build: QMAKE_CFLAGS     += $($(package)_cflags) $($(package)_cppflags)" >> qtbase/mkspecs/common/gcc-base.conf && \
-  echo "QMAKE_CXXFLAGS   += $($(package)_cxxflags) $($(package)_cppflags) -Wno-deprecated-copy" >> qtbase/mkspecs/common/gcc-base.conf && \
-  echo "!host_build: QMAKE_LFLAGS     += $($(package)_ldflags)" >> qtbase/mkspecs/common/gcc-base.conf && \
+  echo "QMAKE_CFLAGS     += $($(package)_cflags) $($(package)_cppflags) -I$(host_prefix)/include" >> qtbase/mkspecs/common/gcc-base.conf && \
+  echo "QMAKE_CXXFLAGS   += $($(package)_cxxflags) $($(package)_cppflags) -Wno-deprecated-copy -I$(host_prefix)/include" >> qtbase/mkspecs/common/gcc-base.conf && \
+  echo "QMAKE_LFLAGS     += $($(package)_ldflags) -L$(host_prefix)/lib" >> qtbase/mkspecs/common/gcc-base.conf && \
   sed -i.old "s|QMAKE_CFLAGS           += |!host_build: QMAKE_CFLAGS            = $($(package)_cflags) $($(package)_cppflags) |" qtbase/mkspecs/win32-g++/qmake.conf && \
   sed -i.old "s|QMAKE_CXXFLAGS         += |!host_build: QMAKE_CXXFLAGS            = $($(package)_cxxflags) $($(package)_cppflags) -Wno-deprecated-copy |" qtbase/mkspecs/win32-g++/qmake.conf && \
   sed -i.old "0,/^QMAKE_LFLAGS_/s|^QMAKE_LFLAGS_|!host_build: QMAKE_LFLAGS            = $($(package)_ldflags)\n&|" qtbase/mkspecs/win32-g++/qmake.conf && \
