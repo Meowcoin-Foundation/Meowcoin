@@ -1,18 +1,11 @@
 diff --git a/qtbase/src/corelib/global/qendian.h b/qtbase/src/corelib/global/qendian.h
-index 0000000..0000001 100644
+index 1234567..89abcde 100644
 --- a/qtbase/src/corelib/global/qendian.h
 +++ b/qtbase/src/corelib/global/qendian.h
-@@ -41,6 +41,14 @@
- #include "qglobal.h"
- #include "qfloat16.h"
-+// Ensure std::numeric_limits is visible with newer libstdc++ (GCC 11+),
-+// and avoid Windows headers defining min/max as macros.
+@@ -41,7 +41,8 @@
+#include "qglobal.h"
+-#include "qfloat16.h"
++#include "qfloat16.h"
 +#include <limits>
-+#if defined(max)
-+#  undef max
-+#endif
-+#if defined(min)
-+#  undef min
-+#endif
- 
- QT_BEGIN_NAMESPACE
+
+QT_BEGIN_NAMESPACE
