@@ -1,7 +1,8 @@
 diff --git a/qtbase/src/corelib/global/qfloat16.h b/qtbase/src/corelib/global/qfloat16.h
 --- a/qtbase/src/corelib/global/qfloat16.h
 +++ b/qtbase/src/corelib/global/qfloat16.h
-@@ -46,6 +46,7 @@
+@@ -43,9 +43,10 @@
+ 
  #include "qglobal.h"
  #include "qmetatype.h"
 +#include <limits>

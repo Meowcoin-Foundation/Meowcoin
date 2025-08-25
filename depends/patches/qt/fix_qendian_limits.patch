@@ -1,7 +1,8 @@
 diff --git a/qtbase/src/corelib/global/qendian.h b/qtbase/src/corelib/global/qendian.h
 --- a/qtbase/src/corelib/global/qendian.h
 +++ b/qtbase/src/corelib/global/qendian.h
-@@ -47,6 +47,7 @@
+@@ -44,9 +44,10 @@
+ 
  #include "qglobal.h"
  #include "qfloat16.h"
 +#include <limits>
