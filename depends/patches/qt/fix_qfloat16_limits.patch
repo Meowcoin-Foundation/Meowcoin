@@ -7,4 +7,4 @@ diff --git a/src/corelib/global/qfloat16.h b/src/corelib/global/qfloat16.h
  #include <QtCore/qglobal.h>
  #include <QtCore/qmetatype.h>
 +#include <limits>
- #include <string.h> 
+ #include <string.h>

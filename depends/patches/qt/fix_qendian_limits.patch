@@ -8,4 +8,4 @@ diff --git a/src/corelib/global/qendian.h b/src/corelib/global/qendian.h
  #include <QtCore/qglobal.h>
 +#include <limits>
  
- // include stdlib.h and hope that it defines __GLIBC__ for glibc-based systems 
+ // include stdlib.h and hope that it defines __GLIBC__ for glibc-based systems
