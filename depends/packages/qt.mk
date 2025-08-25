@@ -135,9 +135,9 @@ $(package)_config_opts_linux += -no-feature-vulkan
 $(package)_config_opts_linux += -dbus-runtime
 $(package)_config_opts_arm_linux = OPENSSL_LIBS="-lssl -lcrypto -pthread -ldl"
 $(package)_config_opts_arm_linux += -platform linux-g++ -xplatform bitcoin-linux-g++
-$(package)_config_opts_arm_linux += QMAKE_CFLAGS="-I$(host_prefix)/include"
-$(package)_config_opts_arm_linux += QMAKE_CXXFLAGS="-I$(host_prefix)/include"
-$(package)_config_opts_arm_linux += QMAKE_LFLAGS="-L$(host_prefix)/lib"
+$(package)_config_opts_arm_linux += QMAKE_CFLAGS="-I$(CURDIR)/$(host_prefix)/include"
+$(package)_config_opts_arm_linux += QMAKE_CXXFLAGS="-I$(CURDIR)/$(host_prefix)/include"
+$(package)_config_opts_arm_linux += QMAKE_LFLAGS="-L$(CURDIR)/$(host_prefix)/lib"
 $(package)_config_opts_i686_linux  = -xplatform linux-g++-32
 $(package)_config_opts_x86_64_linux = OPENSSL_LIBS="-lssl -lcrypto -pthread -ldl"
 $(package)_config_opts_x86_64_linux += -xplatform linux-g++-64
@@ -152,6 +152,9 @@ $(package)_config_opts_mingw32 = -no-opengl
 $(package)_config_opts_mingw32 += -xplatform win32-g++
 $(package)_config_opts_mingw32 += -device-option CROSS_COMPILE="$(host)-"
 $(package)_config_opts_mingw32 += OPENSSL_LIBS="-L/usr/x86_64-w64-mingw32/lib -lssl -lcrypto -lws2_32"
+$(package)_config_opts_mingw32 += QMAKE_CFLAGS="-I$(CURDIR)/$(host_prefix)/include"
+$(package)_config_opts_mingw32 += QMAKE_CXXFLAGS="-I$(CURDIR)/$(host_prefix)/include"
+$(package)_config_opts_mingw32 += QMAKE_LFLAGS="-L$(CURDIR)/$(host_prefix)/lib"
 
 $(package)_config_opts_android = -xplatform android-clang
 $(package)_config_opts_android += -android-sdk $(ANDROID_SDK)
