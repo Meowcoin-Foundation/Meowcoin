@@ -98,7 +98,7 @@ jobs:
 
     - if: ${{ needs.check-jobs.outputs.should_skip != 'true' }}
       name: Build Meowcoin
-      run: make -j2
+      run: make -j16
 
     - if: ${{ needs.check-jobs.outputs.should_skip != 'true' }}
       name: Check Binary Security
