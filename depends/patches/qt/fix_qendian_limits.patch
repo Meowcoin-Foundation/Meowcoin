@@ -1,8 +1,20 @@
+diff --git a/qtbase/src/corelib/global/qfloat16.h b/qtbase/src/corelib/global/qfloat16.h
+--- a/qtbase/src/corelib/global/qfloat16.h
++++ b/qtbase/src/corelib/global/qfloat16.h
+@@ -46,6 +46,7 @@
+ #include "qglobal.h"
+ #include "qmetatype.h"
++#include <limits>
+ 
+ QT_BEGIN_NAMESPACE
+ 
+diff --git a/qtbase/src/corelib/global/qendian.h b/qtbase/src/corelib/global/qendian.h
 --- a/qtbase/src/corelib/global/qendian.h
 +++ b/qtbase/src/corelib/global/qendian.h
-@@ -41,6 +41,7 @@
+@@ -47,6 +47,7 @@
  #include "qglobal.h"
  #include "qfloat16.h"
 +#include <limits>
-
+ 
  QT_BEGIN_NAMESPACE
+
