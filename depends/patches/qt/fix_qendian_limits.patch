@@ -1,0 +1,18 @@
+diff --git a/qtbase/src/corelib/global/qendian.h b/qtbase/src/corelib/global/qendian.h
+index 1234567..89abcde 100644
+--- a/qtbase/src/corelib/global/qendian.h
++++ b/qtbase/src/corelib/global/qendian.h
+@@ -41,6 +41,13 @@
+ #include "qglobal.h"
+ #include "qfloat16.h"
++// Needed for std::numeric_limits with GCC 11+ (Ubuntu 22.04 toolchains)
++#include <limits>
++// Avoid Windows headers' min/max macros poisoning std::min/std::max later
++#if defined(max)
++#  undef max
++#endif
++#if defined(min)
++#  undef min
++#endif
+ 
+ QT_BEGIN_NAMESPACE 
