@@ -1,4 +1,3 @@
-diff --git a/qtbase/src/corelib/global/qendian.h b/qtbase/src/corelib/global/qendian.h
 --- a/qtbase/src/corelib/global/qendian.h
 +++ b/qtbase/src/corelib/global/qendian.h
 @@
