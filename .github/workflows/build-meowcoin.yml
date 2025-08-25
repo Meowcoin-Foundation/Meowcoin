@@ -58,7 +58,7 @@ jobs:
     runs-on: ubuntu-22.04
     strategy:
       matrix:
-       OS: [ 'windows', 'linux', 'arm32v7', 'aarch64']
+       OS: [ 'windows', 'linux', 'aarch64']
       #  OS: [ 'windows', 'linux', 'linux-disable-wallet', 'arm32v7', 'arm32v7-disable-wallet', 'aarch64', 'aarch64-disable-wallet' ]
 
     steps:
