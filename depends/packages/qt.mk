@@ -106,6 +106,7 @@ $(package)_config_opts += -no-feature-wizard
 $(package)_config_opts += -no-feature-xml
 $(package)_config_opts += -no-openssl
 $(package)_config_opts += QMAKE_CXXFLAGS="-Wno-deprecated-copy"
+$(package)_config_opts += QMAKE_CFLAGS="-Wno-deprecated-copy"
 
 $(package)_config_opts_darwin = -no-dbus
 $(package)_config_opts_darwin += -no-opengl
