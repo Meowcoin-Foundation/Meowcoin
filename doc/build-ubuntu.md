@@ -164,7 +164,11 @@ __The build process:__
 
 `export BDB_PREFIX=$HOME/src/db4`
 
-`./configure BDB_LIBS="-L${BDB_PREFIX}/lib -ldb_cxx-4.8" BDB_CFLAGS="-I${BDB_PREFIX}/include" --prefix=/usr/local` 
+`./configure BDB_LIBS="-L${BDB_PREFIX}/lib -ldb_cxx-4.8" BDB_CFLAGS="-I${BDB_PREFIX}/include" --prefix=/usr/local --enable-sse2 --disable-tests`
+
+**Note on configure flags:**
+- `--enable-sse2`: Enables SSE2 instructions in the scrypt library for significantly faster mining and block validation performance
+- `--disable-tests`: Skips test compilation to speed up the build process
 
 _Adjust to own needs. This will install the binaries to `/usr/local/bin`_
 

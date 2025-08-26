@@ -70,7 +70,7 @@ If you used the export command, your configure command will probably be this:
     You can disable the GUI build by passing `--without-gui` to configure.
     ```shell
     ./autogen.sh
-    ./configure
+    ./configure --enable-sse2 --disable-tests
     make
     ```
 
