@@ -27,11 +27,14 @@ if [[ ${GITHUB_REF} =~ "release" || ${FORCEBUILDDEPS} = "1" ]]; then
     if [[ ${OS} == "windows" ]]; then
         make HOST=x86_64-w64-mingw32 -j2
     elif [[ ${OS} == "osx" ]]; then
-       cd ${GITHUB_WORKSPACE}
-        curl -O https://bitcoincore.org/depends-sources/sdks/MacOSX10.14.sdk.tar.gz
-        mkdir -p ${GITHUB_WORKSPACE}/depends/SDKs
-        cd ${GITHUB_WORKSPACE}/depends/SDKs && tar -zxf ${GITHUB_WORKSPACE}/MacOSX10.14.sdk.tar.gz
-        cd ${GITHUB_WORKSPACE}/depends && make HOST=x86_64-apple-darwin14 -j2
+        cd ${GITHUB_WORKSPACE}/depends
+        mkdir -p SDKs
+        cd SDKs
+        curl -O https://bitcoincore.org/depends-sources/sdks/Xcode-11.3.1-11C505-extracted-SDK-with-libcxx-headers.tar.gz
+        tar -zxf Xcode-11.3.1-11C505-extracted-SDK-with-libcxx-headers.tar.gz
+        rm -rf Xcode-11.3.1-11C505-extracted-SDK-with-libcxx-headers.tar.gz
+        cd ..
+        make HOST=x86_64-apple-darwin14 -j2
     elif [[ ${OS} == "linux" || ${OS} == "linux-disable-wallet" ]]; then
         make HOST=x86_64-linux-gnu -j2
     elif [[ ${OS} == "arm32v7" || ${OS} == "arm32v7-disable-wallet" ]]; then
