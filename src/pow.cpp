@@ -355,11 +355,11 @@ unsigned int GetNextWorkRequiredBTC(const CBlockIndex* pindexLast, const CBlockH
 }
 
 
-unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHeader *pblock, const Consensus::Params& params, bool fIsAuxPow)
+unsigned int GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlockHeader *pblock, const Consensus::Params& params, bool fIsAuxPow /*ignored*/)
 {
     if (params.IsAuxpowActive(pindexLast->nHeight + 1)) {
-        // FIX: Use the block's version to determine if it's AuxPoW, not the parameter
-        bool fIsAuxPowBlock = pblock->nVersion.IsAuxpow();
+        // IMPORTANT: derive AuxPoW from the header's version bit during headers-first sync
+        const bool fIsAuxPowBlock = pblock->nVersion.IsAuxpow();
         return GetNextWorkRequired_LWMA_MultiAlgo(pindexLast, pblock, params, fIsAuxPowBlock);
     }
 

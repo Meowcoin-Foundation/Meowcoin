@@ -4243,8 +4243,8 @@ static bool ContextualCheckBlockHeader(const CBlockHeader& block, CValidationSta
         return state.DoS(100, error("%s : legacy block after auxpow start", __func__), REJECT_INVALID, "late-legacy-block");
 
     // Check proof of work
-    // Use the block's version to determine if it's AuxPoW, not the parameter
-    bool fIsAuxPowBlock = block.nVersion.IsAuxpow();
+    // IMPORTANT: pick AuxPoW vs legacy from the header's version bit
+    const bool fIsAuxPowBlock = block.nVersion.IsAuxpow();
     unsigned int expectedBits = GetNextWorkRequired(pindexPrev, &block, consensusParams, fIsAuxPowBlock);
     if (block.nBits != expectedBits)
         return state.DoS(100, false, REJECT_INVALID, "bad-diffbits", false, "incorrect proof of work");
