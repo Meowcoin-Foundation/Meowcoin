@@ -29,7 +29,7 @@ env:
 jobs:
   check-jobs:
       # continue-on-error: true # Uncomment once integration is finished
-    runs-on: MeowcoinBuildMaster # Meowcoin Runner 22.04
+    runs-on: ubuntu-22.04
     # Map a step output to a job output
     outputs:
       should_skip: ${{ steps.skip_check.outputs.should_skip }}
@@ -55,7 +55,7 @@ jobs:
 
   build:
     needs: check-jobs
-    runs-on: MeowcoinBuildMaster # Meowcoin Runner 22.04
+    runs-on: ubuntu-22.04
     strategy:
       matrix:
        OS: [ 'windows', 'linux', 'aarch64', 'arm32v7', 'osx']
@@ -98,7 +98,7 @@ jobs:
 
     - if: ${{ needs.check-jobs.outputs.should_skip != 'true' }}
       name: Build Meowcoin
-      run: make -j5
+      run: make -j2
 
     - if: ${{ needs.check-jobs.outputs.should_skip != 'true' }}
       name: Check Binary Security
