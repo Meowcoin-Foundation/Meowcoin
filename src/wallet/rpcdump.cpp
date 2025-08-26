@@ -17,6 +17,7 @@
 #include "wallet.h"
 #include "merkleblock.h"
 #include "core_io.h"
+#include "primitives/pureheader.h"
 
 #include "rpcwallet.h"
 

@@ -32,7 +32,7 @@ relocation R_X86_64_32 against `.rodata' can not be used when making a shared ob
  
 To resolve or avoid the following build error specify the following configure parameters, make clean, and then build:
 ```bash
-./configure --enable-cxx --disable-shared --with-pic --prefix=$BDB_PREFIX CXXFLAGS="-fPIC" CPPFLAGS="-fPIC"
+./configure --enable-cxx --disable-shared --with-pic --prefix=$BDB_PREFIX CXXFLAGS="-fPIC" CPPFLAGS="-fPIC" --enable-sse2 --disable-tests
 make clean
 make
 ```

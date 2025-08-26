@@ -37,7 +37,7 @@ public:
     { return 900; }
 
     bool Condition(const CBlockIndex *pindex, const Consensus::Params &params) const override
-    { return (pindex->nVersion & 0x100); }
+    { return (pindex->nVersion.GetBaseVersion() & 0x100); }
 
     ThresholdState GetStateFor(const CBlockIndex *pindexPrev) const
     { return AbstractThresholdConditionChecker::GetStateFor(pindexPrev, paramsDummy, cache); }
@@ -92,7 +92,7 @@ public:
             pindex->nHeight = vpblock.size();
             pindex->pprev = vpblock.size() > 0 ? vpblock.back() : nullptr;
             pindex->nTime = nTime;
-            pindex->nVersion = nVersion;
+            pindex->nVersion.SetGenesisVersion(nVersion);
             pindex->BuildSkip();
             vpblock.push_back(pindex);
         }

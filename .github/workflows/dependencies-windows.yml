@@ -24,7 +24,7 @@ jobs:
 
     steps:
     - name: Checkout the Code
-      uses: actions/checkout@v1
+      uses: actions/checkout@v4
 
     - name: Install Build Tools
       run: sudo ${SCRIPTS}/00-install-deps.sh ${OS}

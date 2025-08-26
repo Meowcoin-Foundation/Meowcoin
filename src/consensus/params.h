@@ -7,6 +7,7 @@
 #ifndef MEOWCOIN_CONSENSUS_PARAMS_H
 #define MEOWCOIN_CONSENSUS_PARAMS_H
 
+#include "primitives/algos.h"
 #include "uint256.h"
 #include <map>
 #include <string>
@@ -68,18 +69,40 @@ struct Params {
     uint32_t nMinerConfirmationWindow;
     BIP9Deployment vDeployments[MAX_VERSION_BITS_DEPLOYMENTS];
     /** Proof of work parameters */
-    uint256 powLimit;
-    uint256 kawpowLimit;
-    uint256 meowpowLimit;
+    uint256 powLimit[static_cast<long unsigned int>(PowAlgo::NUM_ALGOS)];
+
     bool fPowAllowMinDifficultyBlocks;
     bool fPowNoRetargeting;
     int64_t nPowTargetSpacing;
     int64_t nPowTargetTimespan;
+    int64_t nLwmaAveragingWindow;
     int64_t DifficultyAdjustmentInterval() const { return nPowTargetTimespan / nPowTargetSpacing; }
     uint256 nMinimumChainWork;
     uint256 defaultAssumeValid;
     bool nSegwitEnabled;
     bool nCSVEnabled;
+
+    /** Auxpow parameters */
+    int32_t nAuxpowChainId;
+    int nAuxpowStartHeight;
+    bool fStrictChainId;
+    int nLegacyBlocksBefore; // -1 for "always allow"
+
+    bool IsAuxpowActive(int nHeight) const
+    {
+        return nHeight >= nAuxpowStartHeight;
+    }
+    /**
+     * Check whether or not to allow legacy blocks at the given height.
+     * @param nHeight Height of the block to check.
+     * @return True if it is allowed to have a legacy version.
+     */
+    bool AllowLegacyBlocks(unsigned nHeight) const
+    {
+        if (nLegacyBlocksBefore < 0)
+            return true;
+        return static_cast<int> (nHeight) < nLegacyBlocksBefore;
+    }
 };
 } // namespace Consensus
 

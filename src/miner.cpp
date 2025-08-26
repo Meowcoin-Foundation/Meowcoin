@@ -58,7 +58,7 @@ uint64_t nHashesPerSec = 0;
 uint64_t nHashesDone = 0;
 
 
-int64_t UpdateTime(CBlockHeader* pblock, const Consensus::Params& consensusParams, const CBlockIndex* pindexPrev)
+int64_t UpdateTime(CBlockHeader* pblock, const Consensus::Params& consensusParams, const CBlockIndex* pindexPrev, bool fIsAuxPow)
 {
     int64_t nOldTime = pblock->nTime;
     int64_t nNewTime = std::max(pindexPrev->GetMedianTimePast()+1, GetAdjustedTime());
@@ -68,7 +68,7 @@ int64_t UpdateTime(CBlockHeader* pblock, const Consensus::Params& consensusParam
 
     // Updating time can change work required on testnet:
     if (consensusParams.fPowAllowMinDifficultyBlocks)
-        pblock->nBits = GetNextWorkRequired(pindexPrev, pblock, consensusParams);
+        pblock->nBits = GetNextWorkRequired(pindexPrev, pblock, consensusParams, fIsAuxPow);
 
     return nNewTime - nOldTime;
 }
@@ -119,7 +119,7 @@ void BlockAssembler::resetBlock()
     nFees = 0;
 }
 
-std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& scriptPubKeyIn, bool fMineWitnessTx)
+std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& scriptPubKeyIn, bool fMineWitnessTx, bool fIsAuxPow)
 {
     int64_t nTimeStart = GetTimeMicros();
 
@@ -141,12 +141,13 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
     assert(pindexPrev != nullptr);
     nHeight = pindexPrev->nHeight + 1;
 
-    pblock->nVersion = ComputeBlockVersion(pindexPrev, chainparams.GetConsensus());
+    const int32_t nChainId = chainparams.GetConsensus().nAuxpowChainId;
+    // FIXME: Active version bits after the always-auxpow fork!
+    pblock->nVersion.SetBaseVersion(ComputeBlockVersion(pindexPrev, chainparams.GetConsensus()), nChainId);;
     // -regtest only: allow overriding block.nVersion with
     // -blockversion=N to test forking scenarios
     if (chainparams.MineBlocksOnDemand())
-        pblock->nVersion = gArgs.GetArg("-blockversion", pblock->nVersion);
-
+        pblock->nVersion.SetBaseVersion(gArgs.GetArg("-blockversion", pblock->nVersion.GetBaseVersion()), nChainId);
     pblock->nTime = GetAdjustedTime();
     const int64_t nMedianTimePast = pindexPrev->GetMedianTimePast();
 
@@ -213,16 +214,23 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
 
 
     // Fill in header
+    LogPrintf("CreateNewBlock(): Filling in Header. IsAuxPow: %s\n", fIsAuxPow);
     pblock->hashPrevBlock  = pindexPrev->GetBlockHash();
-    UpdateTime(pblock, chainparams.GetConsensus(), pindexPrev);
-    pblock->nBits          = GetNextWorkRequired(pindexPrev, pblock, chainparams.GetConsensus());
+    LogPrintf("CreateNewBlock(): Set Prev Hash. IsAuxPow: %s\n", fIsAuxPow);
+    UpdateTime(pblock, chainparams.GetConsensus(), pindexPrev, fIsAuxPow);
+    LogPrintf("CreateNewBlock(): Updated nTime. IsAuxPow: %s\n", fIsAuxPow);
+    pblock->nBits          = GetNextWorkRequired(pindexPrev, pblock, chainparams.GetConsensus(), fIsAuxPow);
+    LogPrintf("CreateNewBlock(): Updated nBits. IsAuxPow: %s\n", fIsAuxPow);
     pblock->nNonce         = 0;
+    LogPrintf("CreateNewBlock(): Updated nNonce. IsAuxPow: %s\n", fIsAuxPow);
     pblock->nNonce64         = 0;
+    LogPrintf("CreateNewBlock(): Updated nNonce64. IsAuxPow: %s\n", fIsAuxPow);
     pblock->nHeight          = nHeight;
     pblocktemplate->vTxSigOpsCost[0] = WITNESS_SCALE_FACTOR * GetLegacySigOpCount(*pblock->vtx[0]);
 
     CValidationState state;
-    if (!TestBlockValidity(state, chainparams, *pblock, pindexPrev, false, false)) {
+    LogPrintf("CreateNewBlock(): Validating Block with TestBlockValidity. IsAuxPow: %s\n", fIsAuxPow);
+    if (!TestBlockValidity(state, chainparams, *pblock, pindexPrev, false, false, fIsAuxPow)) {
         if (state.IsTransactionError()) {
             if (gArgs.GetBoolArg("-autofixmempool", false)) {
                 {
@@ -525,7 +533,7 @@ void IncrementExtraNonce(CBlock* pblock, const CBlockIndex* pindexPrev, unsigned
 }
 
 
-static bool ProcessBlockFound(const CBlock* pblock, const CChainParams& chainparams)
+bool ProcessBlockFound(const CBlock* pblock, const CChainParams& chainparams)
 {
     LogPrintf("%s\n", pblock->ToString());
     LogPrintf("generated %s\n", FormatMoney(pblock->vtx[0]->vout[0].nValue));

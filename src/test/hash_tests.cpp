@@ -86,7 +86,7 @@ BOOST_FIXTURE_TEST_SUITE(hash_tests, BasicTestingSetup)
         BOOST_TEST_MESSAGE("Running Hash16R Test");
 
         CBlock block;
-        block.nVersion = 42;
+        block.nVersion.SetGenesisVersion(42);
         std::string hashHex = "19bcdaa780349350b210ca84d73dc1c08fbae659990b47a9d28655e7e9be3970";
 
         //decimal order of hash16R is d28655e7e9be3970 hex converted to 13 2 8 6 5 5 14 7 14 9 11 14 3 9 7 0
