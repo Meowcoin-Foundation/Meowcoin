@@ -21,16 +21,16 @@ elif [[ ${OS} == "linux" || ${OS} == "linux-disable-wallet" ]]; then
 elif [[ ${OS} == "arm32v7" || ${OS} == "arm32v7-disable-wallet" ]]; then
     if [[ ${OS} == "arm32v7-disable-wallet" ]]; then
         EXTRA_OPTS="--disable-wallet"
-        CONFIG_SITE=${GITHUB_WORKSPACE}/depends/arm-linux-gnueabihf/share/config.site ./configure --prefix=/ --enable-glibc-back-compat --enable-reduce-exports LDFLAGS=-static-libstdc++ --disable-tests --with-libs=no --with-gui=no --enable-sse2 ${EXTRA_OPTS}
+        CONFIG_SITE=${GITHUB_WORKSPACE}/depends/arm-linux-gnueabihf/share/config.site ./configure --prefix=/ --enable-glibc-back-compat --enable-reduce-exports LDFLAGS=-static-libstdc++ --disable-tests --with-libs=no --with-gui=no ${EXTRA_OPTS}
     else
-        CONFIG_SITE=${GITHUB_WORKSPACE}/depends/arm-linux-gnueabihf/share/config.site ./configure --prefix=/ --disable-ccache --disable-maintainer-mode --disable-dependency-tracking --enable-glibc-back-compat --enable-reduce-exports --disable-bench --disable-gui-tests --disable-tests --enable-sse2 CFLAGS="-O2 -g" CXXFLAGS="-O2 -g" LDFLAGS="-static-libstdc++"
+        CONFIG_SITE=${GITHUB_WORKSPACE}/depends/arm-linux-gnueabihf/share/config.site ./configure --prefix=/ --disable-ccache --disable-maintainer-mode --disable-dependency-tracking --enable-glibc-back-compat --enable-reduce-exports --disable-bench --disable-gui-tests --disable-tests CFLAGS="-O2 -g" CXXFLAGS="-O2 -g" LDFLAGS="-static-libstdc++"
     fi
 elif [[ ${OS} == "aarch64" || ${OS} == "aarch64-disable-wallet" ]]; then
     if [[ ${OS} == "aarch64-disable-wallet" ]]; then
         EXTRA_OPTS="--disable-wallet"
-        CONFIG_SITE=${GITHUB_WORKSPACE}/depends/aarch64-linux-gnu/share/config.site ./configure --prefix=/ --enable-glibc-back-compat --enable-reduce-exports LDFLAGS=-static-libstdc++ --disable-tests --with-libs=no --with-gui=no --enable-sse2 ${EXTRA_OPTS}
+        CONFIG_SITE=${GITHUB_WORKSPACE}/depends/aarch64-linux-gnu/share/config.site ./configure --prefix=/ --enable-glibc-back-compat --enable-reduce-exports LDFLAGS=-static-libstdc++ --disable-tests --with-libs=no --with-gui=no ${EXTRA_OPTS}
     else
-        CONFIG_SITE=${GITHUB_WORKSPACE}/depends/aarch64-linux-gnu/share/config.site ./configure --prefix=/ --disable-ccache --disable-maintainer-mode --disable-dependency-tracking --enable-glibc-back-compat --enable-reduce-exports --disable-bench --disable-gui-tests --disable-tests --enable-sse2 CFLAGS="-O2 -g" CXXFLAGS="-O2 -g" LDFLAGS="-static-libstdc++"
+        CONFIG_SITE=${GITHUB_WORKSPACE}/depends/aarch64-linux-gnu/share/config.site ./configure --prefix=/ --disable-ccache --disable-maintainer-mode --disable-dependency-tracking --enable-glibc-back-compat --enable-reduce-exports --disable-bench --disable-gui-tests --disable-tests CFLAGS="-O2 -g" CXXFLAGS="-O2 -g" LDFLAGS="-static-libstdc++"
     fi
 else
     echo "You must pass an OS."
