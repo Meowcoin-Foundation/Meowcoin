@@ -258,7 +258,7 @@ unsigned int GetNextWorkRequired_LWMA_MultiAlgo(
     if (height < N) {
         unsigned int result = powLimit.GetCompact();
         LogPrintf("LWMA h=%d algo=%s aux=%d same=%d exp=%08x hdrBits=%08x (height < N)\n",
-                  pindexLast->nHeight+1, AlgoName(algo), ((pblock->nVersion & VERSION_AUXPOW)!=0),
+                  pindexLast->nHeight+1, pblock->nVersion.GetAlgoName().c_str(), pblock->nVersion.IsAuxpow(),
                   0, result, pblock->nBits);
         return result;
     }
@@ -281,13 +281,13 @@ unsigned int GetNextWorkRequired_LWMA_MultiAlgo(
         if (!sameAlgo.empty()) {
             unsigned int result = sameAlgo.front()->nBits;
             LogPrintf("LWMA h=%d algo=%s aux=%d same=%d exp=%08x hdrBits=%08x (using first same-algo)\n",
-                      pindexLast->nHeight+1, AlgoName(algo), ((pblock->nVersion & VERSION_AUXPOW)!=0),
+                      pindexLast->nHeight+1, pblock->nVersion.GetAlgoName().c_str(), pblock->nVersion.IsAuxpow(),
                       (int)sameAlgo.size(), result, pblock->nBits);
             return result;
         }
         unsigned int result = powLimit.GetCompact();
         LogPrintf("LWMA h=%d algo=%s aux=%d same=%d exp=%08x hdrBits=%08x (no same-algo, using powLimit)\n",
-                  pindexLast->nHeight+1, AlgoName(algo), ((pblock->nVersion & VERSION_AUXPOW)!=0),
+                  pindexLast->nHeight+1, pblock->nVersion.GetAlgoName().c_str(), pblock->nVersion.IsAuxpow(),
                   (int)sameAlgo.size(), result, pblock->nBits);
         return result;
     }
@@ -332,7 +332,7 @@ unsigned int GetNextWorkRequired_LWMA_MultiAlgo(
     
     // Debug logging to track difficulty calculation
     LogPrintf("LWMA h=%d algo=%s aux=%d same=%d exp=%08x hdrBits=%08x\n",
-              pindexLast->nHeight+1, AlgoName(algo), ((pblock->nVersion & VERSION_AUXPOW)!=0),
+              pindexLast->nHeight+1, pblock->nVersion.GetAlgoName().c_str(), pblock->nVersion.IsAuxpow(),
               (int)sameAlgo.size(), result, pblock->nBits);
     
     return result;
