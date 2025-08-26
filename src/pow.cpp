@@ -236,8 +236,9 @@ unsigned int GetNextWorkRequired_LWMA_MultiAlgo(
     // Base chain design target (e.g., 60s for the whole chain)
     const int64_t T_chain = params.nPowTargetSpacing;
 
-    // Number of parallel algos contributing blocks
-    const int64_t ALGOS = 2; // MeowPow + AuxPoW
+    // Number of parallel algos contributing blocks - make this height-pure
+    const bool auxActive = (pindexLast->nHeight + 1) >= params.nAuxpowStartHeight;
+    const int64_t ALGOS = auxActive ? 2 : 1; // 2 if AuxPoW active, 1 if not
 
     // Effective per-algo target to achieve ~T_chain overall:
     // with 2 algos ~50/50, set per-algo to 2 * T_chain = 120s
@@ -256,7 +257,11 @@ unsigned int GetNextWorkRequired_LWMA_MultiAlgo(
         UintToArith256(params.powLimit[static_cast<uint8_t>(algo)]);
 
     if (height < N) {
-        return powLimit.GetCompact();
+        unsigned int result = powLimit.GetCompact();
+        LogPrintf("LWMA h=%d algo=%s aux=%d auxActive=%d ALGOS=%d same=%d exp=%08x hdrBits=%08x (height < N)\n",
+                  pindexLast->nHeight+1, pblock->nVersion.GetAlgoName().c_str(), pblock->nVersion.IsAuxpow(),
+                  auxActive, (int)ALGOS, 0, result, pblock->nBits);
+        return result;
     }
 
     // Gather last N+1 blocks of the SAME algo
@@ -269,13 +274,27 @@ unsigned int GetNextWorkRequired_LWMA_MultiAlgo(
          && (height - h) <= searchLimit; --h) {
         const CBlockIndex* bi = pindexLast->GetAncestor(h);
         if (!bi) break;
-        PowAlgo bialgo = bi->GetBlockHeader(params).nVersion.GetAlgo();
+        // Use index fields only - no disk reads during headers sync
+        PowAlgo bialgo = bi->nVersion.IsAuxpow() ? PowAlgo::SCRYPT : PowAlgo::MEOWPOW;
         if (bialgo == algo) sameAlgo.push_back(bi);
     }
 
     if ((int)sameAlgo.size() < (N + 1)) {
-        if (!sameAlgo.empty()) return sameAlgo.front()->nBits;
-        return powLimit.GetCompact();
+        if (!sameAlgo.empty()) {
+            unsigned int result = sameAlgo.front()->nBits;
+            const CBlockIndex* first = sameAlgo.front();
+            const CBlockIndex* last = sameAlgo.back();
+            LogPrintf("LWMA h=%d algo=%s aux=%d auxActive=%d ALGOS=%d same=%d exp=%08x hdrBits=%08x (using first same-algo) firstH=%d first=%s lastH=%d last=%s\n",
+                      pindexLast->nHeight+1, pblock->nVersion.GetAlgoName().c_str(), pblock->nVersion.IsAuxpow(),
+                      auxActive, (int)ALGOS, (int)sameAlgo.size(), result, pblock->nBits,
+                      first->nHeight, first->GetBlockHash().ToString(), last->nHeight, last->GetBlockHash().ToString());
+            return result;
+        }
+        unsigned int result = powLimit.GetCompact();
+        LogPrintf("LWMA h=%d algo=%s aux=%d auxActive=%d ALGOS=%d same=%d exp=%08x hdrBits=%08x (no same-algo, using powLimit)\n",
+                  pindexLast->nHeight+1, pblock->nVersion.GetAlgoName().c_str(), pblock->nVersion.IsAuxpow(),
+                  auxActive, (int)ALGOS, (int)sameAlgo.size(), result, pblock->nBits);
+        return result;
     }
 
     std::reverse(sameAlgo.begin(), sameAlgo.end()); // oldest -> newest
@@ -314,7 +333,17 @@ unsigned int GetNextWorkRequired_LWMA_MultiAlgo(
 
     if (nextTarget > powLimit) nextTarget = powLimit;
 
-    return nextTarget.GetCompact();
+    unsigned int result = nextTarget.GetCompact();
+    
+    // Debug logging to track difficulty calculation
+    const CBlockIndex* first = sameAlgo.front();
+    const CBlockIndex* last = sameAlgo.back();
+    LogPrintf("LWMA h=%d algo=%s aux=%d auxActive=%d ALGOS=%d same=%d exp=%08x hdrBits=%08x firstH=%d first=%s lastH=%d last=%s\n",
+              pindexLast->nHeight+1, pblock->nVersion.GetAlgoName().c_str(), pblock->nVersion.IsAuxpow(),
+              auxActive, (int)ALGOS, (int)sameAlgo.size(), result, pblock->nBits,
+              first->nHeight, first->GetBlockHash().ToString(), last->nHeight, last->GetBlockHash().ToString());
+    
+    return result;
 }
 
 
