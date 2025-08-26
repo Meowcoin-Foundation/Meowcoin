@@ -6,6 +6,7 @@ on:
       - master
       - Meow_*
       - develop
+      - temp/mm
   pull_request:
     branches:
       - master

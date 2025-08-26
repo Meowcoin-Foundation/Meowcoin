@@ -256,7 +256,11 @@ unsigned int GetNextWorkRequired_LWMA_MultiAlgo(
         UintToArith256(params.powLimit[static_cast<uint8_t>(algo)]);
 
     if (height < N) {
-        return powLimit.GetCompact();
+        unsigned int result = powLimit.GetCompact();
+        LogPrintf("LWMA h=%d algo=%s aux=%d same=%d exp=%08x hdrBits=%08x (height < N)\n",
+                  pindexLast->nHeight+1, AlgoName(algo), ((pblock->nVersion & VERSION_AUXPOW)!=0),
+                  0, result, pblock->nBits);
+        return result;
     }
 
     // Gather last N+1 blocks of the SAME algo
@@ -274,8 +278,18 @@ unsigned int GetNextWorkRequired_LWMA_MultiAlgo(
     }
 
     if ((int)sameAlgo.size() < (N + 1)) {
-        if (!sameAlgo.empty()) return sameAlgo.front()->nBits;
-        return powLimit.GetCompact();
+        if (!sameAlgo.empty()) {
+            unsigned int result = sameAlgo.front()->nBits;
+            LogPrintf("LWMA h=%d algo=%s aux=%d same=%d exp=%08x hdrBits=%08x (using first same-algo)\n",
+                      pindexLast->nHeight+1, AlgoName(algo), ((pblock->nVersion & VERSION_AUXPOW)!=0),
+                      (int)sameAlgo.size(), result, pblock->nBits);
+            return result;
+        }
+        unsigned int result = powLimit.GetCompact();
+        LogPrintf("LWMA h=%d algo=%s aux=%d same=%d exp=%08x hdrBits=%08x (no same-algo, using powLimit)\n",
+                  pindexLast->nHeight+1, AlgoName(algo), ((pblock->nVersion & VERSION_AUXPOW)!=0),
+                  (int)sameAlgo.size(), result, pblock->nBits);
+        return result;
     }
 
     std::reverse(sameAlgo.begin(), sameAlgo.end()); // oldest -> newest
@@ -314,7 +328,14 @@ unsigned int GetNextWorkRequired_LWMA_MultiAlgo(
 
     if (nextTarget > powLimit) nextTarget = powLimit;
 
-    return nextTarget.GetCompact();
+    unsigned int result = nextTarget.GetCompact();
+    
+    // Debug logging to track difficulty calculation
+    LogPrintf("LWMA h=%d algo=%s aux=%d same=%d exp=%08x hdrBits=%08x\n",
+              pindexLast->nHeight+1, AlgoName(algo), ((pblock->nVersion & VERSION_AUXPOW)!=0),
+              (int)sameAlgo.size(), result, pblock->nBits);
+    
+    return result;
 }
 
 
