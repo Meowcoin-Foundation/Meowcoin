@@ -357,6 +357,7 @@ crypto_libmeowcoin_crypto_a_SOURCES = \
   crypto/ethash/include/ethash/keccak.hpp \
   crypto/ethash/include/ethash/progpow.hpp \
   crypto/ethash/include/ethash/meowpow.hpp \
+  crypto/ethash/include/ethash/version.h \
   crypto/ethash/lib/ethash/bit_manipulation.h \
   crypto/ethash/lib/ethash/builtins.h \
   crypto/ethash/lib/ethash/endianness.hpp \
