@@ -1904,7 +1904,7 @@ static DisconnectResult DisconnectBlock(const CBlock& block, const CBlockIndex* 
         error("DisconnectBlock(): block asset undo data inconsistent");
         return DISCONNECT_FAILED;
     }
-    
+
     std::vector<std::pair<CAddressIndexKey, CAmount> > addressIndex;
     std::vector<std::pair<CAddressUnspentKey, CAddressUnspentValue> > addressUnspentIndex;
     std::vector<std::pair<CSpentIndexKey, CSpentIndexValue> > spentIndex;
@@ -2823,7 +2823,7 @@ static bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockInd
     }
 	// Parse Meowcoin address
     CScript scriptPubKeyCommunityAutonomous 	= GetScriptForDestination(destCommunityAutonomous);
-	
+
 	CAmount nCommunityAutonomousAmount 			= GetParams().CommunityAutonomousAmount();
 	CAmount nSubsidy 							= GetBlockSubsidy(pindex->nHeight, chainparams.GetConsensus());
 	CAmount nCommunityAutonomousAmountValue		= nSubsidy*nCommunityAutonomousAmount/100;
@@ -4264,7 +4264,11 @@ static bool ContextualCheckBlockHeader(const CBlockHeader& block, CValidationSta
         return state.Invalid(false, REJECT_INVALID, "time-too-old", "block's timestamp is too early");
 
     // Check timestamp
-    if (IsDGWActive(pindexPrev->nHeight+1))
+    if (params.IsAuxpowActive(pindexPrev->nHeight + 1)) {
+        if (block.GetBlockTime() > nAdjustedTime + MAX_FUTURE_BLOCK_TIME_LWMA)
+            return state.Invalid(false, REJECT_INVALID, "time-too-new", "block timestamp too far in the future");
+    }
+    else if (IsDGWActive(pindexPrev->nHeight+1))
     {
         if (block.GetBlockTime() > nAdjustedTime + MAX_FUTURE_BLOCK_TIME_DGW)
             return state.Invalid(false, REJECT_INVALID, "time-too-new", "block timestamp too far in the future");
