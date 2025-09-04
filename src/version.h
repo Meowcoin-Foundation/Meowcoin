@@ -29,6 +29,7 @@ static const int KAWPOW_VERSION = 70027;
 
 static const int MEOWPOW_VERSION = 70030;
 
+static const int AUXPOW_VERSION = 70031;
 //! disconnect from peers older than this proto version
 //!!! Anytime this value is changed please also update the "MY_VERSION" value to match in the
 //!!! ./test/functional/test_framework/mininode.py file. Not doing so will cause verack to fail!
