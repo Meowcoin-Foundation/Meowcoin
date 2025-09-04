@@ -175,7 +175,7 @@ public:
         consensus.nAuxpowChainId = 9;
         consensus.nAuxpowStartHeight = 1614560;
         consensus.fStrictChainId = true;
-        consensus.nLegacyBlocksBefore = INT_MAX;
+        consensus.nLegacyBlocksBefore = 1614560;
         /**
          * The message start string is designed to be unlikely to occur in normal data.
          * The characters are rarely used upper ASCII, not valid as UTF-8, and produce
@@ -529,9 +529,9 @@ public:
         consensus.nLegacyBlocksBefore = 19200;
 
         pchMessageStart[0] = 0x44;
-        pchMessageStart[1] = 0x52; 
-        pchMessageStart[2] = 0x4F; 
-        pchMessageStart[3] = 0x57; 
+        pchMessageStart[1] = 0x52;
+        pchMessageStart[2] = 0x4F;
+        pchMessageStart[3] = 0x57;
         nDefaultPort = 18444;
         nPruneAfterHeight = 1000;
 
