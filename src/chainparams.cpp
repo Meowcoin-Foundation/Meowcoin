@@ -191,7 +191,6 @@ public:
         uint32_t nGenesisTime = 1661730843;
 
         genesis = CreateGenesisBlock(nGenesisTime, 351574, 0x1e00ffff, 4, 5000 * COIN);
-        std::cout << "Genesis " << genesis.ToString() << std::endl;
         consensus.hashGenesisBlock = genesis.GetX16RHash();
 
         assert(consensus.hashGenesisBlock == uint256S("0x000000edd819220359469c54f2614b5602ebc775ea67a64602f354bdaa320f70"));
