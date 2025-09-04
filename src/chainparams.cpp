@@ -127,7 +127,7 @@ public:
         consensus.powLimit[static_cast<uint8_t>(PowAlgo::SCRYPT)] = uint256S("00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.nPowTargetTimespan = 2016 * 60; // 1.4 days
         consensus.nPowTargetSpacing = 1 * 60;
-        consensus.nLwmaAveragingWindow = 180;
+        consensus.nLwmaAveragingWindow = 45;
         consensus.fPowAllowMinDifficultyBlocks = false;
         consensus.fPowNoRetargeting = false;
         consensus.nRuleChangeActivationThreshold = 1613; // Approx 80% of 2016
@@ -314,7 +314,7 @@ public:
         consensus.powLimit[static_cast<uint8_t>(PowAlgo::SCRYPT)] = uint256S("00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.nPowTargetTimespan = 2016 * 60; // 1.4 days
         consensus.nPowTargetSpacing = 1 * 60;
-        consensus.nLwmaAveragingWindow = 180;
+        consensus.nLwmaAveragingWindow = 45;
         consensus.fPowAllowMinDifficultyBlocks = false;
         consensus.fPowNoRetargeting = false;
         consensus.nRuleChangeActivationThreshold = 1613; // Approx 65% for testchains
@@ -357,7 +357,7 @@ public:
         consensus.defaultAssumeValid = uint256S("0x000000eaab417d6dfe9bd75119972e1d07ecfe8ff655bef7c2acb3d9a0eeed81");
 
         consensus.nAuxpowChainId = 9;
-        consensus.nAuxpowStartHeight = 181;
+        consensus.nAuxpowStartHeight = 46;
         consensus.fStrictChainId = true;
         consensus.nLegacyBlocksBefore = 100;
 
@@ -481,7 +481,7 @@ public:
         consensus.powLimit[static_cast<uint8_t>(PowAlgo::SCRYPT)] = uint256S("00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.nPowTargetTimespan = 2016 * 60; // 1.4 days
         consensus.nPowTargetSpacing = 1 * 60;
-        consensus.nLwmaAveragingWindow = 180;
+        consensus.nLwmaAveragingWindow = 45;
         consensus.fPowAllowMinDifficultyBlocks = true;
         consensus.fPowNoRetargeting = true;
         consensus.nRuleChangeActivationThreshold = 108; // 75% for testchains
