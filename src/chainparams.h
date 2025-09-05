@@ -148,6 +148,9 @@ public:
     int MinReorganizationAge() const { return nMinReorganizationAge; }
 
     int GetAssetActivationHeight() const { return nAssetActivationHeight; }
+    
+    // Check if AuxPoW is active at the given height
+    bool IsAuxpowActive(int height) const;
     /** MEWC End **/
 
 protected:

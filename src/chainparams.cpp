@@ -101,6 +101,9 @@ bool CChainParams::CSVEnabled() const{
 	return consensus.nCSVEnabled;
 }
 
+bool CChainParams::IsAuxpowActive(int height) const {
+    return height >= consensus.nAuxpowStartHeight;
+}
 
 /**
  * Main network
