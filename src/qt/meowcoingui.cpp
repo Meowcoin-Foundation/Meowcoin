@@ -942,7 +942,7 @@ void MeowcoinGUI::updateIconsOnlyToolbar(bool IconsOnly)
         labelToolbar->setPixmap(QPixmap::fromImage(QImage(":/icons/meowcointext")));
         m_toolbar->setMinimumWidth(labelToolbar->width());
         m_toolbar->setMaximumWidth(255);
-        m_toolbar->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);        
+        m_toolbar->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
     }
 }
 void MeowcoinGUI::setClientModel(ClientModel *_clientModel)
@@ -1346,7 +1346,7 @@ void MeowcoinGUI::setNumBlocks(int count, const QDateTime& blockDate, double nVe
     tooltip = tr("Processed %n block(s) of transaction history.", "", count);
 
     // Set icon state: spinning if catching up, tick otherwise
-    if(secs < 90*60)
+    if(secs < 10*60)
     {
         tooltip = tr("Up to date") + QString(".<br>") + tooltip;
         labelBlocksIcon->setPixmap(platformStyle->SingleColorIcon(":/icons/synced").pixmap(STATUSBAR_ICONSIZE, STATUSBAR_ICONSIZE));

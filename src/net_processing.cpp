@@ -32,6 +32,7 @@
 #include "utilmoneystr.h"
 #include "utilstrencodings.h"
 #include "validationinterface.h"
+#include "version.h"
 
 #if defined(NDEBUG)
 # error "Meowcoin cannot be compiled without assertions."
@@ -1632,6 +1633,13 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
              return false;
          }
 
+        if (chainparams.GetConsensus().IsAuxpowActive(chainActive.Height()) && nVersion < AUXPOW_VERSION) {
+            LogPrintf("peer=%d using obsolete version %i; disconnecting because peer isn't signalling protocol version for auxpow support\n", pfrom->GetId(), nVersion);
+            connman->PushMessage(pfrom, CNetMsgMaker(INIT_PROTO_VERSION).Make(NetMsgType::REJECT, strCommand, REJECT_OBSOLETE,
+                                                                              strprintf("Version must be %d or greater or equal to", AUXPOW_VERSION)));
+            pfrom->fDisconnect = true;
+            return false;
+        }
         if (nVersion == 10300)
             nVersion = 300;
         if (!vRecv.empty())

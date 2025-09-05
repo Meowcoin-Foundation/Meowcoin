@@ -66,7 +66,6 @@ public:
         READWRITE(nTime);
         READWRITE(nBits);
         if (this->nTime < nKAWPOWActivationTime || this->nVersion.IsAuxpow()) {
-            // nNonce is already serialized in the base class, no need to do it again
             READWRITE(nNonce);
             if (this->nVersion.IsAuxpow())
             {
@@ -180,7 +179,7 @@ public:
         return block;
     }
 
-    // void SetPrevBlockHash(uint256 prevHash) 
+    // void SetPrevBlockHash(uint256 prevHash)
     // {
     //     block.hashPrevBlock = prevHash;
     // }

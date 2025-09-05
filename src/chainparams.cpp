@@ -101,6 +101,9 @@ bool CChainParams::CSVEnabled() const{
 	return consensus.nCSVEnabled;
 }
 
+bool CChainParams::IsAuxpowActive(int height) const {
+    return height >= consensus.nAuxpowStartHeight;
+}
 
 /**
  * Main network
@@ -175,7 +178,7 @@ public:
         consensus.nAuxpowChainId = 9;
         consensus.nAuxpowStartHeight = 1614560;
         consensus.fStrictChainId = true;
-        consensus.nLegacyBlocksBefore = INT_MAX;
+        consensus.nLegacyBlocksBefore = 1614560;
         /**
          * The message start string is designed to be unlikely to occur in normal data.
          * The characters are rarely used upper ASCII, not valid as UTF-8, and produce
@@ -191,7 +194,6 @@ public:
         uint32_t nGenesisTime = 1661730843;
 
         genesis = CreateGenesisBlock(nGenesisTime, 351574, 0x1e00ffff, 4, 5000 * COIN);
-        std::cout << "Genesis " << genesis.ToString() << std::endl;
         consensus.hashGenesisBlock = genesis.GetX16RHash();
 
         assert(consensus.hashGenesisBlock == uint256S("0x000000edd819220359469c54f2614b5602ebc775ea67a64602f354bdaa320f70"));
@@ -529,9 +531,9 @@ public:
         consensus.nLegacyBlocksBefore = 19200;
 
         pchMessageStart[0] = 0x44;
-        pchMessageStart[1] = 0x52; 
-        pchMessageStart[2] = 0x4F; 
-        pchMessageStart[3] = 0x57; 
+        pchMessageStart[1] = 0x52;
+        pchMessageStart[2] = 0x4F;
+        pchMessageStart[3] = 0x57;
         nDefaultPort = 18444;
         nPruneAfterHeight = 1000;
 

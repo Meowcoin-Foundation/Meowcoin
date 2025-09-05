@@ -109,10 +109,6 @@ CAuxPow::check (const uint256& hashAuxBlock, int nChainId,
     CScript::const_iterator pcHead =
         std::search(script.begin(), script.end(), UBEGIN(pchMergedMiningHeader), UEND(pchMergedMiningHeader));
 
-    // Debug log the script bytes for troubleshooting
-    std::string scriptHex = HexStr(script.begin(), script.end());
-    std::string headerHex = HexStr(UBEGIN(pchMergedMiningHeader), UEND(pchMergedMiningHeader));
-    std::string rootHashHex = HexStr(vchRootHash.begin(), vchRootHash.end());
 
     CScript::const_iterator pc =
         std::search(script.begin(), script.end(), vchRootHash.begin(), vchRootHash.end());
@@ -213,29 +209,29 @@ CAuxPow::initAuxPow (CBlockHeader& header)
 
   /* Build a minimal coinbase script input for merge-mining.  */
   const uint256 blockHash = header.GetHash ();
-  
+
   // Create a fake merkle root as stand-in for the root hash
   uint256 merkleRoot = blockHash;
-  
+
   // vchRootHash is the 32-byte LE of the merkle root
   valtype vchRootHash(merkleRoot.begin(), merkleRoot.end());
   std::reverse(vchRootHash.begin(), vchRootHash.end());
-  
+
   // Start with the merged-mining header
   CScript scriptSig;
   scriptSig << std::vector<unsigned char>(pchMergedMiningHeader, pchMergedMiningHeader+4);
-  
+
   // Then add the merkle root hash
   scriptSig << vchRootHash;
-  
+
   // Finally add tree size (1) and nonce (0)
   uint32_t nSize = 1;  // Tree size of 1 (encoded as little-endian)
   uint32_t nNonce = 0; // Nonce of 0 (encoded as little-endian)
-  
+
   // Add the size and nonce in little-endian format
   scriptSig << nSize;
   scriptSig << nNonce;
-  
+
   /* Fake a parent-block coinbase with just the required input
      script and no outputs.  */
   CMutableTransaction coinbase;
