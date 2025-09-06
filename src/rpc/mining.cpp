@@ -26,6 +26,7 @@
 #include "utilstrencodings.h"
 #include "validationinterface.h"
 #include "warnings.h"
+#include "primitives/algos.h"
 
 #include <memory>
 #include <stdint.h>
@@ -95,27 +96,127 @@ UniValue GetNetworkHashPS(int lookup, int height) {
     return workDiff.getdouble() / timeDiff;
 }
 
+enum class Algo { Combined, MeowPOW, Scrypt };
+
+static Algo ParseAlgoParam(const UniValue& v) {
+    if (v.isNull()) return Algo::Combined;
+
+    // Numeric path (works in CLI; sometimes not in Qt console)
+    if (v.isNum()) {
+        int i = v.get_int();
+        if (i == 0) return Algo::MeowPOW;
+        if (i == 1) return Algo::Scrypt;
+        throw JSONRPCError(RPC_INVALID_PARAMETER,
+            "algo (numeric) must be 0 (meowpow) or 1 (scrypt)");
+    }
+
+    // String path (Qt console commonly sends strings)
+    if (v.isStr()) {
+        std::string s = v.get_str();
+        // trim optional whitespace
+        s.erase(0, s.find_first_not_of(" \t\r\n"));
+        s.erase(s.find_last_not_of(" \t\r\n") + 1);
+
+        // accept numeric-looking strings too
+        if (s == "0") return Algo::MeowPOW;
+        if (s == "1") return Algo::Scrypt;
+
+        // normal string aliases
+        std::transform(s.begin(), s.end(), s.begin(),
+                       [](unsigned char c){ return std::tolower(c); });
+        if (s == "meowpow" || s == "meow") return Algo::MeowPOW;
+        if (s == "scrypt"  || s == "auxpow" || s == "mm")   return Algo::Scrypt;
+        if (s == "combined" || s == "all")                   return Algo::Combined;
+
+        throw JSONRPCError(RPC_INVALID_PARAMETER,
+            "algo must be \"combined\", \"meowpow\" (or 0), or \"scrypt\" (or 1)");
+    }
+
+    throw JSONRPCError(RPC_INVALID_PARAMETER,
+        "algo must be string (\"meowpow\"|\"scrypt\"|\"combined\"|\"0\"|\"1\") or numeric (0|1)");
+}
+
+static inline bool IsAuxpowBlock(const CBlockIndex* pindex) {
+    return pindex->nVersion.IsAuxpow(); // keep the accessor that exists in your codebase
+}
+
+static inline bool MatchesAlgo(const CBlockIndex* pindex, Algo target) {
+    if (target == Algo::Combined) return true;
+    const bool isAux = IsAuxpowBlock(pindex);
+    return target == Algo::Scrypt ? isAux : !isAux;
+}
+
+static double GetNetworkHashPSAlgoAware(int nblocks, int height, Algo algo) {
+    CBlockIndex* pb = chainActive.Tip();
+    if (height >= 0 && height < chainActive.Height())
+        pb = chainActive[height];
+    if (pb == nullptr || !pb->nHeight)
+        return 0.0;
+
+    if (nblocks <= 0)
+        nblocks = pb->nHeight % GetParams().GetConsensus().DifficultyAdjustmentInterval() + 1;
+    if (nblocks > pb->nHeight)
+        nblocks = pb->nHeight;
+
+    int matched = 0;
+    arith_uint256 workSum = 0;
+    int64_t lastTime = pb->GetBlockTime();
+    int64_t firstTime = lastTime;
+
+    const CBlockIndex* cursor = pb;
+    while (cursor && matched < nblocks) {
+        if (MatchesAlgo(cursor, algo)) {
+            matched++;
+            workSum += GetBlockProof(*cursor);
+            firstTime = cursor->GetBlockTime();
+        }
+        cursor = cursor->pprev;
+    }
+
+    if (matched <= 1 || lastTime <= firstTime) return 0.0;
+    const int64_t span = lastTime - firstTime;
+    return workSum.getdouble() / static_cast<double>(span);
+}
+
 UniValue getnetworkhashps(const JSONRPCRequest& request)
 {
-    if (request.fHelp || request.params.size() > 2)
+    if (request.fHelp || request.params.size() > 3)
         throw std::runtime_error(
-            "getnetworkhashps ( nblocks height )\n"
-            "\nReturns the estimated network hashes per second based on the last n blocks.\n"
-            "Pass in [blocks] to override # of blocks, -1 specifies since last difficulty change.\n"
-            "Pass in [height] to estimate the network speed at the time when a certain block was found.\n"
+            "getnetworkhashps ( nblocks height algo )\n"
+            "\nReturns the estimated network hashes per second based on recent blocks.\n"
             "\nArguments:\n"
-            "1. nblocks     (numeric, optional, default=120) The number of blocks, or -1 for blocks since last difficulty change.\n"
-            "2. height      (numeric, optional, default=-1) To estimate at the time of the given height.\n"
-            "\nResult:\n"
-            "x             (numeric) Hashes per second estimated\n"
+            "1. nblocks   (numeric, optional, default=120) Number of blocks to average. -1 = since last difficulty change.\n"
+            "2. height    (numeric, optional, default=-1)  Estimate at the time of the given height (tip if -1).\n"
+            "3. algo      (string|numeric, optional, default=\"combined\") "
+            "\"combined\" | \"meowpow\"(or 0) | \"scrypt\"(or 1)\n"
+            "\nNotes:\n"
+            "- \"combined\" preserves historical behavior (all blocks).\n"
+            "- When an algo is selected, only blocks mined by that algo are sampled.\n"
+            "- If too few blocks of that algo are found in the lookback window, 0 is returned.\n"
             "\nExamples:\n"
             + HelpExampleCli("getnetworkhashps", "")
+            + HelpExampleCli("getnetworkhashps", "0 -1 meowpow")
+            + HelpExampleCli("getnetworkhashps", "0 -1 1")
             + HelpExampleRpc("getnetworkhashps", "")
-       );
+        );
 
     LOCK(cs_main);
-    return GetNetworkHashPS(!request.params[0].isNull() ? request.params[0].get_int() : 120, !request.params[1].isNull() ? request.params[1].get_int() : -1);
+
+    int nblocks = 120;
+    int height  = -1;
+    Algo algo   = Algo::Combined;
+
+    if (request.params.size() > 0 && request.params[0].isNum())
+        nblocks = request.params[0].get_int();
+    if (request.params.size() > 1 && request.params[1].isNum())
+        height = request.params[1].get_int();
+    if (request.params.size() > 2)
+        algo = ParseAlgoParam(request.params[2]);
+
+    const double d = GetNetworkHashPSAlgoAware(nblocks, height, algo);
+    return UniValue(d);
 }
+
 
 UniValue generateBlocks(std::shared_ptr<CReserveScript> coinbaseScript, int nGenerate, uint64_t nMaxTries, bool keepScript)
 {
