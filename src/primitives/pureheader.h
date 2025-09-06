@@ -38,7 +38,7 @@ private:
     /** Bits above are reserved for the auxpow chain ID.  */
     static const int32_t VERSION_CHAIN_START = (1 << 16);
 
-    // mask to get Chain ID from version field, chainid is 16 in SYS so 0x001f mask should be OK
+    // mask to get Chain ID from version field
     static const int32_t MASK_AUXPOW_CHAINID_SHIFTED = (0x001f << VERSION_START_BIT);
 
     // shifted Chain ID in version field
