@@ -1605,6 +1605,7 @@ UniValue AuxMiningCreateBlock(const CScript& scriptPubKey)
     result.pushKV("bits", strprintf("%08x", pblock->nBits));
     result.pushKV("height", static_cast<int64_t> (pindexPrev->nHeight + 1));
     result.pushKV("_target", HexStr(BEGIN(target), END(target)));
+    result.pushKV("target", HexStr(BEGIN(target), END(target)));
 
     return result;
 }
