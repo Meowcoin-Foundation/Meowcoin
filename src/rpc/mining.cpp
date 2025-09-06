@@ -1659,6 +1659,7 @@ UniValue createauxblock(const JSONRPCRequest& request)
             "  \"bits\"               (string) compressed target of the block\n"
             "  \"height\"             (numeric) height of the block\n"
             "  \"_target\"            (string) target in reversed byte order, deprecated\n"
+            "  \"target\"            (string) target in reversed byte order, deprecated\n"
             "}\n"
             "\nExamples:\n"
             + HelpExampleCli("createauxblock", "\"address\"")
