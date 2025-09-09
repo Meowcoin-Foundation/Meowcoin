@@ -185,7 +185,6 @@ unsigned int GetNextWorkRequired_LWMA_MultiAlgo(
          && (height - h) <= searchLimit; --h) {
         const CBlockIndex* bi = pindexLast->GetAncestor(h);
         if (!bi) break;
-        // Use index fields only - no disk reads during headers sync
         PowAlgo bialgo = bi->nVersion.IsAuxpow() ? PowAlgo::SCRYPT : PowAlgo::MEOWPOW;
         if (bialgo == algo) sameAlgo.push_back(bi);
     }
@@ -208,7 +207,7 @@ unsigned int GetNextWorkRequired_LWMA_MultiAlgo(
         return result;
     }
 
-    std::reverse(sameAlgo.begin(), sameAlgo.end()); // oldest -> newest
+    std::reverse(sameAlgo.begin(), sameAlgo.end());
 
     arith_uint256 sumTargets;                 // Σ target_i
     int64_t sumWeightedSolvetimes = 0;        // Σ i * solvetime_i
@@ -224,7 +223,7 @@ unsigned int GetNextWorkRequired_LWMA_MultiAlgo(
         int64_t st = ts - prevTs;
         prevTs = ts;
 
-        // Clamp relative to the per-algo target (now 120s)
+        // Clamp relative to the per-algo target
         if (st < 1) st = 1;
         if (st > 6 * T) st = 6 * T;
 
