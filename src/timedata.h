@@ -6,16 +6,18 @@
 #ifndef MEOWCOIN_TIMEDATA_H
 #define MEOWCOIN_TIMEDATA_H
 
+#include "chain.h"
 #include <algorithm>
 #include <assert.h>
 #include <stdint.h>
 #include <vector>
 
-static const int64_t DEFAULT_MAX_TIME_ADJUSTMENT = 70 * 60;
+static const int64_t DEFAULT_MAX_TIME_ADJUSTMENT = MAX_FUTURE_BLOCK_TIME_LWMA / 2;
+
 
 class CNetAddr;
 
-/** 
+/**
  * Median filter over a stream of values.
  * Returns the median of the last N numbers
  */

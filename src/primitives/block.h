@@ -7,10 +7,15 @@
 #ifndef MEOWCOIN_PRIMITIVES_BLOCK_H
 #define MEOWCOIN_PRIMITIVES_BLOCK_H
 
+#include "auxpow.h"
+#include "primitives/pureheader.h"
 #include "primitives/transaction.h"
 #include "serialize.h"
 #include "uint256.h"
-
+#include <boost/shared_ptr.hpp>
+#include "tinyformat.h"
+#include "utilstrencodings.h"
+#include "util.h"
 /** Nodes collect new transactions into a block, hash them into a hash tree,
  * and scan through nonce values to make the block's hash satisfy proof-of-work
  * requirements.  When they solve the proof-of-work, they broadcast the block
@@ -34,22 +39,16 @@ public:
 extern BlockNetwork bNetwork;
 
 
-class CBlockHeader
+class CBlockHeader : public CPureBlockHeader
 {
 public:
-
-    // header
-    int32_t nVersion;
-    uint256 hashPrevBlock;
-    uint256 hashMerkleRoot;
-    uint32_t nTime;
-    uint32_t nBits;
-    uint32_t nNonce;
-
     //KAAAWWWPOW+Meowpow data
     uint32_t nHeight;
     uint64_t nNonce64;
     uint256 mix_hash;
+
+    // auxpow (if this is a merge-minded block)
+    boost::shared_ptr<CAuxPow> auxpow;
 
     CBlockHeader()
     {
@@ -60,14 +59,24 @@ public:
 
     template <typename Stream, typename Operation>
     inline void SerializationOp(Stream& s, Operation ser_action) {
+        // First serialize everything in CPureBlockHeader
         READWRITE(this->nVersion);
         READWRITE(hashPrevBlock);
         READWRITE(hashMerkleRoot);
         READWRITE(nTime);
         READWRITE(nBits);
-        if (nTime < nKAWPOWActivationTime) {
+        if (this->nTime < nKAWPOWActivationTime || this->nVersion.IsAuxpow()) {
             READWRITE(nNonce);
-        } else { //This should be more than adequte for Meowpow
+            if (this->nVersion.IsAuxpow())
+            {
+                if (ser_action.ForRead())
+                    auxpow.reset(new CAuxPow());
+                assert(auxpow);
+                READWRITE(*auxpow);
+            } else if (ser_action.ForRead()) {
+                auxpow.reset();
+            }
+        } else {
             READWRITE(nHeight);
             READWRITE(nNonce64);
             READWRITE(mix_hash);
@@ -76,16 +85,11 @@ public:
 
     void SetNull()
     {
-        nVersion = 0;
-        hashPrevBlock.SetNull();
-        hashMerkleRoot.SetNull();
-        nTime = 0;
-        nBits = 0;
-        nNonce = 0;
-
+        CPureBlockHeader::SetNull();
         nNonce64 = 0;
         nHeight = 0;
         mix_hash.SetNull();
+        auxpow.reset();
     }
 
     bool IsNull() const
@@ -111,6 +115,13 @@ public:
     {
         return (int64_t)nTime;
     }
+
+    /**
+     * Set the block's auxpow (or unset it).  This takes care of updating
+     * the version accordingly.
+     * @param apow Pointer to the auxpow to use or NULL.
+     */
+    void SetAuxpow(CAuxPow* apow);
 };
 
 
@@ -159,6 +170,7 @@ public:
         block.nTime          = nTime;
         block.nBits          = nBits;
         block.nNonce         = nNonce;
+        block.auxpow         = auxpow;
 
         // KAWPOW
         block.nHeight        = nHeight;
@@ -167,7 +179,7 @@ public:
         return block;
     }
 
-    // void SetPrevBlockHash(uint256 prevHash) 
+    // void SetPrevBlockHash(uint256 prevHash)
     // {
     //     block.hashPrevBlock = prevHash;
     // }

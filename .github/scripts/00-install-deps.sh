@@ -65,8 +65,10 @@ elif [[ ${OS} == "osx" ]]; then
     s3curl \
     sleuthkit \
     bison \
-    libstdc++6 \
-    libtinfo5
+    libtinfo5 \
+    python3-pip
+
+    pip3 install ds-store
     
 elif [[ ${OS} == "linux" || ${OS} == "linux-disable-wallet" || ${OS} == "aarch64" || ${OS} == "aarch64-disable-wallet" ]]; then
     apt -y install \
@@ -81,10 +83,7 @@ elif [[ ${OS} == "linux" || ${OS} == "linux-disable-wallet" || ${OS} == "aarch64
     ca-certificates \
     curl \
     g++-aarch64-linux-gnu \
-    g++-8-aarch64-linux-gnu \
-    g++-8-multilib \
-    gcc-8-aarch64-linux-gnu \
-    gcc-8-multilib \
+    gcc-aarch64-linux-gnu \
     git \
     gnupg \
     libtool \
@@ -104,20 +103,13 @@ elif [[ ${OS} == "arm32v7" || ${OS} == "arm32v7-disable-wallet" ]]; then
     apt -y install \
     autoconf \
     automake \
-    binutils-aarch64-linux-gnu \
     binutils-arm-linux-gnueabihf \
     binutils \
     bsdmainutils \
     ca-certificates \
     curl \
-    g++-aarch64-linux-gnu \
-    g++-8-aarch64-linux-gnu \
-    gcc-8-aarch64-linux-gnu \
     g++-arm-linux-gnueabihf \
-    g++-8-arm-linux-gnueabihf \
-    gcc-8-arm-linux-gnueabihf \
-    g++-8-multilib \
-    gcc-8-multilib \
+    gcc-arm-linux-gnueabihf \
     git \
     libtool \
     pkg-config \

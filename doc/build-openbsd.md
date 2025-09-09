@@ -138,13 +138,14 @@ To configure with wallet:
 ```bash
 ./configure --with-gui=no --with-boost=$BOOST_PREFIX \
     CC=egcc CXX=eg++ CPP=ecpp \
-    BDB_LIBS="-L${BDB_PREFIX}/lib -ldb_cxx-4.8" BDB_CFLAGS="-I${BDB_PREFIX}/include"
+    BDB_LIBS="-L${BDB_PREFIX}/lib -ldb_cxx-4.8" BDB_CFLAGS="-I${BDB_PREFIX}/include" \
+    --enable-sse2 --disable-tests
 ```
 
 To configure without wallet:
 ```bash
 ./configure --disable-wallet --with-gui=no --with-boost=$BOOST_PREFIX \
-    CC=egcc CXX=eg++ CPP=ecpp
+    CC=egcc CXX=eg++ CPP=ecpp --enable-sse2 --disable-tests
 ```
 
 Build and run the tests:

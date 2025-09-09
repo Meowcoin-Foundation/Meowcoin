@@ -10,7 +10,7 @@
  * network protocol versioning
  */
 
-static const int PROTOCOL_VERSION = 70030;
+static const int PROTOCOL_VERSION = 70031;
 
 //! initial proto version, to be increased after version/verack negotiation
 static const int INIT_PROTO_VERSION = 209;
@@ -29,10 +29,11 @@ static const int KAWPOW_VERSION = 70027;
 
 static const int MEOWPOW_VERSION = 70030;
 
+static const int AUXPOW_VERSION = 70031;
 //! disconnect from peers older than this proto version
 //!!! Anytime this value is changed please also update the "MY_VERSION" value to match in the
 //!!! ./test/functional/test_framework/mininode.py file. Not doing so will cause verack to fail!
-static const int MIN_PEER_PROTO_VERSION = X16RV2_VERSION;
+static const int MIN_PEER_PROTO_VERSION = MEOWPOW_VERSION;
 
 //! nTime field added to CAddress, starting with this version;
 //! if possible, avoid requesting addresses nodes older than this
@@ -43,6 +44,9 @@ static const int BIP0031_VERSION = 60000;
 
 //! "filter*" commands are disabled without NODE_BLOOM after and including this version
 static const int NO_BLOOM_VERSION = 70011;
+
+//! Version when we switched to a size-based "headers" limit.
+static const int SIZE_HEADERS_LIMIT_VERSION = 70031;
 
 //! "sendheaders" command and announcing blocks with headers starts with this version
 static const int SENDHEADERS_VERSION = 70012;

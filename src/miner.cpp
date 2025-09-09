@@ -58,7 +58,7 @@ uint64_t nHashesPerSec = 0;
 uint64_t nHashesDone = 0;
 
 
-int64_t UpdateTime(CBlockHeader* pblock, const Consensus::Params& consensusParams, const CBlockIndex* pindexPrev)
+int64_t UpdateTime(CBlockHeader* pblock, const Consensus::Params& consensusParams, const CBlockIndex* pindexPrev, bool fIsAuxPow)
 {
     int64_t nOldTime = pblock->nTime;
     int64_t nNewTime = std::max(pindexPrev->GetMedianTimePast()+1, GetAdjustedTime());
@@ -68,7 +68,7 @@ int64_t UpdateTime(CBlockHeader* pblock, const Consensus::Params& consensusParam
 
     // Updating time can change work required on testnet:
     if (consensusParams.fPowAllowMinDifficultyBlocks)
-        pblock->nBits = GetNextWorkRequired(pindexPrev, pblock, consensusParams);
+        pblock->nBits = GetNextWorkRequired(pindexPrev, pblock, consensusParams, fIsAuxPow);
 
     return nNewTime - nOldTime;
 }
@@ -119,7 +119,7 @@ void BlockAssembler::resetBlock()
     nFees = 0;
 }
 
-std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& scriptPubKeyIn, bool fMineWitnessTx)
+std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& scriptPubKeyIn, bool fMineWitnessTx, bool fIsAuxPow)
 {
     int64_t nTimeStart = GetTimeMicros();
 
@@ -141,12 +141,12 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
     assert(pindexPrev != nullptr);
     nHeight = pindexPrev->nHeight + 1;
 
-    pblock->nVersion = ComputeBlockVersion(pindexPrev, chainparams.GetConsensus());
+    const int32_t nChainId = chainparams.GetConsensus().nAuxpowChainId;
+    pblock->nVersion.SetBaseVersion(ComputeBlockVersion(pindexPrev, chainparams.GetConsensus()), nChainId);;
     // -regtest only: allow overriding block.nVersion with
     // -blockversion=N to test forking scenarios
     if (chainparams.MineBlocksOnDemand())
-        pblock->nVersion = gArgs.GetArg("-blockversion", pblock->nVersion);
-
+        pblock->nVersion.SetBaseVersion(gArgs.GetArg("-blockversion", pblock->nVersion.GetBaseVersion()), nChainId);
     pblock->nTime = GetAdjustedTime();
     const int64_t nMedianTimePast = pindexPrev->GetMedianTimePast();
 
@@ -179,11 +179,11 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
 	//vout
 	CAmount nSubsidy 					= GetBlockSubsidy(nHeight, chainparams.GetConsensus());
 	CAmount nCommunityAutonomousAmount 	= GetParams().CommunityAutonomousAmount();
-	
+
     coinbaseTx.vout.resize(2);
     coinbaseTx.vout[0].scriptPubKey = scriptPubKeyIn;
     coinbaseTx.vout[0].nValue = nFees + ( (100-nCommunityAutonomousAmount) * nSubsidy / 100 );
-	
+
     // Assign the set % in chainparams.cpp to the TX
 	std::string  GetCommunityAutonomousAddress 	= GetParams().CommunityAutonomousAddress();
 	CTxDestination destCommunityAutonomous = DecodeDestination(GetCommunityAutonomousAddress);
@@ -192,37 +192,37 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
     }
     // We need to parse the address ready to send to it
     CScript scriptPubKeyCommunityAutonomous = GetScriptForDestination(destCommunityAutonomous);
-	
+
     coinbaseTx.vout[1].scriptPubKey = scriptPubKeyCommunityAutonomous;
     coinbaseTx.vout[1].nValue = nSubsidy*nCommunityAutonomousAmount/100;
 	LogPrintf("nSubsidy: ====================================================\n");
 	LogPrintf("Miner: %ld \n", coinbaseTx.vout[0].nValue);
 	LogPrintf("scriptPubKeyIn: %s \n", HexStr(scriptPubKeyIn));
-	
+
 	LogPrintf("GetCommunityAutonomousAddress: %s \n", GetCommunityAutonomousAddress);
 	LogPrintf("scriptPubKeyCommunityAutonomous: %s \n", HexStr(scriptPubKeyCommunityAutonomous));
 	LogPrintf("nCommunityAutonomousAmount: %ld \n", coinbaseTx.vout[1].nValue);
     coinbaseTx.vin[0].scriptSig = CScript() << nHeight << OP_0;
-	
+
     pblock->vtx[0] = MakeTransactionRef(std::move(coinbaseTx));
     pblocktemplate->vchCoinbaseCommitment = GenerateCoinbaseCommitment(*pblock, pindexPrev, chainparams.GetConsensus());
     pblocktemplate->vTxFees[0] = -nFees;
-    
+
     LogPrintf("CreateNewBlock(): block weight: %u txs: %u fees: %ld sigops %d\n", GetBlockWeight(*pblock), nBlockTx, nFees, nBlockSigOpsCost);
     //MEWC END
 
 
     // Fill in header
     pblock->hashPrevBlock  = pindexPrev->GetBlockHash();
-    UpdateTime(pblock, chainparams.GetConsensus(), pindexPrev);
-    pblock->nBits          = GetNextWorkRequired(pindexPrev, pblock, chainparams.GetConsensus());
+    UpdateTime(pblock, chainparams.GetConsensus(), pindexPrev, fIsAuxPow);
+    pblock->nBits          = GetNextWorkRequired(pindexPrev, pblock, chainparams.GetConsensus(), fIsAuxPow);
     pblock->nNonce         = 0;
     pblock->nNonce64         = 0;
     pblock->nHeight          = nHeight;
     pblocktemplate->vTxSigOpsCost[0] = WITNESS_SCALE_FACTOR * GetLegacySigOpCount(*pblock->vtx[0]);
 
     CValidationState state;
-    if (!TestBlockValidity(state, chainparams, *pblock, pindexPrev, false, false)) {
+    if (!TestBlockValidity(state, chainparams, *pblock, pindexPrev, false, false, fIsAuxPow)) {
         if (state.IsTransactionError()) {
             if (gArgs.GetBoolArg("-autofixmempool", false)) {
                 {
@@ -525,7 +525,7 @@ void IncrementExtraNonce(CBlock* pblock, const CBlockIndex* pindexPrev, unsigned
 }
 
 
-static bool ProcessBlockFound(const CBlock* pblock, const CChainParams& chainparams)
+bool ProcessBlockFound(const CBlock* pblock, const CChainParams& chainparams)
 {
     LogPrintf("%s\n", pblock->ToString());
     LogPrintf("generated %s\n", FormatMoney(pblock->vtx[0]->vout[0].nValue));
@@ -684,7 +684,7 @@ void static MeowcoinMiner(const CChainParams& chainparams)
                     nHashesDone += 1;
                     if (nHashesDone % 500000 == 0) {   //Calculate hashing speed
                         nHashesPerSec = nHashesDone / (((GetTimeMicros() - nMiningTimeStart) / 1000000) + 1);
-                    } 
+                    }
                     if ((pblock->nNonce & 0xFF) == 0)
                         break;
                 }
@@ -745,7 +745,7 @@ int GenerateMeowcoins(bool fGenerate, int nThreads, const CChainParams& chainpar
         return numCores;
 
     minerThreads = new boost::thread_group();
-    
+
     //Reset metrics
     nMiningTimeStart = GetTimeMicros();
     nHashesDone = 0;

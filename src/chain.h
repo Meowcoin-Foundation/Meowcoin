@@ -8,6 +8,7 @@
 #define MEOWCOIN_CHAIN_H
 
 #include "arith_uint256.h"
+#include "consensus/params.h"
 #include "primitives/block.h"
 #include "pow.h"
 #include "tinyformat.h"
@@ -21,6 +22,7 @@
  */
 static const int64_t MAX_FUTURE_BLOCK_TIME = 2 * 60 * 60;
 static const int64_t MAX_FUTURE_BLOCK_TIME_DGW = MAX_FUTURE_BLOCK_TIME / 10;
+static const int64_t MAX_FUTURE_BLOCK_TIME_LWMA = (45 * 120) / 20; // Adjust if LWMA Param changes
 
 /**
  * Timestamp window used as a grace period by code that compares external
@@ -209,7 +211,7 @@ public:
     uint32_t nStatus;
 
     //! block header
-    int32_t nVersion;
+    CBlockVersion nVersion;
     uint256 hashMerkleRoot;
     uint32_t nTime;
     uint32_t nBits;
@@ -241,7 +243,7 @@ public:
         nSequenceId = 0;
         nTimeMax = 0;
 
-        nVersion       = 0;
+        nVersion.SetNull();
         hashMerkleRoot = uint256();
         nTime          = 0;
         nBits          = 0;
@@ -292,21 +294,7 @@ public:
         return ret;
     }
 
-    CBlockHeader GetBlockHeader() const
-    {
-        CBlockHeader block;
-        block.nVersion       = nVersion;
-        if (pprev)
-            block.hashPrevBlock = pprev->GetBlockHash();
-        block.hashMerkleRoot = hashMerkleRoot;
-        block.nTime          = nTime;
-        block.nBits          = nBits;
-        block.nNonce         = nNonce;
-        block.nHeight        = nHeight;
-        block.nNonce64       = nNonce64;
-        block.mix_hash       = mix_hash;
-        return block;
-    }
+    CBlockHeader GetBlockHeader(const Consensus::Params& consensusParams) const;
 
     uint256 GetBlockHash() const
     {

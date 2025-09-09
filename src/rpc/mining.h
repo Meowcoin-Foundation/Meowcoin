@@ -7,6 +7,7 @@
 #define MEOWCOIN_RPC_MINING_H
 
 #include "script/script.h"
+#include <string>
 
 #include <univalue.h>
 
@@ -21,4 +22,8 @@ UniValue getgenerate(const UniValue& params, bool fHelp);
 /** Check bounds on a command line confirm target */
 unsigned int ParseConfirmTarget(const UniValue& value);
 
+/* Creation and submission of auxpow blocks.  */
+UniValue AuxMiningCreateBlock(const CScript& scriptPubKey);
+bool AuxMiningSubmitBlock(const std::string& hashHex,
+                          const std::string& auxpowHex);
 #endif

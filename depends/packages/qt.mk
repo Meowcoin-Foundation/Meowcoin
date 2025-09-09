@@ -11,7 +11,7 @@ $(package)_patches=fix_qt_pkgconfig.patch mac-qmake.conf fix_no_printer.patch no
 $(package)_patches+= fix_android_qmake_conf.patch fix_android_jni_static.patch dont_hardcode_pwd.patch
 $(package)_patches+= drop_lrelease_dependency.patch no_sdk_version_check.patch
 $(package)_patches+= fix_lib_paths.patch fix_android_pch.patch
-$(package)_patches+= qtbase-moc-ignore-gcc-macro.patch
+$(package)_patches+= qtbase-moc-ignore-gcc-macro.patch fix_qfloat16_limits.patch fix_qendian_limits.patch fix_qbytearraymatcher_limits.patch fix_generator_limits.patch
 
 $(package)_qttranslations_file_name=qttranslations-$($(package)_suffix)
 $(package)_qttranslations_sha256_hash=577b0668a777eb2b451c61e8d026d79285371597ce9df06b6dee6c814164b7c3
@@ -46,7 +46,6 @@ $(package)_config_opts += -no-iconv
 $(package)_config_opts += -no-kms
 $(package)_config_opts += -no-linuxfb
 $(package)_config_opts += -no-libudev
-$(package)_config_opts += -no-mtdev
 $(package)_config_opts += -openssl-linked
 $(package)_config_opts += -no-dtls
 $(package)_config_opts += -no-openvg
@@ -105,6 +104,9 @@ $(package)_config_opts += -no-feature-undoview
 $(package)_config_opts += -no-feature-vnc
 $(package)_config_opts += -no-feature-wizard
 $(package)_config_opts += -no-feature-xml
+$(package)_config_opts += QMAKE_CXXFLAGS="-Wno-deprecated-copy"
+$(package)_config_opts += QMAKE_CFLAGS="-Wno-deprecated-copy"
+$(package)_config_opts += QMAKE_CXXFLAGS+="-Wno-deprecated-copy"
 
 $(package)_config_opts_darwin = -no-dbus
 $(package)_config_opts_darwin += -no-opengl
@@ -135,20 +137,36 @@ $(package)_config_opts_linux += -no-feature-vulkan
 $(package)_config_opts_linux += -dbus-runtime
 $(package)_config_opts_arm_linux = OPENSSL_LIBS="-lssl -lcrypto -pthread -ldl"
 $(package)_config_opts_arm_linux += -platform linux-g++ -xplatform bitcoin-linux-g++
+$(package)_config_opts_arm_linux += -I $(host_prefix)/include
+$(package)_config_opts_arm_linux += -L $(host_prefix)/lib
 $(package)_config_opts_i686_linux  = -xplatform linux-g++-32
 $(package)_config_opts_x86_64_linux = OPENSSL_LIBS="-lssl -lcrypto -pthread -ldl"
 $(package)_config_opts_x86_64_linux += -xplatform linux-g++-64
+$(package)_config_opts_x86_64_linux += -I $(host_prefix)/include
+$(package)_config_opts_x86_64_linux += -L $(host_prefix)/lib
 $(package)_config_opts_aarch64_linux = OPENSSL_LIBS="-lssl -lcrypto -pthread -ldl"
 $(package)_config_opts_aarch64_linux += -xplatform linux-aarch64-gnu-g++
+$(package)_config_opts_aarch64_linux += -I $(host_prefix)/include
+$(package)_config_opts_aarch64_linux += -L $(host_prefix)/lib
 $(package)_config_opts_powerpc64_linux = -platform linux-g++ -xplatform bitcoin-linux-g++
+$(package)_config_opts_powerpc64_linux += -I $(host_prefix)/include
+$(package)_config_opts_powerpc64_linux += -L $(host_prefix)/lib
 $(package)_config_opts_powerpc64le_linux = -platform linux-g++ -xplatform bitcoin-linux-g++
+$(package)_config_opts_powerpc64le_linux += -I $(host_prefix)/include
+$(package)_config_opts_powerpc64le_linux += -L $(host_prefix)/lib
 $(package)_config_opts_riscv64_linux = -platform linux-g++ -xplatform bitcoin-linux-g++
+$(package)_config_opts_riscv64_linux += -I $(host_prefix)/include
+$(package)_config_opts_riscv64_linux += -L $(host_prefix)/lib
 $(package)_config_opts_s390x_linux = -platform linux-g++ -xplatform bitcoin-linux-g++
+$(package)_config_opts_s390x_linux += -I $(host_prefix)/include
+$(package)_config_opts_s390x_linux += -L $(host_prefix)/lib
 
 $(package)_config_opts_mingw32 = -no-opengl
 $(package)_config_opts_mingw32 += -xplatform win32-g++
 $(package)_config_opts_mingw32 += -device-option CROSS_COMPILE="$(host)-"
-$(package)_config_opts_mingw32 += OPENSSL_LIBS="-L/usr/x86_64-w64-mingw32/lib -lssl -lcrypto -lws2_32"
+$(package)_config_opts_mingw32 += -I $(host_prefix)/include
+$(package)_config_opts_mingw32 += -L $(host_prefix)/lib
+$(package)_config_opts_mingw32 += OPENSSL_LIBS="-L$(host_prefix)/lib -lssl -lcrypto -lws2_32 -lcrypt32"
 
 $(package)_config_opts_android = -xplatform android-clang
 $(package)_config_opts_android += -android-sdk $(ANDROID_SDK)
@@ -230,17 +248,21 @@ define $(package)_preprocess_cmds
   patch -p1 -i $($(package)_patch_dir)/no_sdk_version_check.patch && \
   patch -p1 -i $($(package)_patch_dir)/fix_lib_paths.patch && \
   patch -p1 -i $($(package)_patch_dir)/qtbase-moc-ignore-gcc-macro.patch && \
+  patch -p1 -i $($(package)_patch_dir)/fix_qfloat16_limits.patch && \
+  patch -p1 -i $($(package)_patch_dir)/fix_qendian_limits.patch && \
+  patch -p1 -i $($(package)_patch_dir)/fix_qbytearraymatcher_limits.patch && \
+  patch -p1 -i $($(package)_patch_dir)/fix_generator_limits.patch && \
   sed -i.old "s|updateqm.commands = \$$$$\$$$$LRELEASE|updateqm.commands = $($(package)_extract_dir)/qttools/bin/lrelease|" qttranslations/translations/translations.pro && \
   mkdir -p qtbase/mkspecs/macx-clang-linux &&\
   cp -f qtbase/mkspecs/macx-clang/qplatformdefs.h qtbase/mkspecs/macx-clang-linux/ &&\
   cp -f $($(package)_patch_dir)/mac-qmake.conf qtbase/mkspecs/macx-clang-linux/qmake.conf && \
   cp -r qtbase/mkspecs/linux-arm-gnueabi-g++ qtbase/mkspecs/bitcoin-linux-g++ && \
   sed -i.old "s/arm-linux-gnueabi-/$(host)-/g" qtbase/mkspecs/bitcoin-linux-g++/qmake.conf && \
-  echo "!host_build: QMAKE_CFLAGS     += $($(package)_cflags) $($(package)_cppflags)" >> qtbase/mkspecs/common/gcc-base.conf && \
-  echo "!host_build: QMAKE_CXXFLAGS   += $($(package)_cxxflags) $($(package)_cppflags)" >> qtbase/mkspecs/common/gcc-base.conf && \
-  echo "!host_build: QMAKE_LFLAGS     += $($(package)_ldflags)" >> qtbase/mkspecs/common/gcc-base.conf && \
+  echo "QMAKE_CFLAGS     += $($(package)_cflags) $($(package)_cppflags) -I$(host_prefix)/include" >> qtbase/mkspecs/common/gcc-base.conf && \
+  echo "QMAKE_CXXFLAGS   += $($(package)_cxxflags) $($(package)_cppflags) -Wno-deprecated-copy -I$(host_prefix)/include" >> qtbase/mkspecs/common/gcc-base.conf && \
+  echo "QMAKE_LFLAGS     += $($(package)_ldflags) -L$(host_prefix)/lib" >> qtbase/mkspecs/common/gcc-base.conf && \
   sed -i.old "s|QMAKE_CFLAGS           += |!host_build: QMAKE_CFLAGS            = $($(package)_cflags) $($(package)_cppflags) |" qtbase/mkspecs/win32-g++/qmake.conf && \
-  sed -i.old "s|QMAKE_CXXFLAGS         += |!host_build: QMAKE_CXXFLAGS            = $($(package)_cxxflags) $($(package)_cppflags) |" qtbase/mkspecs/win32-g++/qmake.conf && \
+  sed -i.old "s|QMAKE_CXXFLAGS         += |!host_build: QMAKE_CXXFLAGS            = $($(package)_cxxflags) $($(package)_cppflags) -Wno-deprecated-copy |" qtbase/mkspecs/win32-g++/qmake.conf && \
   sed -i.old "0,/^QMAKE_LFLAGS_/s|^QMAKE_LFLAGS_|!host_build: QMAKE_LFLAGS            = $($(package)_ldflags)\n&|" qtbase/mkspecs/win32-g++/qmake.conf && \
   sed -i.old "s|QMAKE_CC                = \$$$$\$$$${CROSS_COMPILE}clang|QMAKE_CC                = $($(package)_cc)|" qtbase/mkspecs/common/clang.conf && \
   sed -i.old "s|QMAKE_CXX               = \$$$$\$$$${CROSS_COMPILE}clang++|QMAKE_CXX               = $($(package)_cxx)|" qtbase/mkspecs/common/clang.conf && \
@@ -251,7 +273,6 @@ define $(package)_config_cmds
   export OPENSSL_PREFIX=$(host_prefix)/ && \
   export OPENSSL_INCDIR=$(host_prefix)/include/ && \
   export OPENSSL_LIBDIR=$(host_prefix)/lib/ && \
-  export OPENSSL_LIBS="-llibssl -llibcrypto -lpthread" && \
   export PKG_CONFIG_SYSROOT_DIR=/ && \
   export PKG_CONFIG_LIBDIR=$(host_prefix)/lib/pkgconfig && \
   export PKG_CONFIG_PATH=$(host_prefix)/share/pkgconfig  && \
