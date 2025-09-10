@@ -1,105 +1,43 @@
-Meowcoin Core integration/staging tree
-=====================================
+<p align="center">
+  <img src="https://www.mewccrypto.com/meowcoin.png" alt="Meowcoin Logo" width="150"/>
+</p>
 
-https://mewccrypto.com
+# Meowcoin Core (integration/staging)
 
-To see how to run Meowcoin, please read the respective files in [the doc folder](doc)
+[![Website](https://img.shields.io/badge/website-mewccrypto.com-blue.svg)](https://www.mewccrypto.com/)
+[![Stable Release](https://img.shields.io/github/v/release/Meowcoin-Foundation/Meowcoin?display_name=tag&sort=semver)](../../releases)
+[![Docker](https://img.shields.io/docker/pulls/zachprice105/meowcoin?logo=docker)](https://hub.docker.com/repository/docker/zachprice105/meowcoin/general)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](COPYING)
 
+## Overview
 
-What is Meowcoin?
-----------------
-Meowcoin is a a project that uses its own blockchain as technological platform to reach their objectives, which are focused in the animal sector (pet rescue and adoption, shelters support, etc). 
-Meowcoin also provide small scale and home miners with a profitable blockchain to devote their hash to, and benefit the wider sector through philanthropic means.
-Its blockchain provides digital currency that enables instant payments to anyone, anywhere in the world. The Meowcoin platform also lets anyone create assets (tokens) on the Meowcoin network. Assets can be used for NFTs, STOs, Gift Cards, and fractional ownership of anything of value.
-Meowcoin uses peer-to-peer technology to operate with no central authority: managing transactions and issuing money are carried out collectively by the network. 
+Meowcoin is a practical, community-run blockchain focused on animal-welfare initiatives while remaining approachable for home and small-scale miners. It also supports user-issued assets for NFTs, gift cards, and fractional ownership.
 
-License
--------
+## Core traits
 
-Meowcoin Core is released under the terms of the MIT license. See [COPYING](COPYING) for more
-information or see https://opensource.org/licenses/MIT.
+* Dual-algorithm PoW: GPU-friendly **MeowPow** + **Scrypt via AuxPoW (merge mining at block 1614560)**
+* Assets/tokens on the Meowcoin network
+* Fair launch (no premine); transparent developer fee funds development, infrastructure, and donations
+* Open source, MIT-licensed
 
-Development Process
--------------------
+## Downloads
 
-The `master` branch is regularly built and tested, but is not guaranteed to be
-completely stable. [Tags](https://github.com/JustAResearcher/Meowcoin/tags) are created
-regularly to indicate new official, stable release versions of Meowcoin Core.
+* Binaries, check **[Releases](../../releases)**
+* Docker images **[here](https://hub.docker.com/repository/docker/zachprice105/meowcoin/general)**
+* Build/run details: **[`doc/`](doc)**
 
-Active development is done in branches, branches are created for specific versions. Development for Meowcoin uses the following workflow:
+## Contributing & branches
 
-* Create a new branch
-* Implement changes
-* Branch becomes reviewed, tested, and approved
-* Upon completion, the branch is merged into master via pull request with exec member approval.
-  
+Open PRs **against `develop`**. After review and testing, changes merge into `develop`; stable snapshots are promoted to `master` and tagged. Contributions are welcome.
 
-The contribution workflow is described in [CONTRIBUTING.md](CONTRIBUTING.md).
+## Community
 
-Please join us on discord for questions or concerns.
+Discord and socials are linked at **[https://www.mewccrypto.com/](https://www.mewccrypto.com/)**.
 
-Testing
--------
+## License
 
-Testing and code review is the bottleneck for development; we get more pull
-requests than we can review and test on short notice. Please be patient and help out by testing
-other people's pull requests, and remember this is a security-critical project where any mistake might cost people
-lots of money.
+MIT — see **[COPYING](COPYING)** or **[https://opensource.org/licenses/MIT](https://opensource.org/licenses/MIT)**.
 
-Testnet is up and running and available to use during development.
+## Acknowledgements
 
-### Automated Testing
-
-Developers are strongly encouraged to write [unit tests](src/test/README.md) for new code, and to
-submit new unit tests for old code. Unit tests can be compiled and run
-(assuming they weren't disabled in configure) with: `make check`. Further details on running
-and extending unit tests can be found in [/src/test/README.md](/src/test/README.md).
-
-There are also [regression and integration tests](/test), written
-in Python, that are run automatically on the build server.
-These tests can be run (if the [test dependencies](/test) are installed) with: `test/functional/test_runner.py`
-
-
-### Manual Quality Assurance (QA) Testing
-
-Changes should be tested by somebody other than the developer who wrote the
-code. This is especially important for large or high-risk changes. It is useful
-to add a test plan to the pull request description if testing the changes is
-not straightforward.
-
-
-About Meowcoin
-----------------
-A digital peer to peer network for the facilitation of asset transfer.
-
-
-
-In the fictional world of Westeros, meows are used as messengers who carry statements of truth. Meowcoin is a use case specific blockchain designed to carry statements of truth about who owns what assets. 
-
-
-
-Thank you to the Bitcoin developers. 
-
-The Meowcoin project is launched based on the hard work and continuous effort of over 400 Bitcoin developers who made over 14,000 commits over the life to date of the Bitcoin project. We are eternally grateful to you for your efforts and diligence in making a secure network and for their support of free and open source software development.  The Meowcoin experiment is made on the foundation you built.
-
-
-Abstract
-----------------
-Meowcoin aims to implement a blockchain which is optimized specifically for the use case of transferring assets such as securities from one holder to another. Based on the extensive development and testing of Bitcoin, Meowcoin is built on a fork of the Bitcoin code. Key changes include a faster block reward time and a change in the number, but not weighed distribution schedule, of coins. Meowcoin is free and open source and will be issued and mined transparently with no pre-mine, developer allocation or any other similar set aside. Meowcoin is intended to prioritize user control, privacy and censorship resistance and be jurisdiction agnostic while allowing simple optional additional features for users based on need.
-
-
-
-A blockchain is a ledger showing the value of something and allowing it to be transferred to someone else. Of all the possible uses for blockchains, the reporting of who owns what is one of the core uses of the technology.  This is why the first and most successful use case for blockchain technology to date has been Bitcoin.
-
-The success of the Ethereum ERC 20 token shows the demand for tokenized assets that use another blockchain.  Tokens offer many advantages to traditional shares or other participation mechanisms such as faster transfer, possibly increased user control and censorship resistance and reduction or elimination of the need for trusted third parties.
-
-Bitcoin also has the capability of serving as the rails for tokens by using projects such as Omnilayer, RSK or Counterparty. However, neither Bitcoin nor Ethereum was specifically designed for facilitating ownership of other assets. 
-
-Meowcoin is designed to be a use case specific blockchain designed to efficiently handle one specific function: the transfer of assets from one party to another.
-
-Bitcoin is and always should be focused on its goals of being a better form of money. Bitcoin developers will unlikely prioritize improvements or features which are specifically beneficial to the facilitation of token transfers.  One goal of the Meowcoin project is to see if a use case specific blockchain and development effort can create code which can either improve existing structures like Bitcoin or provide advantages for specific use cases.
-
-In the new global economy, borders and jurisdictions will be less relevant as more assets are tradable and trade across borders is increasingly frictionless. In an age where people can move significant amounts of wealth instantly using Bitcoin, global consumers will likely demand the same efficiency for their securities and similar asset holdings.
-
-For such a global system to work it will need to be independent of regulatory jurisdictions.  This is not due to ideological belief but practicality: if the rails for blockchain asset transfer are not censorship resistance and jurisdiction agnostic, any given jurisdiction may be in conflict with another.  In legacy systems, wealth was generally confined in the jurisdiction of the holder and therefore easy to control based on the policies of that jurisdiction. Because of the global nature of blockchain technology any protocol level ability to control wealth would potentially place jurisdictions in conflict and will not be able to operate fairly.  
-
+Built on the work of **Ravencoin** and **Bitcoin**, and many open-source contributors.

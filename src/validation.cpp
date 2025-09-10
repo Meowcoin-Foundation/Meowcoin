@@ -4242,7 +4242,6 @@ static bool ContextualCheckBlockHeader(const CBlockHeader& block, CValidationSta
     if (!consensusParams.AllowLegacyBlocks(nHeight) && block.nVersion.IsLegacy())
         return state.DoS(100, error("%s : legacy block after auxpow start", __func__), REJECT_INVALID, "late-legacy-block");
 
-    // Check proof of work
     // IMPORTANT: pick AuxPoW vs legacy from the header's version bit
     const bool fIsAuxPowBlock = block.nVersion.IsAuxpow();
     unsigned int expectedBits = GetNextWorkRequired(pindexPrev, &block, consensusParams, fIsAuxPowBlock);
