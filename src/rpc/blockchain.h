@@ -12,6 +12,7 @@
 class CBlock;
 class CBlockIndex;
 class UniValue;
+class JSONRPCRequest;
 
 
 // To be used by local rpc GPU mining only
@@ -44,6 +45,9 @@ UniValue mempoolToJSON(bool fVerbose = false);
 
 /** Block header to JSON */
 UniValue blockheaderToJSON(const CBlockIndex* blockindex);
+
+/** Block statistics to JSON */
+UniValue getblockstats(const JSONRPCRequest& request);
 
 #endif
 
