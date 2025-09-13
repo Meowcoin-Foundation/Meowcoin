@@ -33,6 +33,7 @@
 #include "utilstrencodings.h"
 #include "hash.h"
 #include "warnings.h"
+#include "undo.h"
 
 #include <stdint.h>
 
@@ -476,8 +477,18 @@ UniValue getblockstats(const JSONRPCRequest& request)
     std::vector<CAmount> feerates;
     std::vector<int64_t> tx_sizes;
     
+    // Read block undo data to get input values
+    CBlockUndo blockUndo;
+    bool hasUndoData = UndoReadFromDisk(blockUndo, pindex->GetUndoPos(), pindex->pprev->GetBlockHash());
+    if (!hasUndoData) {
+        // If we can't read undo data, we'll calculate what we can without fees
+        LogPrintf("Warning: Could not read block undo data for getblockstats\n");
+    }
+    
     // Process each transaction
-    for (const auto& tx : block.vtx) {
+    for (size_t txIndex = 0; txIndex < block.vtx.size(); txIndex++) {
+        const auto& tx = block.vtx[txIndex];
+        
         if (tx->IsCoinBase()) {
             // For coinbase, calculate subsidy
             CAmount subsidy = 0;
@@ -491,14 +502,23 @@ UniValue getblockstats(const JSONRPCRequest& request)
             CAmount tx_in = 0;
             CAmount tx_out = 0;
             
-            // Calculate inputs
-            for (const auto& input : tx->vin) {
-                CCoinsViewCache view(pcoinsTip);
-                const Coin& coin = view.AccessCoin(input.prevout);
-                if (!coin.IsSpent()) {
-                    tx_in += coin.out.nValue;
+            // Calculate inputs using block undo data
+            // Note: vtxundo excludes coinbase, so we need to adjust the index
+            size_t undoIndex = txIndex - 1; // Skip coinbase transaction
+            if (hasUndoData && undoIndex < blockUndo.vtxundo.size()) {
+                const auto& txundo = blockUndo.vtxundo[undoIndex];
+                for (size_t inputIndex = 0; inputIndex < tx->vin.size(); inputIndex++) {
+                    if (inputIndex < txundo.vprevout.size()) {
+                        CAmount inputValue = txundo.vprevout[inputIndex].out.nValue;
+                        tx_in += inputValue;
+                    }
+                    total_ins++;
                 }
-                total_ins++;
+            } else {
+                // If undo data is not available, just count inputs
+                for (size_t i = 0; i < tx->vin.size(); i++) {
+                    total_ins++;
+                }
             }
             
             // Calculate outputs
@@ -507,6 +527,7 @@ UniValue getblockstats(const JSONRPCRequest& request)
                 total_outs++;
             }
             
+            // Fee calculation: inputs - outputs
             fee = tx_in - tx_out;
             total_fee += fee;
             total_out += tx_out;
@@ -517,7 +538,7 @@ UniValue getblockstats(const JSONRPCRequest& request)
             total_size += tx_size;
             total_weight += tx_weight;
             
-            // Store for statistics
+            // Store for statistics (only for non-coinbase transactions)
             fees.push_back(fee);
             tx_sizes.push_back(tx_size);
             

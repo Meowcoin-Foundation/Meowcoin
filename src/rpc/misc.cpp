@@ -19,6 +19,7 @@
 #include "txmempool.h"
 #include "util.h"
 #include "utilstrencodings.h"
+#include "txdb.h"
 #ifdef ENABLE_WALLET
 #include "wallet/rpcwallet.h"
 #include "wallet/wallet.h"
@@ -1273,6 +1274,69 @@ UniValue getaddresstxids(const JSONRPCRequest& request)
 
 }
 
+UniValue getindexinfo(const JSONRPCRequest& request)
+{
+    if (request.fHelp || request.params.size() > 1)
+        throw std::runtime_error(
+            "getindexinfo ( index_name )\n"
+            "\nReturns the status of one or all available indices currently running in the node.\n"
+            "\nArguments:\n"
+            "1. \"index_name\"    (string, optional) Filter results for an index with a specific name.\n"
+            "\nResult:\n"
+            "{\n"
+            "  \"name\": {                    (object) The name of the index\n"
+            "    \"synced\": true|false,      (boolean) Whether the index is synced or not\n"
+            "    \"best_block_height\": n     (numeric) The block height to which the index is synced\n"
+            "  }, ...\n"
+            "}\n"
+            "\nExamples:\n"
+            + HelpExampleCli("getindexinfo", "")
+            + HelpExampleRpc("getindexinfo", "")
+            + HelpExampleCli("getindexinfo", "txindex")
+            + HelpExampleRpc("getindexinfo", "txindex")
+        );
+
+    LOCK(cs_main);
+
+    UniValue result(UniValue::VOBJ);
+    const std::string index_name = request.params[0].isNull() ? "" : request.params[0].get_str();
+
+    // Helper function to create index summary
+    auto createIndexSummary = [&](const std::string& name, bool enabled) -> UniValue {
+        UniValue index(UniValue::VOBJ);
+        index.push_back(Pair("synced", enabled));
+        index.push_back(Pair("best_block_height", enabled ? (int)chainActive.Height() : 0));
+        return index;
+    };
+
+    // Check if we should include txindex
+    if (index_name.empty() || index_name == "txindex") {
+        result.push_back(Pair("txindex", createIndexSummary("txindex", fTxIndex)));
+    }
+
+    // Check if we should include addressindex
+    if (index_name.empty() || index_name == "addressindex") {
+        result.push_back(Pair("addressindex", createIndexSummary("addressindex", fAddressIndex)));
+    }
+
+    // Check if we should include assetindex
+    if (index_name.empty() || index_name == "assetindex") {
+        result.push_back(Pair("assetindex", createIndexSummary("assetindex", fAssetIndex)));
+    }
+
+    // Check if we should include timestampindex
+    if (index_name.empty() || index_name == "timestampindex") {
+        result.push_back(Pair("timestampindex", createIndexSummary("timestampindex", fTimestampIndex)));
+    }
+
+    // Check if we should include spentindex
+    if (index_name.empty() || index_name == "spentindex") {
+        result.push_back(Pair("spentindex", createIndexSummary("spentindex", fSpentIndex)));
+    }
+
+    return result;
+}
+
 UniValue getspentinfo(const JSONRPCRequest& request)
 {
 
@@ -1330,6 +1394,7 @@ static const CRPCCommand commands[] =
     { "util",               "createmultisig",         &createmultisig,         {"nrequired","keys"} },
     { "util",               "verifymessage",          &verifymessage,          {"address","signature","message"} },
     { "util",               "signmessagewithprivkey", &signmessagewithprivkey, {"privkey","message"} },
+    { "util",               "getindexinfo",           &getindexinfo,           {"index_name"} },
 
     /* Address index */
     { "addressindex",       "getaddressmempool",      &getaddressmempool,      {"addresses","includeAssets"} },
