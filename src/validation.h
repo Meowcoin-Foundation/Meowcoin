@@ -52,6 +52,7 @@ class CBlockPolicyEstimator;
 class CTxMemPool;
 class CValidationState;
 class CTxUndo;
+class CBlockUndo;
 struct ChainTxData;
 
 class CAssetsDB;
@@ -288,6 +289,7 @@ static const uint64_t MIN_DISK_SPACE_FOR_BLOCK_FILES = 550 * 1024 * 1024;
  * @return True if state.IsValid()
  */
 bool ProcessNewBlock(const CChainParams& chainparams, const std::shared_ptr<const CBlock> pblock, bool fForceProcessing, bool* fNewBlock);
+bool UndoReadFromDisk(CBlockUndo& blockundo, const CDiskBlockPos& pos, const uint256& hashBlock);
 
 /**
  * Process incoming block headers.
