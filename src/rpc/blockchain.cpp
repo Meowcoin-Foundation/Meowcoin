@@ -857,6 +857,12 @@ std::string EntryDescriptionString()
            "    \"ancestorsize\" : n,     (numeric) virtual transaction size of in-mempool ancestors (including this one)\n"
            "    \"ancestorfees\" : n,     (numeric) modified fees (see above) of in-mempool ancestors (including this one)\n"
            "    \"wtxid\" : hash,         (string) hash of serialized transaction, including witness data\n"
+           "    \"fees\" : {              (json object)\n"
+           "        \"base\" : n,         (numeric) transaction fee in " + CURRENCY_UNIT + "\n"
+           "        \"modified\" : n,     (numeric) transaction fee with fee deltas used for mining priority in " + CURRENCY_UNIT + "\n"
+           "        \"ancestor\" : n,     (numeric) modified fees (see above) of in-mempool ancestors (including this one) in " + CURRENCY_UNIT + "\n"
+           "        \"descendant\" : n    (numeric) modified fees (see above) of in-mempool descendants (including this one) in " + CURRENCY_UNIT + "\n"
+           "    },\n"
            "    \"depends\" : [           (array) unconfirmed transactions used as inputs for this transaction\n"
            "        \"transactionid\",    (string) parent transaction id\n"
            "       ... ]\n";
@@ -878,6 +884,15 @@ void entryToJSON(UniValue &info, const CTxMemPoolEntry &e)
     info.push_back(Pair("ancestorsize", e.GetSizeWithAncestors()));
     info.push_back(Pair("ancestorfees", e.GetModFeesWithAncestors()));
     info.push_back(Pair("wtxid", mempool.vTxHashes[e.vTxHashesIdx].first.ToString()));
+    
+    // Add nested fees object
+    UniValue fees(UniValue::VOBJ);
+    fees.push_back(Pair("base", ValueFromAmount(e.GetFee())));
+    fees.push_back(Pair("modified", ValueFromAmount(e.GetModifiedFee())));
+    fees.push_back(Pair("ancestor", ValueFromAmount(e.GetModFeesWithAncestors())));
+    fees.push_back(Pair("descendant", ValueFromAmount(e.GetModFeesWithDescendants())));
+    info.push_back(Pair("fees", fees));
+    
     const CTransaction& tx = e.GetTx();
     std::set<std::string> setDepends;
     for (const CTxIn& txin : tx.vin)
