@@ -174,6 +174,7 @@ public:
  * the block header (referencing an auxpow).  The parent block header
  * does not have auxpow itself, so it is a pure header.
  */
+#pragma pack(push, 1)
 class CPureBlockHeader
 {
 public:
@@ -226,5 +227,6 @@ public:
 
     std::string ToString() const;
 };
+#pragma pack(pop)
 
 #endif // BITCOIN_PRIMITIVES_PUREHEADER_H

@@ -39,6 +39,7 @@ public:
 extern BlockNetwork bNetwork;
 
 
+#pragma pack(push, 1)
 class CBlockHeader : public CPureBlockHeader
 {
 public:
@@ -123,6 +124,7 @@ public:
      */
     void SetAuxpow(CAuxPow* apow);
 };
+#pragma pack(pop)
 
 
 class CBlock : public CBlockHeader
