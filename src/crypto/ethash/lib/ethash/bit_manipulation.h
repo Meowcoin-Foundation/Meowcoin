@@ -62,7 +62,11 @@ static const uint32_t fnv_offset_basis = 0x811c9dc5;
 NO_SANITIZE("unsigned-integer-overflow")
 static inline uint32_t fnv1(uint32_t u, uint32_t v) noexcept
 {
-    return (u * fnv_prime) ^ v;
+    // Force compiler to not optimize this function
+    __asm__ __volatile__("" ::: "memory");
+    uint32_t result = (u * fnv_prime) ^ v;
+    __asm__ __volatile__("" ::: "memory");
+    return result;
 }
 
 /**

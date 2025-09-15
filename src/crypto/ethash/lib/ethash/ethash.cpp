@@ -41,9 +41,12 @@ using ::fnv1;
 
 inline hash512 fnv1(const hash512& u, const hash512& v) noexcept
 {
+    // Force compiler to not optimize this function
+    __asm__ __volatile__("" ::: "memory");
     hash512 r;
     for (size_t i = 0; i < sizeof(r) / sizeof(r.word32s[0]); ++i)
         r.word32s[i] = fnv1(u.word32s[i], v.word32s[i]);
+    __asm__ __volatile__("" ::: "memory");
     return r;
 }
 
