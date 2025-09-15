@@ -17,7 +17,7 @@ union ethash_hash256
     uint32_t word32s[8];
     uint8_t bytes[32];
     char str[32];
-};
+} __attribute__((packed));
 
 union ethash_hash512
 {
@@ -25,7 +25,7 @@ union ethash_hash512
     uint32_t word32s[16];
     uint8_t bytes[64];
     char str[64];
-};
+} __attribute__((packed));
 
 union ethash_hash1024
 {
@@ -34,7 +34,7 @@ union ethash_hash1024
     uint32_t word32s[32];
     uint8_t bytes[128];
     char str[128];
-};
+} __attribute__((packed));
 
 union ethash_hash2048
 {
@@ -43,7 +43,7 @@ union ethash_hash2048
     uint32_t word32s[64];
     uint8_t bytes[256];
     char str[256];
-};
+} __attribute__((packed));
 
 #ifdef __cplusplus
 }
