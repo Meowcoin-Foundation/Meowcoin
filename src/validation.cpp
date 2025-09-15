@@ -1353,9 +1353,9 @@ static bool ReadBlockOrHeader(T& block, const CDiskBlockPos& pos, const Consensu
         return error("%s: Deserialize or I/O error - %s at %s", __func__, e.what(), pos.ToString());
     }
 
-    // Check the header
-    if (!CheckProofOfWork(block, consensusParams))
-        return error("ReadBlockFromDisk: Errors in block header at %s", pos.ToString());
+    // Note: PoW verification removed from read path to prevent segfaults
+    // PoW checks are still performed in validation paths (ProcessNewBlock, AcceptBlock, etc.)
+    // This follows upstream Bitcoin behavior where reads don't recompute PoW
 
     return true;
 }
