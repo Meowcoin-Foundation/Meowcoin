@@ -11,6 +11,7 @@
 
 class CBlock;
 class CBlockIndex;
+class CTxMemPool;
 class UniValue;
 class JSONRPCRequest;
 
@@ -38,7 +39,7 @@ UniValue blockToJSON(const CBlock& block, const CBlockIndex* blockindex, bool tx
 UniValue decodeblockToJSON(const CBlock& block);
 
 /** Mempool information to JSON */
-UniValue mempoolInfoToJSON();
+UniValue MempoolInfoToJSON(CTxMemPool& pool);
 
 /** Mempool to JSON */
 UniValue mempoolToJSON(bool fVerbose = false);
