@@ -1200,6 +1200,16 @@ bool GetAddressUnspent(uint160 addressHash, int type,
 bool GetTransaction(const uint256 &hash, CTransactionRef &txOut, const Consensus::Params& consensusParams, uint256 &hashBlock, bool fAllowSlow)
 {
     CBlockIndex *pindexSlow = nullptr;
+    
+    // Special handling for genesis block coinbase transaction
+    if (hash == uint256S("e8916cf6592c8433d598c3a5fe60a9741fd2a997b39d93af2d789cdd9d9a7390")) {
+        CBlock block;
+        if (ReadBlockFromDisk(block, chainActive[0], consensusParams)) {
+            txOut = block.vtx[0];
+            hashBlock = chainActive[0]->GetBlockHash();
+            return true;
+        }
+    }
 
     LOCK(cs_main);
 
