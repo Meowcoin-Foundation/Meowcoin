@@ -5,6 +5,65 @@ The headless daemon `meowcoind` has the JSON-RPC API enabled by default, the GUI
 option. In the GUI it is possible to execute RPC methods in the Debug Console
 Dialog.
 
+## Endpoints
+
+There are two JSON-RPC endpoints on the server:
+
+1. `/`
+2. `/wallet/<walletname>/`
+
+### `/` endpoint
+
+This endpoint is always active.
+It can always service non-wallet requests and can service wallet requests when
+exactly one wallet is loaded.
+
+### `/wallet/<walletname>/` endpoint
+
+This endpoint is only activated when the wallet component has been compiled in.
+It can service both wallet and non-wallet requests.
+It MUST be used for wallet requests when two or more wallets are loaded.
+
+This is the endpoint used by meowcoin-cli when a `-rpcwallet=` parameter is passed in.
+
+Best practice would dictate using the `/wallet/<walletname>/` endpoint for ALL
+requests when multiple wallets are in use.
+
+### Examples
+
+```sh
+# Get block count from the / endpoint when rpcuser=alice and rpcport=38332
+$ curl --user alice --data-binary '{"jsonrpc": "2.0", "id": "0", "method": "getblockcount", "params": []}' -H 'content-type: application/json' localhost:38332/
+
+# Get balance from the /wallet/walletname endpoint when rpcuser=alice, rpcport=38332 and rpcwallet=desc-wallet
+$ curl --user alice --data-binary '{"jsonrpc": "2.0", "id": "0", "method": "getbalance", "params": []}' -H 'content-type: application/json' localhost:38332/wallet/desc-wallet
+
+```
+
+## Parameter passing
+
+The JSON-RPC server supports both _by-position_ and _by-name_ [parameter
+structures](https://www.jsonrpc.org/specification#parameter_structures)
+described in the JSON-RPC specification. For extra convenience, to avoid the
+need to name every parameter value, all RPC methods accept a named parameter
+called `args`, which can be set to an array of initial positional values that
+are combined with named values.
+
+Examples:
+
+```sh
+# "params": ["mywallet", false, false, "", false, false, true]
+meowcoin-cli createwallet mywallet false false "" false false true
+
+# "params": {"wallet_name": "mywallet", "load_on_startup": true}
+meowcoin-cli -named createwallet wallet_name=mywallet load_on_startup=true
+
+# "params": {"args": ["mywallet"], "load_on_startup": true}
+meowcoin-cli -named createwallet mywallet load_on_startup=true
+```
+
+`meowcoin rpc` can also be substituted for `meowcoin-cli -named`, and is a newer alternative.
+
 ## Versioning
 
 The RPC interface might change from one major version of Meowcoin Core to the
@@ -16,6 +75,22 @@ Usually deprecated features can be re-enabled during the grace-period of one
 major version via the `-deprecatedrpc=` command line option. The release notes
 of a new major release come with detailed instructions on what RPC features
 were deprecated and how to re-enable them temporarily.
+
+## JSON-RPC 1.1 vs 2.0
+
+The server recognizes [JSON-RPC v2.0](https://www.jsonrpc.org/specification) requests
+and responds accordingly. A 2.0 request is identified by the presence of
+`"jsonrpc": "2.0"` in the request body. If that key + value is not present in a request,
+the legacy JSON-RPC v1.1 protocol is followed instead, which was the only available
+protocol in v27.0 and prior releases.
+
+|| 1.1 | 2.0 |
+|-|-|-|
+| Request marker | `"version": "1.1"` (or none) | `"jsonrpc": "2.0"` |
+| Response marker | (none) | `"jsonrpc": "2.0"` |
+| `"error"` and `"result"` fields in response | both present | only one is present |
+| HTTP codes in response | `200` unless there is any kind of RPC error (invalid parameters, method not found, etc) | Always `200` unless there is an actual HTTP server error (request parsing error, endpoint not found, etc) |
+| Notifications: requests that get no reply | (not supported) | Supported for requests that exclude the "id" field. Returns HTTP status `204` "No Content" |
 
 ## Security
 
@@ -71,7 +146,7 @@ RPC interface will be abused.
     Instead, expose it only on the host system's localhost, for example:
     `-p 127.0.0.1:8332:8332`
 
-- **Secure authentication:** By default, Meowcoin Core generates unique
+- **Secure authentication:** By default, when no `rpcpassword` is specified, Meowcoin Core generates unique
   login credentials each time it restarts and puts them into a file
   readable only by the user that started Meowcoin Core, allowing any of
   that user's RPC clients with read access to the file to login
@@ -88,13 +163,14 @@ RPC interface will be abused.
 - **Secure string handling:** The RPC interface does not guarantee any
   escaping of data beyond what's necessary to encode it as JSON,
   although it does usually provide serialized data using a hex
-  representation of the bytes.  If you use RPC data in your programs or
-  provide its data to other programs, you must ensure any problem
-  strings are properly escaped.  For example, multiple websites have
-  been manipulated because they displayed decoded hex strings that
-  included HTML `<script>` tags.  For this reason, and other
-  non-security reasons, it is recommended to display all serialized data
-  in hex form only.
+  representation of the bytes. If you use RPC data in your programs or
+  provide its data to other programs, you must ensure any problem strings
+  are properly escaped. For example, the `createwallet` RPC accepts
+  arguments such as `wallet_name` which is a string and could be used
+  for a path traversal attack without application level checks. Multiple
+  websites have been manipulated because they displayed decoded hex strings
+  that included HTML `<script>` tags. For this reason, and others, it is
+  recommended to display all serialized data in hex form only.
 
 ## RPC consistency guarantees
 
@@ -127,3 +203,14 @@ However, the wallet may not be up-to-date with the current state of the mempool
 or the state of the mempool by an RPC that returned before this RPC. For
 example, a wallet transaction that was BIP-125-replaced in the mempool prior to
 this RPC may not yet be reflected as such in this RPC response.
+
+## Limitations
+
+There is a known issue in the JSON-RPC interface that can cause a node to crash if
+too many http connections are being opened at the same time because the system runs
+out of available file descriptors. To prevent this from happening you might
+want to increase the number of maximum allowed file descriptors in your system
+and try to prevent opening too many connections to your JSON-RPC interface at the
+same time if this is under your control. It is hard to give general advice
+since this depends on your system but if you make several hundred requests at
+once you are definitely at risk of encountering this issue.

@@ -17,19 +17,19 @@
    <item>
     <layout class="QHBoxLayout" name="horizontalLayout">
      <property name="spacing">
-      <number>20</number>
+      <number>34</number>
      </property>
      <property name="leftMargin">
-      <number>20</number>
+      <number>40</number>
      </property>
      <property name="topMargin">
-      <number>20</number>
+      <number>40</number>
      </property>
      <property name="rightMargin">
-      <number>20</number>
+      <number>40</number>
      </property>
      <property name="bottomMargin">
-      <number>20</number>
+      <number>40</number>
      </property>
      <item>
       <widget class="QFrame" name="frameAssetBalance">
@@ -281,7 +281,7 @@
         <cursorShape>IBeamCursor</cursorShape>
        </property>
        <property name="text">
-        <string notr="true">123.456 MEWC</string>
+        <string notr="true">123.456 AVN</string>
        </property>
        <property name="textInteractionFlags">
         <set>Qt::LinksAccessibleByMouse|Qt::TextSelectableByKeyboard|Qt::TextSelectableByMouse</set>
@@ -293,7 +293,7 @@
   </layout>
  </widget>
  <resources>
-  <include location="../meowcoin.qrc"/>
+  <include location="../avian.qrc"/>
  </resources>
  <connections/>
 </ui>

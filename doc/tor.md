@@ -1,125 +1,240 @@
-TOR SUPPORT IN MEOWCOIN
-======================
+# TOR SUPPORT IN MEOWCOIN
 
-It is possible to run Meowcoin as a Tor hidden service, and connect to such services.
+It is possible to run Meowcoin Core as a Tor onion service, and connect to such services.
 
-The following directions assume you have a Tor proxy running on port 9050. Many distributions default to having a SOCKS proxy listening on port 9050, but others may not. In particular, the Tor Browser Bundle defaults to listening on port 9150. See [Tor Project FAQ:TBBSocksPort](https://www.torproject.org/docs/faq.html.en#TBBSocksPort) for how to properly
-configure Tor.
+The following directions assume you have a Tor proxy running on port 9050. Many distributions default to having a SOCKS proxy listening on port 9050, but others may not. In particular, the Tor Browser Bundle defaults to listening on port 9150.
+## Compatibility
 
+- Starting with version 22.0, Meowcoin Core only supports Tor version 3 hidden
+  services (Tor v3). Tor v2 addresses are ignored by Meowcoin Core and neither
+  relayed nor stored.
 
-1. Run meowcoin behind a Tor proxy
----------------------------------
+- Tor removed v2 support beginning with version 0.4.6.
 
-The first step is running Meowcoin behind a Tor proxy. This will already make all
-outgoing connections be anonymized, but more is possible.
+## How to see information about your Tor configuration via Meowcoin Core
 
-	-proxy=ip:port  Set the proxy server. If SOCKS5 is selected (default), this proxy
-	                server will be used to try to reach .onion addresses as well.
+There are several ways to see your local onion address in Meowcoin Core:
+- in the "Local addresses" output of CLI `-netinfo`
+- in the "localaddresses" output of RPC `getnetworkinfo`
+- in the debug log (grep for "AddLocal"; the Tor address ends in `.onion`)
 
-	-onion=ip:port  Set the proxy server to use for tor hidden services. You do not
-	                need to set this if it's the same as -proxy. You can use -noonion
-	                to explicitly disable access to hidden service.
+You may set the `-debug=tor` config logging option to have additional
+information in the debug log about your Tor configuration.
 
-	-listen         When using -proxy, listening is disabled by default. If you want
-	                to run a hidden service (see next section), you'll need to enable
-	                it explicitly.
+CLI `-addrinfo` returns the number of addresses known to your node per
+network. This can be useful to see how many onion peers your node knows,
+e.g. for `-onlynet=onion`.
 
-	-connect=X      When behind a Tor proxy, you can specify .onion addresses instead
-	-addnode=X      of IP addresses or hostnames in these parameters. It requires
-	-seednode=X     SOCKS5. In Tor mode, such addresses can also be exchanged with
-	                other P2P nodes.
+You can use the `getnodeaddresses` RPC to fetch a number of onion peers known to your node; run `meowcoin-cli help getnodeaddresses` for details.
+
+`meowcoin rpc` can also be substituted for `meowcoin-cli`.
+
+## 1. Run Meowcoin Core behind a Tor proxy
+
+The first step is running Meowcoin Core behind a Tor proxy. This will already anonymize all
+outgoing connections, but more is possible.
+
+    -proxy=ip[:port]
+        Set the proxy server. It will be used to try to reach .onion addresses
+        as well. You need to use -noonion or -onion=0 to explicitly disable
+        outbound access to onion services.
+
+    -proxy=ip[:port]=tor
+    or
+    -onion=ip[:port]
+        Set the proxy server for reaching .onion addresses. You do not need to
+        set this if it's the same as the generic -proxy. You can use -onion=0 to
+        explicitly disable access to onion services.
+        ------------------------------------------------------------------------
+        Note: The proxy for DNS requests is taken from
+        -proxy=addr:port or
+        -proxy=addr:port=ipv4 or
+        -proxy=addr:port=ipv6
+        (last one if multiple options are given). It is not taken from
+        -proxy=addr:port=tor or
+        -onion=addr:port.
+        If no proxy for DNS requests is configured, then they will be done using
+        the functions provided by the operating system, most likely resulting in
+        them being done over the clearnet to the DNS servers of the internet
+        service provider.
+        ------------------------------------------------------------------------
+
+If -proxy or -onion is specified multiple times, later occurrences override
+earlier ones and command line overrides the config file. UNIX domain sockets may
+be used for proxy connections. Set `-onion` or `-proxy` to the local socket path
+with the prefix `unix:` (e.g. `-onion=unix:/home/me/torsocket`).
+
+    -listen
+        When using -proxy, listening is disabled by default. If you want to
+        manually configure an onion service (see section 3), you'll need to
+        enable it explicitly.
+
+    -connect=X
+    -addnode=X
+    -seednode=X
+        When behind a Tor proxy, you can specify .onion addresses instead of IP
+        addresses or hostnames in these parameters. Such addresses can also be
+        exchanged with other P2P nodes.
+
+    -onlynet=onion
+        Make automatic outbound connections only to .onion addresses. Inbound
+        and manual connections are not affected by this option. It can be
+        specified multiple times to allow multiple networks, e.g. onlynet=onion,
+        onlynet=i2p, onlynet=cjdns.
 
 In a typical situation, this suffices to run behind a Tor proxy:
 
-	./meowcoin -proxy=127.0.0.1:9050
+    meowcoind -proxy=127.0.0.1:9050
+
+`meowcoin node` or `meowcoin gui` can also be substituted for `meowcoind`.
+
+## 2. Automatically create a Meowcoin Core onion service
+
+Meowcoin Core makes use of Tor's control socket API to create and destroy
+ephemeral onion services programmatically. This means that if Tor is running and
+proper authentication has been configured, Meowcoin Core automatically creates an
+onion service to listen on. The goal is to increase the number of available
+onion nodes.
+
+This feature is enabled by default if Meowcoin Core is listening (`-listen`) and
+it requires a Tor connection to work. It can be explicitly disabled with
+`-listenonion=0`. If it is not disabled, it can be configured using the
+`-torcontrol` and `-torpassword` settings.
+
+To see verbose Tor information in the meowcoind debug log, pass `-debug=tor`.
+
+### Control Port
+
+You may need to set up the Tor Control Port. On Linux distributions there may be
+some or all of the following settings in `/etc/tor/torrc`, generally commented
+out by default (if not, add them):
+
+```
+ControlPort 9051
+CookieAuthentication 1
+CookieAuthFileGroupReadable 1
+DataDirectoryGroupReadable 1
+```
+
+Add or uncomment those, save, and restart Tor (usually `systemctl restart tor`
+or `sudo systemctl restart tor` on most systemd-based systems, including recent
+Debian and Ubuntu, or just restart the computer).
+
+### Authentication
+
+Connecting to Tor's control socket API requires one of two authentication
+methods to be configured: cookie authentication or meowcoind's `-torpassword`
+configuration option.
+
+#### Cookie authentication
+
+For cookie authentication, the user running meowcoind must have read access to
+the `CookieAuthFile` specified in the Tor configuration. In some cases this is
+preconfigured and the creation of an onion service is automatic. Don't forget to
+use the `-debug=tor` meowcoind configuration option to enable Tor debug logging.
+
+If a permissions problem is seen in the debug log, e.g. `tor: Authentication
+cookie /run/tor/control.authcookie could not be opened (check permissions)`, it
+can be resolved by adding both the user running Tor and the user running
+meowcoind to the same Tor group and setting permissions appropriately.
+
+On Debian-derived systems, the Tor group will likely be `debian-tor` and one way
+to verify could be to list the groups and grep for a "tor" group name:
+
+```
+getent group | cut -d: -f1 | grep -i tor
+```
+
+You can also check the group of the cookie file. On most Linux systems, the Tor
+auth cookie will usually be `/run/tor/control.authcookie`:
+
+```
+TORGROUP=$(stat -c '%G' /run/tor/control.authcookie)
+```
+
+Once you have determined the `${TORGROUP}` and selected the `${USER}` that will
+run meowcoind, run this as root:
+
+```
+usermod -a -G ${TORGROUP} ${USER}
+```
+
+Then restart the computer (or log out) and log in as the `${USER}` that will run
+meowcoind.
+
+#### `torpassword` authentication
+
+For the `-torpassword=password` option, the password is the clear text form that
+was used when generating the hashed password for the `HashedControlPassword`
+option in the Tor configuration file.
+
+The hashed password can be obtained with the command `tor --hash-password
+password` (refer to the [Tor Dev
+Manual](https://2019.www.torproject.org/docs/tor-manual.html.en) for more
+details).
 
 
-2. Run a meowcoin hidden server
-------------------------------
+## 3. Manually create a Meowcoin Core onion service
 
-If you configure your Tor system accordingly, it is possible to make your node also
-reachable from the Tor network. Add these lines to your /etc/tor/torrc (or equivalent
-config file):
+You can also manually configure your node to be reachable from the Tor network.
+Add these lines to your `/etc/tor/torrc` (or equivalent config file):
 
-	HiddenServiceDir /var/lib/tor/meowcoin-service/
-	HiddenServicePort 8788 127.0.0.1:8788
-	HiddenServicePort 18767 127.0.0.1:18767
+    HiddenServiceDir /var/lib/tor/meowcoin-service/
+    HiddenServicePort 8333 127.0.0.1:8334
 
-The directory can be different of course, but (both) port numbers should be equal to
-your meowcoind's P2P listen port (8788 by default).
+The directory can be different of course, but virtual port numbers should be equal to
+your meowcoind's P2P listen port (8333 by default), and target addresses and ports
+should be equal to binding address and port for inbound Tor connections (127.0.0.1:8334 by default).
 
-	-externalip=X   You can tell meowcoin about its publicly reachable address using
-	                this option, and this can be a .onion address. Given the above
-	                configuration, you can find your onion address in
-	                /var/lib/tor/meowcoin-service/hostname. Onion addresses are given
-	                preference for your node to advertise itself with, for connections
-	                coming from unroutable addresses (such as 127.0.0.1, where the
-	                Tor proxy typically runs).
+    -externalip=X   You can tell meowcoin about its publicly reachable addresses using
+                    this option, and this can be an onion address. Given the above
+                    configuration, you can find your onion address in
+                    /var/lib/tor/meowcoin-service/hostname. For connections
+                    coming from unroutable addresses (such as 127.0.0.1, where the
+                    Tor proxy typically runs), onion addresses are given
+                    preference for your node to advertise itself with.
 
-	-listen         You'll need to enable listening for incoming connections, as this
-	                is off by default behind a proxy.
+                    You can set multiple local addresses with -externalip. The
+                    one that will be rumoured to a particular peer is the most
+                    compatible one and also using heuristics, e.g. the address
+                    with the most incoming connections, etc.
 
-	-discover       When -externalip is specified, no attempt is made to discover local
-	                IPv4 or IPv6 addresses. If you want to run a dual stack, reachable
-	                from both Tor and IPv4 (or IPv6), you'll need to either pass your
-	                other addresses using -externalip, or explicitly enable -discover.
-	                Note that both addresses of a dual-stack system may be easily
-	                linkable using traffic analysis.
+    -listen         You'll need to enable listening for incoming connections, as this
+                    is off by default behind a proxy.
+
+    -discover       When -externalip is specified, no attempt is made to discover local
+                    IPv4 or IPv6 addresses. If you want to run a dual stack, reachable
+                    from both Tor and IPv4 (or IPv6), you'll need to either pass your
+                    other addresses using -externalip, or explicitly enable -discover.
+                    Note that both addresses of a dual-stack system may be easily
+                    linkable using traffic analysis.
 
 In a typical situation, where you're only reachable via Tor, this should suffice:
 
-	./meowcoind -proxy=127.0.0.1:9050 -externalip=57qr3yd1nyntf5k.onion -listen
+    meowcoind -proxy=127.0.0.1:9050 -externalip=7zvj7a2imdgkdbg4f2dryd5rgtrn7upivr5eeij4cicjh65pooxeshid.onion -listen
 
-(obviously, replace the Onion address with your own). It should be noted that you still
+(obviously, replace the .onion address with your own). It should be noted that you still
 listen on all devices and another node could establish a clearnet connection, when knowing
 your address. To mitigate this, additionally bind the address of your Tor proxy:
 
-	./meowcoind ... -bind=127.0.0.1
+    meowcoind ... -bind=127.0.0.1:8334=onion
 
 If you don't care too much about hiding your node, and want to be reachable on IPv4
 as well, use `discover` instead:
 
-	./meowcoind ... -discover
+    meowcoind ... -discover
 
-and open port 8788 on your firewall (or use -upnp).
+and open port 8333 on your firewall (or use port mapping, i.e., `-natpmp`).
 
-If you only want to use Tor to reach onion addresses, but not use it as a proxy
+If you only want to use Tor to reach .onion addresses, but not use it as a proxy
 for normal IPv4/IPv6 communication, use:
 
-	./meowcoin -onion=127.0.0.1:9050 -externalip=57qr3yd1nyntf5k.onion -discover
+    meowcoind -onion=127.0.0.1:9050 -externalip=7zvj7a2imdgkdbg4f2dryd5rgtrn7upivr5eeij4cicjh65pooxeshid.onion -discover
 
-3. Automatically listen on Tor
---------------------------------
+## 4. Privacy recommendations
 
-Starting with Tor version 0.2.7.1 it is possible, through Tor's control socket
-API, to create and destroy 'ephemeral' hidden services programmatically.
-Meowcoin Core has been updated to make use of this.
-
-This means that if Tor is running (and proper authentication has been configured),
-Meowcoin Core automatically creates a hidden service to listen on. This will positively 
-affect the number of available .onion nodes.
-
-This new feature is enabled by default if Meowcoin Core is listening (`-listen`), and
-requires a Tor connection to work. It can be explicitly disabled with `-listenonion=0`
-and, if not disabled, configured using the `-torcontrol` and `-torpassword` settings.
-To show verbose debugging information, pass `-debug=tor`.
-
-Connecting to Tor's control socket API requires one of two authentication methods to be 
-configured. For cookie authentication the user running meowcoind must have write access 
-to the `CookieAuthFile` specified in Tor configuration. In some cases this is 
-preconfigured and the creation of a hidden service is automatic. If permission problems 
-are seen with `-debug=tor` they can be resolved by adding both the user running tor and 
-the user running meowcoind to the same group and setting permissions appropriately. On 
-Debian-based systems the user running meowcoind can be added to the debian-tor group, 
-which has the appropriate permissions. An alternative authentication method is the use 
-of the `-torpassword` flag and a `hash-password` which can be enabled and specified in 
-Tor configuration.
-
-4. Privacy recommendations
----------------------------
-
-- Do not add anything but meowcoin ports to the hidden service created in section 2.
-  If you run a web service too, create a new hidden service for that.
-  Otherwise it is trivial to link them, which may reduce privacy. Hidden
-  services created automatically (as in section 3) always have only one port
+- Do not add anything but Meowcoin Core ports to the onion service created in section 3.
+  If you run a web service too, create a new onion service for that.
+  Otherwise it is trivial to link them, which may reduce privacy. Onion
+  services created automatically (as in section 2) always have only one port
   open.

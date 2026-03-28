@@ -3,10 +3,11 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef MEOWCOIN_QT_SENDASSETSENTRY_H
-#define MEOWCOIN_QT_SENDASSETSENTRY_H
+#ifndef AVIAN_QT_SENDASSETSENTRY_H
+#define AVIAN_QT_SENDASSETSENTRY_H
 
-#include "walletmodel.h"
+#include <qt/walletmodel.h>
+#include <qt/sendcoinsrecipient.h>
 
 #include <QStackedWidget>
 
@@ -21,7 +22,7 @@ namespace Ui {
 }
 
 /**
- * A single entry in the dialog for sending meows.
+ * A single entry in the dialog for sending avians.
  * Stacked widget, with different UIs for payment requests
  * with a strong payee identity.
  */
@@ -30,7 +31,7 @@ class SendAssetsEntry : public QStackedWidget
     Q_OBJECT
 
 public:
-    explicit SendAssetsEntry(const PlatformStyle *platformStyle, const QStringList myAssetsNames, QWidget *parent = 0);
+    explicit SendAssetsEntry(const PlatformStyle *platformStyle, const QStringList myAssetsNames, QWidget *parent = nullptr);
     ~SendAssetsEntry();
 
     void setModel(WalletModel *model);
@@ -64,7 +65,7 @@ public:
     QSortFilterProxyModel* proxy;
     QCompleter* completer;
 
-    bool eventFilter(QObject *object, QEvent *event);
+    bool eventFilter(QObject *object, QEvent *event) override;
 
 
 public Q_SLOTS:
@@ -92,4 +93,4 @@ private:
     bool updateLabel(const QString &address);
 };
 
-#endif // MEOWCOIN_QT_SENDASSETSENTRY_H
+#endif // AVIAN_QT_SENDASSETSENTRY_H

@@ -1,8 +1,0 @@
-/usr/bin/meowcoin-cli		--	gen_context(system_u:object_r:meowcoin_exec_t,s0)
-/usr/sbin/meowcoind		--	gen_context(system_u:object_r:meowcoin_exec_t,s0)
-/usr/lib(64)?/meowcoin/meowcoind		--	gen_context(system_u:object_r:meowcoin_exec_t,s0)
-
-/etc/meowcoin(/.*)?		gen_context(system_u:object_r:meowcoin_conf_t,s0)
-/var/lib/meowcoin(/.*)?		gen_context(system_u:object_r:meowcoin_var_lib_t,s0)
-
-(/var)?/run/meowcoind(/.*)?   gen_context(system_u:object_r:meowcoin_var_run_t,s0)

@@ -1,29 +1,28 @@
-// Copyright (c) 2011-2016 The Bitcoin Core developers
-// Copyright (c) 2017-2021 The Meowcoin Core developers
+// Copyright (c) 2011-2021 The Meowcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef MEOWCOIN_QT_WALLETVIEW_H
-#define MEOWCOIN_QT_WALLETVIEW_H
+#ifndef BITCOIN_QT_WALLETVIEW_H
+#define BITCOIN_QT_WALLETVIEW_H
 
-#include "amount.h"
+#include <consensus/amount.h>
+#include <qt/meowcoinunits.h>
 
 #include <QStackedWidget>
 
-class MeowcoinGUI;
+class AssetsDialog;
 class ClientModel;
+class CreateAssetDialog;
 class OverviewPage;
 class PlatformStyle;
 class ReceiveCoinsDialog;
+class ReissueAssetDialog;
+class RestrictedAssetsDialog;
 class SendCoinsDialog;
 class SendCoinsRecipient;
 class TransactionView;
 class WalletModel;
 class AddressBookPage;
-class AssetsDialog;
-class CreateAssetDialog;
-class ReissueAssetDialog;
-class RestrictedAssetsDialog;
 
 QT_BEGIN_NAMESPACE
 class QModelIndex;
@@ -41,27 +40,27 @@ class WalletView : public QStackedWidget
     Q_OBJECT
 
 public:
-    explicit WalletView(const PlatformStyle *platformStyle, QWidget *parent);
+    explicit WalletView(WalletModel* wallet_model, const PlatformStyle* platformStyle, QWidget* parent);
     ~WalletView();
 
-    void setMeowcoinGUI(MeowcoinGUI *gui);
     /** Set the client model.
         The client model represents the part of the core that communicates with the P2P network, and is wallet-agnostic.
     */
     void setClientModel(ClientModel *clientModel);
-    /** Set the wallet model.
-        The wallet model represents a meowcoin wallet, and offers access to the list of transactions, address book and sending
-        functionality.
-    */
-    void setWalletModel(WalletModel *walletModel);
+    WalletModel* getWalletModel() const noexcept { return walletModel; }
 
     bool handlePaymentRequest(const SendCoinsRecipient& recipient);
 
     void showOutOfSyncWarning(bool fShow);
 
 private:
-    ClientModel *clientModel;
-    WalletModel *walletModel;
+    ClientModel* clientModel{nullptr};
+
+    //!
+    //! The wallet model represents a meowcoin wallet, and offers access to
+    //! the list of transactions, address book and sending functionality.
+    //!
+    WalletModel* const walletModel;
 
     OverviewPage *overviewPage;
     QWidget *transactionsPage;
@@ -72,16 +71,13 @@ private:
 
     TransactionView *transactionView;
 
-    QProgressDialog *progressDialog;
-    const PlatformStyle *platformStyle;
-
-
-    /** MEWC START */
     AssetsDialog *assetsPage;
     CreateAssetDialog *createAssetsPage;
     ReissueAssetDialog *manageAssetsPage;
     RestrictedAssetsDialog *restrictedAssetsPage;
-    /** MEWC END */
+
+    QProgressDialog* progressDialog{nullptr};
+    const PlatformStyle *platformStyle;
 
 public Q_SLOTS:
     /** Switch to overview (home) page */
@@ -93,6 +89,12 @@ public Q_SLOTS:
     /** Switch to send coins page */
     void gotoSendCoinsPage(QString addr = "");
 
+    /** Switch to asset pages */
+    void gotoAssetsPage();
+    void gotoCreateAssetsPage();
+    void gotoManageAssetsPage();
+    void gotoRestrictedAssetsPage();
+
     /** Show Sign/Verify Message dialog and switch to sign message tab */
     void gotoSignMessageTab(QString addr = "");
     /** Show Sign/Verify Message dialog and switch to verify message tab */
@@ -102,9 +104,9 @@ public Q_SLOTS:
 
         The new items are those between start and end inclusive, under the given parent item.
     */
-    void processNewTransaction(const QModelIndex& parent, int start, int end);
+    void processNewTransaction(const QModelIndex& parent, int start, int /*end*/);
     /** Encrypt the wallet */
-    void encryptWallet(bool status);
+    void encryptWallet();
     /** Backup the wallet */
     void backupWallet();
     /** Change encrypted wallet passphrase */
@@ -112,49 +114,33 @@ public Q_SLOTS:
     /** Ask for passphrase to unlock wallet temporarily */
     void unlockWallet();
 
-    /** Show 12-words */
-    void getMyWords();
-
     /** Show used sending addresses */
     void usedSendingAddresses();
     /** Show used receiving addresses */
     void usedReceivingAddresses();
 
-    /** Re-emit encryption status signal */
-    void updateEncryptionStatus();
-
     /** Show progress dialog e.g. for rescan */
     void showProgress(const QString &title, int nProgress);
 
-    /** User has requested more information about the out of sync state */
-    void requestedSyncWarningInfo();
-
-
-    /** MEWC START */
-    /** Switch to assets page */
-
-    void gotoAssetsPage();
-    void gotoCreateAssetsPage();
-    void gotoManageAssetsPage();
-    void gotoRestrictedAssetsPage();
-
-    /** MEWC END */
+private Q_SLOTS:
+    void disableTransactionView(bool disable);
 
 Q_SIGNALS:
-    /** Signal that we want to show the main window */
-    void showNormalIfMinimized();
+    void setPrivacy(bool privacy);
+    void transactionClicked();
+    void coinsSent();
     /**  Fired when a message should be reported to the user */
     void message(const QString &title, const QString &message, unsigned int style);
     /** Encryption status of wallet changed */
-    void encryptionStatusChanged(int status);
-    /** HD-Enabled status of wallet changed (only possible during startup) */
-    void hdEnabledStatusChanged(int hdEnabled);
+    void encryptionStatusChanged();
     /** Notify that a new transaction appeared */
-    void incomingTransaction(const QString& date, int unit, const CAmount& amount, const QString& type, const QString& address, const QString& label, const QString& assetName);
+    void incomingTransaction(const QString& date, BitcoinUnit unit, const CAmount& amount, const QString& type, const QString& address, const QString& label, const QString& walletName);
     /** Notify that the out of sync warning icon has been pressed */
     void outOfSyncWarningClicked();
-    /** Show the assets GUI */
     void checkAssets();
+    void assetPageRequested();
+    void createAssetPageRequested();
+    void manageAssetPageRequested();
 };
 
-#endif // MEOWCOIN_QT_WALLETVIEW_H
+#endif // BITCOIN_QT_WALLETVIEW_H

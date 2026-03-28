@@ -3,14 +3,16 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include "amount.h"
-#include "uint256.h"
+#include <consensus/amount.h>
+#include <uint256.h>
 
 #include <QList>
 #include <QString>
 
+namespace wallet {
 class CWallet;
 class CWalletTx;
+}
 
 /** UI model for a transaction. A core transaction can be represented by multiple UI transactions if it has
     multiple outputs.
@@ -31,12 +33,12 @@ public:
     static const int RecommendedNumConfirmations = 6;
 
     MyRestrictedAssetRecord():
-            hash(), time(0), type(Other), address(""), assetName("MEWC"), idx(0)
+            hash(), time(0), type(Other), address(""), assetName("AVN"), idx(0)
     {
     }
 
     MyRestrictedAssetRecord(uint256 _hash, qint64 _time):
-            hash(_hash), time(_time), type(Other), address(""), assetName("MEWC"), idx(0)
+            hash(_hash), time(_time), type(Other), address(""), assetName("AVN"), idx(0)
     {
     }
 
@@ -44,14 +46,14 @@ public:
                       Type _type, const std::string &_address,
                       const CAmount& _debit, const CAmount& _credit):
             hash(_hash), time(_time), type(_type), address(_address),
-            assetName("MEWC"), idx(0)
+            assetName("AVN"), idx(0)
     {
     }
 
     /** Decompose CWallet transaction to model transaction records.
      */
-    static bool showTransaction(const CWalletTx &wtx);
-    static QList<MyRestrictedAssetRecord> decomposeTransaction(const CWallet *wallet, const CWalletTx &wtx);
+    static bool showTransaction(const wallet::CWalletTx &wtx);
+    static QList<MyRestrictedAssetRecord> decomposeTransaction(const wallet::CWallet *wallet, const wallet::CWalletTx &wtx);
 
     /** @name Immutable transaction attributes
       @{*/

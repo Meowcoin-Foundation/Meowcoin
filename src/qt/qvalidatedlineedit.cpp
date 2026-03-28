@@ -1,20 +1,22 @@
-// Copyright (c) 2011-2016 The Bitcoin Core developers
-// Copyright (c) 2017-2019 The Meowcoin Core developers
+// Copyright (c) 2011-2022 The Meowcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include "qvalidatedlineedit.h"
+#include <qt/qvalidatedlineedit.h>
 
-#include "meowcoinaddressvalidator.h"
-#include "guiconstants.h"
-#include "platformstyle.h"
+#include <qt/meowcoinaddressvalidator.h>
+#include <qt/guiconstants.h>
 
-QValidatedLineEdit::QValidatedLineEdit(QWidget *parent) :
-    QLineEdit(parent),
-    valid(true),
-    checkValidator(0)
+QValidatedLineEdit::QValidatedLineEdit(QWidget* parent)
+    : QLineEdit(parent)
 {
-    connect(this, SIGNAL(textChanged(QString)), this, SLOT(markValid()));
+    connect(this, &QValidatedLineEdit::textChanged, this, &QValidatedLineEdit::markValid);
+}
+
+void QValidatedLineEdit::setText(const QString& text)
+{
+    QLineEdit::setText(text);
+    checkValidity();
 }
 
 void QValidatedLineEdit::setValid(bool _valid)
@@ -26,14 +28,11 @@ void QValidatedLineEdit::setValid(bool _valid)
 
     if(_valid)
     {
-        if (darkModeEnabled)
-            setStyleSheet("");
-        else
-            setStyleSheet(STYLE_VALID);
+        setStyleSheet("");
     }
     else
     {
-        setStyleSheet(STYLE_INVALID);
+        setStyleSheet("QValidatedLineEdit { " STYLE_INVALID "}");
     }
     this->valid = _valid;
 }
@@ -111,6 +110,7 @@ void QValidatedLineEdit::checkValidity()
 void QValidatedLineEdit::setCheckValidator(const QValidator *v)
 {
     checkValidator = v;
+    checkValidity();
 }
 
 bool QValidatedLineEdit::isValid()

@@ -1,29 +1,12 @@
-// Copyright (c) 2017 The Bitcoin Core developers
-// Copyright (c) 2017-2019 The Meowcoin Core developers
+// Copyright (c) 2020 The Meowcoin Core developers
+// Copyright (c) 2017-2021 The Meowcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef MEOWCOIN_RPC_MINING_H
-#define MEOWCOIN_RPC_MINING_H
+#ifndef BITCOIN_RPC_MINING_H
+#define BITCOIN_RPC_MINING_H
 
-#include "script/script.h"
-#include <string>
+/** Default max iterations to try in RPC generatetodescriptor, generatetoaddress, and generateblock. */
+static const uint64_t DEFAULT_MAX_TRIES{1000000};
 
-#include <univalue.h>
-
-static const bool DEFAULT_GENERATE = false;
-static const int DEFAULT_GENERATE_THREADS = 1;
-
-/** Generate blocks (mine) */
-UniValue generateBlocks(std::shared_ptr<CReserveScript> coinbaseScript, int nGenerate, uint64_t nMaxTries, bool keepScript);
-
-UniValue getgenerate(const UniValue& params, bool fHelp);
-
-/** Check bounds on a command line confirm target */
-unsigned int ParseConfirmTarget(const UniValue& value);
-
-/* Creation and submission of auxpow blocks.  */
-UniValue AuxMiningCreateBlock(const CScript& scriptPubKey);
-bool AuxMiningSubmitBlock(const std::string& hashHex,
-                          const std::string& auxpowHex);
-#endif
+#endif // BITCOIN_RPC_MINING_H

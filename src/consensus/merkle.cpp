@@ -1,18 +1,17 @@
-// Copyright (c) 2015-2016 The Bitcoin Core developers
-// Copyright (c) 2017-2019 The Meowcoin Core developers
+// Copyright (c) 2015-2020 The Meowcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include "merkle.h"
-#include "hash.h"
-#include "utilstrencodings.h"
+#include <consensus/merkle.h>
+#include <hash.h>
+#include <util/check.h>
 
 /*     WARNING! If you're reading this because you're learning about crypto
        and/or designing a new system that will use merkle trees, keep in mind
        that the following merkle tree algorithm has a serious flaw related to
        duplicate txids, resulting in a vulnerability (CVE-2012-2459).
 
-       The reason is that if the number of hashes in the list at a given time
+       The reason is that if the number of hashes in the list at a given level
        is odd, the last one is duplicated before computing the next level (which
        is unusual in Merkle trees). This results in certain sequences of
        transactions leading to the same merkle root. For example, these two
@@ -43,9 +42,53 @@
        root.
 */
 
+
+uint256 ComputeMerkleRoot(std::vector<uint256> hashes, bool* mutated) {
+    bool mutation = false;
+    while (hashes.size() > 1) {
+        if (mutated) {
+            for (size_t pos = 0; pos + 1 < hashes.size(); pos += 2) {
+                if (hashes[pos] == hashes[pos + 1]) mutation = true;
+            }
+        }
+        if (hashes.size() & 1) {
+            hashes.push_back(hashes.back());
+        }
+        SHA256D64(hashes[0].begin(), hashes[0].begin(), hashes.size() / 2);
+        hashes.resize(hashes.size() / 2);
+    }
+    if (mutated) *mutated = mutation;
+    if (hashes.size() == 0) return uint256();
+    return hashes[0];
+}
+
+
+uint256 BlockMerkleRoot(const CBlock& block, bool* mutated)
+{
+    std::vector<uint256> leaves;
+    leaves.resize(block.vtx.size());
+    for (size_t s = 0; s < block.vtx.size(); s++) {
+        leaves[s] = block.vtx[s]->GetHash().ToUint256();
+    }
+    return ComputeMerkleRoot(std::move(leaves), mutated);
+}
+
+uint256 BlockWitnessMerkleRoot(const CBlock& block, bool* mutated)
+{
+    std::vector<uint256> leaves;
+    leaves.resize(block.vtx.size());
+    leaves[0].SetNull(); // The witness hash of the coinbase is 0.
+    for (size_t s = 1; s < block.vtx.size(); s++) {
+        leaves[s] = block.vtx[s]->GetWitnessHash().ToUint256();
+    }
+    return ComputeMerkleRoot(std::move(leaves), mutated);
+}
+
 /* This implements a constant-space merkle root/path calculator, limited to 2^32 leaves. */
-static void MerkleComputation(const std::vector<uint256>& leaves, uint256* proot, bool* pmutated, uint32_t branchpos, std::vector<uint256>* pbranch) {
-    if (pbranch) pbranch->clear();
+static void MerkleComputation(const std::vector<uint256>& leaves, uint256* proot, bool* pmutated, uint32_t leaf_pos, std::vector<uint256>* path)
+{
+    if (path) path->clear();
+    Assume(leaves.size() <= UINT32_MAX);
     if (leaves.size() == 0) {
         if (pmutated) *pmutated = false;
         if (proot) *proot = uint256();
@@ -65,23 +108,23 @@ static void MerkleComputation(const std::vector<uint256>& leaves, uint256* proot
     // First process all leaves into 'inner' values.
     while (count < leaves.size()) {
         uint256 h = leaves[count];
-        bool matchh = count == branchpos;
+        bool matchh = count == leaf_pos;
         count++;
         int level;
         // For each of the lower bits in count that are 0, do 1 step. Each
         // corresponds to an inner value that existed before processing the
         // current leaf, and each needs a hash to combine it.
-        for (level = 0; !(count & (((uint32_t)1) << level)); level++) {
-            if (pbranch) {
+        for (level = 0; !(count & ((uint32_t{1}) << level)); level++) {
+            if (path) {
                 if (matchh) {
-                    pbranch->push_back(inner[level]);
+                    path->push_back(inner[level]);
                 } else if (matchlevel == level) {
-                    pbranch->push_back(h);
+                    path->push_back(h);
                     matchh = true;
                 }
             }
             mutated |= (inner[level] == h);
-            CHash256().Write(inner[level].begin(), 32).Write(h.begin(), 32).Finalize(h.begin());
+            h = Hash(inner[level], h);
         }
         // Store the resulting hash at inner position level.
         inner[level] = h;
@@ -95,34 +138,34 @@ static void MerkleComputation(const std::vector<uint256>& leaves, uint256* proot
     int level = 0;
     // As long as bit number level in count is zero, skip it. It means there
     // is nothing left at this level.
-    while (!(count & (((uint32_t)1) << level))) {
+    while (!(count & ((uint32_t{1}) << level))) {
         level++;
     }
     uint256 h = inner[level];
     bool matchh = matchlevel == level;
-    while (count != (((uint32_t)1) << level)) {
+    while (count != ((uint32_t{1}) << level)) {
         // If we reach this point, h is an inner value that is not the top.
         // We combine it with itself (Meowcoin's special rule for odd levels in
         // the tree) to produce a higher level one.
-        if (pbranch && matchh) {
-            pbranch->push_back(h);
+        if (path && matchh) {
+            path->push_back(h);
         }
-        CHash256().Write(h.begin(), 32).Write(h.begin(), 32).Finalize(h.begin());
+        h = Hash(h, h);
         // Increment count to the value it would have if two entries at this
         // level had existed.
-        count += (((uint32_t)1) << level);
+        count += ((uint32_t{1}) << level);
         level++;
         // And propagate the result upwards accordingly.
-        while (!(count & (((uint32_t)1) << level))) {
-            if (pbranch) {
+        while (!(count & ((uint32_t{1}) << level))) {
+            if (path) {
                 if (matchh) {
-                    pbranch->push_back(inner[level]);
+                    path->push_back(inner[level]);
                 } else if (matchlevel == level) {
-                    pbranch->push_back(h);
+                    path->push_back(h);
                     matchh = true;
                 }
             }
-            CHash256().Write(inner[level].begin(), 32).Write(h.begin(), 32).Finalize(h.begin());
+            h = Hash(inner[level], h);
             level++;
         }
     }
@@ -131,58 +174,18 @@ static void MerkleComputation(const std::vector<uint256>& leaves, uint256* proot
     if (proot) *proot = h;
 }
 
-uint256 ComputeMerkleRoot(const std::vector<uint256>& leaves, bool* mutated) {
-    uint256 hash;
-    MerkleComputation(leaves, &hash, mutated, -1, nullptr);
-    return hash;
-}
-
-std::vector<uint256> ComputeMerkleBranch(const std::vector<uint256>& leaves, uint32_t position) {
+static std::vector<uint256> ComputeMerklePath(const std::vector<uint256>& leaves, uint32_t position) {
     std::vector<uint256> ret;
     MerkleComputation(leaves, nullptr, nullptr, position, &ret);
     return ret;
 }
 
-uint256 ComputeMerkleRootFromBranch(const uint256& leaf, const std::vector<uint256>& vMerkleBranch, uint32_t nIndex) {
-    uint256 hash = leaf;
-    for (std::vector<uint256>::const_iterator it = vMerkleBranch.begin(); it != vMerkleBranch.end(); ++it) {
-        if (nIndex & 1) {
-            hash = Hash(BEGIN(*it), END(*it), BEGIN(hash), END(hash));
-        } else {
-            hash = Hash(BEGIN(hash), END(hash), BEGIN(*it), END(*it));
-        }
-        nIndex >>= 1;
-    }
-    return hash;
-}
-
-uint256 BlockMerkleRoot(const CBlock& block, bool* mutated)
+std::vector<uint256> TransactionMerklePath(const CBlock& block, uint32_t position)
 {
     std::vector<uint256> leaves;
     leaves.resize(block.vtx.size());
     for (size_t s = 0; s < block.vtx.size(); s++) {
-        leaves[s] = block.vtx[s]->GetHash();
+        leaves[s] = block.vtx[s]->GetHash().ToUint256();
     }
-    return ComputeMerkleRoot(leaves, mutated);
-}
-
-uint256 BlockWitnessMerkleRoot(const CBlock& block, bool* mutated)
-{
-    std::vector<uint256> leaves;
-    leaves.resize(block.vtx.size());
-    leaves[0].SetNull(); // The witness hash of the coinbase is 0.
-    for (size_t s = 1; s < block.vtx.size(); s++) {
-        leaves[s] = block.vtx[s]->GetWitnessHash();
-    }
-    return ComputeMerkleRoot(leaves, mutated);
-}
-
-std::vector<uint256> BlockMerkleBranch(const CBlock& block, uint32_t position)
-{
-    std::vector<uint256> leaves;
-    leaves.resize(block.vtx.size());
-    for (size_t s = 0; s < block.vtx.size(); s++) {
-        leaves[s] = block.vtx[s]->GetHash();
-    }
-    return ComputeMerkleBranch(leaves, position);
+    return ComputeMerklePath(leaves, position);
 }

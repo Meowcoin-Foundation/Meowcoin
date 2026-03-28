@@ -1,66 +1,54 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-// Copyright (c) 2009-2014 The Bitcoin developers
+// Copyright (c) 2009-2014 The Meowcoin developers
 // Copyright (c) 2014-2016 Daniel Kraft
-// Distributed under the MIT/X11 software license, see the accompanying
-// file license.txt or http://www.opensource.org/licenses/mit-license.php.
+// Copyright (c) 2017-2021 The Meowcoin Core developers
+// Distributed under the MIT software license, see the accompanying
+// file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #ifndef BITCOIN_AUXPOW_H
 #define BITCOIN_AUXPOW_H
 
-#include "consensus/params.h"
-#include "primitives/pureheader.h"
-#include "primitives/transaction.h"
-#include "serialize.h"
-#include "uint256.h"
-#include "util.h"
-#include "utilstrencodings.h"
+#include <consensus/params.h>
+#include <primitives/pureheader.h>
+#include <primitives/transaction.h>
+#include <serialize.h>
+#include <uint256.h>
+
+#include <memory>
+#include <sstream>
+#include <string>
 #include <vector>
 
 class CBlock;
 class CBlockHeader;
 class CBlockIndex;
-class CValidationState;
 
 /** Header for merge-mining data in the coinbase.  */
 static const unsigned char pchMergedMiningHeader[] = { 0xfa, 0xbe, 'm', 'm' };
 
-/* Because it is needed for auxpow, the definition of CMerkleTx is moved
-   here from wallet.h.  */
-
-/** A transaction with a merkle branch linking it to the block chain. */
+/**
+ * A transaction with a merkle branch linking it to the block chain.
+ * Moved from wallet.h because it is needed for auxpow.
+ */
 class CMerkleTx
 {
-private:
-  /** Constant used in hashBlock to indicate tx has been abandoned */
-    static const uint256 ABANDON_HASH;
-
 public:
     CTransactionRef tx;
     uint256 hashBlock;
     std::vector<uint256> vMerkleBranch;
-
-    /* An nIndex == -1 means that hashBlock (in nonzero) refers to the earliest
-     * block in the chain we know this or any in-wallet dependency conflicts
-     * with. Older clients interpret nIndex == -1 as unconfirmed for backward
-     * compatibility.
-     */
     int nIndex;
 
     CMerkleTx()
     {
-        SetTx(MakeTransactionRef());
+        SetTx(MakeTransactionRef(CMutableTransaction{}));
         Init();
     }
 
-    CMerkleTx(CTransactionRef arg)
+    explicit CMerkleTx(CTransactionRef arg)
     {
         SetTx(std::move(arg));
         Init();
     }
-
-    /** Helper conversion operator to allow passing CMerkleTx where CTransaction is expected.
-     *  TODO: adapt callers and remove this operator. */
-    operator const CTransaction&() const { return *tx; }
 
     void Init()
     {
@@ -73,43 +61,12 @@ public:
         tx = std::move(arg);
     }
 
-    ADD_SERIALIZE_METHODS;
-
-    template <typename Stream, typename Operation>
-    inline void SerializationOp(Stream& s, Operation ser_action) {
-        READWRITE(tx);
-        READWRITE(hashBlock);
-        READWRITE(vMerkleBranch);
-        READWRITE(nIndex);
+    SERIALIZE_METHODS(CMerkleTx, obj)
+    {
+        READWRITE(TX_WITH_WITNESS(obj.tx), obj.hashBlock, obj.vMerkleBranch, obj.nIndex);
     }
 
-    void SetMerkleBranch(const CBlockIndex* pindex, int posInBlock);
-
-    /**
-     * Actually compute the Merkle branch.  This is used for unit tests when
-     * constructing an auxpow.  It is not needed for actual production, since
-     * we do not care in the Namecoin client how the auxpow is constructed
-     * by a miner.
-     */
-    void InitMerkleBranch(const CBlock& block, int posInBlock);
-
-    /**
-     * Return depth of transaction in blockchain:
-     * <0  : conflicts with a transaction this deep in the blockchain
-     *  0  : in memory pool, waiting to be included in a block
-     * >=1 : this many blocks deep in the main chain
-     */
-    int GetDepthInMainChain(const CBlockIndex* &pindexRet) const;
-    int GetDepthInMainChain() const { const CBlockIndex *pindexRet; return GetDepthInMainChain(pindexRet); }
-    bool IsInMainChain() const { const CBlockIndex *pindexRet; return GetDepthInMainChain(pindexRet) > 0; }
-    int GetBlocksToMaturity() const;
-    /** Pass this transaction to the mempool. Fails if absolute fee exceeds absurd fee. */
-    bool AcceptToMemoryPool(const CAmount& nAbsurdFee, CValidationState& state);
-    bool hashUnset() const { return (hashBlock.IsNull() || hashBlock == ABANDON_HASH); }
-    bool isAbandoned() const { return (hashBlock == ABANDON_HASH); }
-    void setAbandoned() { hashBlock = ABANDON_HASH; }
-
-    const uint256& GetHash() const { return tx->GetHash(); }
+    uint256 GetHash() const { return tx->GetHash().ToUint256(); }
     bool IsCoinBase() const { return tx->IsCoinBase(); }
 };
 
@@ -121,104 +78,80 @@ public:
  */
 class CAuxPow : public CMerkleTx
 {
-
-/* Public for the unit tests.  */
 public:
+    /** The merkle branch connecting the aux block to our coinbase.  */
+    std::vector<uint256> vChainMerkleBranch;
 
-  /** The merkle branch connecting the aux block to our coinbase.  */
-  std::vector<uint256> vChainMerkleBranch;
+    /** Merkle tree index of the aux block header in the coinbase.  */
+    int nChainIndex;
 
-  /** Merkle tree index of the aux block header in the coinbase.  */
-  int nChainIndex;
+    /** Parent block header (on which the real PoW is done).  */
+    CPureBlockHeader parentBlock;
 
-  /** Parent block header (on which the real PoW is done).  */
-  CPureBlockHeader parentBlock;
+    explicit CAuxPow(CTransactionRef txIn)
+        : CMerkleTx(std::move(txIn)), nChainIndex{0}
+    {}
 
-public:
+    CAuxPow()
+        : CMerkleTx(), nChainIndex{0}
+    {}
 
-  /* Prevent accidental conversion.  */
-  inline explicit CAuxPow (CTransactionRef txIn)
-    : CMerkleTx (txIn)
-  {}
+    SERIALIZE_METHODS(CAuxPow, obj)
+    {
+        READWRITE(AsBase<CMerkleTx>(obj), obj.vChainMerkleBranch, obj.nChainIndex, obj.parentBlock);
+    }
 
-  inline CAuxPow ()
-    : CMerkleTx ()
-  {}
+    /**
+     * Check the auxpow, given the merge-mined block's hash and our chain ID.
+     * Note that this does not verify the actual PoW on the parent block!  It
+     * just confirms that all the merkle branches are valid.
+     * @param hashAuxBlock Hash of the merge-mined block.
+     * @param nChainId The auxpow chain ID of the block to check.
+     * @param params Consensus parameters.
+     * @return True if the auxpow is valid.
+     */
+    bool check(const uint256& hashAuxBlock, int nChainId,
+               const Consensus::Params& params) const;
 
-  ADD_SERIALIZE_METHODS;
+    /**
+     * Get the parent block's hash.
+     * @return The parent block hash.
+     */
+    uint256 getParentBlockHash() const
+    {
+        return parentBlock.GetHash();
+    }
 
-  template<typename Stream, typename Operation>
-    inline void
-    SerializationOp (Stream& s, Operation ser_action)
-  {
-    READWRITE (*static_cast<CMerkleTx*> (this));
-    READWRITE (vChainMerkleBranch);
-    READWRITE (nChainIndex);
-    READWRITE (parentBlock);
-  }
+    /**
+     * Calculate the expected index in the merkle tree.
+     * @param nNonce The coinbase's nonce value.
+     * @param nChainId The chain ID.
+     * @param h The merkle block height.
+     * @return The expected index for the aux hash.
+     */
+    static int getExpectedIndex(uint32_t nNonce, int nChainId, unsigned h);
 
-  /**
-   * Check the auxpow, given the merge-mined block's hash and our chain ID.
-   * Note that this does not verify the actual PoW on the parent block!  It
-   * just confirms that all the merkle branches are valid.
-   * @param hashAuxBlock Hash of the merge-mined block.
-   * @param nChainId The auxpow chain ID of the block to check.
-   * @param params Consensus parameters.
-   * @return True if the auxpow is valid.
-   */
-  bool check (const uint256& hashAuxBlock, int nChainId,
-              const Consensus::Params& params) const;
+    /**
+     * Check a merkle branch.  This used to be in CBlock, but was removed upstream.
+     */
+    static uint256 CheckMerkleBranch(uint256 hash,
+                                     const std::vector<uint256>& vMerkleBranch,
+                                     int nIndex);
 
-  /**
-   * Get the parent block's hash.  This is used to verify that it
-   * satisfies the PoW requirement.
-   * @return The parent block hash.
-   */
-  inline uint256
-  getParentBlockHash () const
-  {
-    return parentBlock.GetHash ();
-  }
+    /**
+     * Initialise the auxpow of the given block header.
+     * @param header The header to set the auxpow on.
+     */
+    static void initAuxPow(CBlockHeader& header);
 
-  /**
-   * Calculate the expected index in the merkle tree.  This is also used
-   * for the test-suite.
-   * @param nNonce The coinbase's nonce value.
-   * @param nChainId The chain ID.
-   * @param h The merkle block height.
-   * @return The expected index for the aux hash.
-   */
-  static int getExpectedIndex (uint32_t nNonce, int nChainId, unsigned h);
-
-  /**
-   * Check a merkle branch.  This used to be in CBlock, but was removed
-   * upstream.  Thus include it here now.
-   */
-  static uint256 CheckMerkleBranch (uint256 hash,
-                                    const std::vector<uint256>& vMerkleBranch,
-                                    int nIndex);
-
-  /**
-   * Initialise the auxpow of the given block header.  This constructs
-   * a minimal CAuxPow object with a minimal parent block and sets
-   * it on the block header.  The auxpow is not necessarily valid, but
-   * can be "mined" to make it valid.
-   * @param header The header to set the auxpow on.
-   */
-  static void initAuxPow (CBlockHeader& header);
-  inline std::string ToString() const
-  {
-      std::stringstream s;
-      s << strprintf("CAuxPow(version=%d, hash=%s, hashPrevBlock=%s, hashMerkleRoot=%s, nTime=%u, nBits=%08x, nNonce=%u)\n",
-          parentBlock.nVersion.GetFullVersion(),
-          parentBlock.GetHash().ToString().c_str(),
-          parentBlock.hashPrevBlock.ToString().c_str(),
-          parentBlock.hashMerkleRoot.ToString().c_str(),
-          parentBlock.nTime,
-          parentBlock.nBits,
-          parentBlock.nNonce);
-      return s.str();
-  }
+    std::string ToString() const
+    {
+        std::stringstream s;
+        s << "CAuxPow(ver=" << parentBlock.nVersion.GetFullVersion()
+          << ", parentHash=" << parentBlock.GetHash().ToString()
+          << ", nChainIndex=" << nChainIndex << ")";
+        return s.str();
+    }
 };
 
 #endif // BITCOIN_AUXPOW_H

@@ -1,56 +1,70 @@
-// Copyright (c) 2014-2016 The Bitcoin Core developers
-// Copyright (c) 2017-2019 The Meowcoin Core developers
+// Copyright (c) 2014-2022 The Meowcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef MEOWCOIN_COMPAT_BYTESWAP_H
-#define MEOWCOIN_COMPAT_BYTESWAP_H
+#ifndef BITCOIN_COMPAT_BYTESWAP_H
+#define BITCOIN_COMPAT_BYTESWAP_H
 
-#if defined(HAVE_CONFIG_H)
-#include "config/meowcoin-config.h"
+#include <cstdint>
+#ifdef _MSC_VER
+#include <cstdlib>
 #endif
 
-#include <stdint.h>
 
-#if defined(HAVE_BYTESWAP_H)
-#include <byteswap.h>
+// All internal_bswap_* functions can be replaced with std::byteswap once we
+// require c++23. Both libstdc++ and libc++ implement std::byteswap via these
+// builtins.
+
+#ifndef DISABLE_BUILTIN_BSWAPS
+#  if defined __has_builtin
+#    if __has_builtin(__builtin_bswap16)
+#      define meowcoin_builtin_bswap16(x) __builtin_bswap16(x)
+#    endif
+#    if __has_builtin(__builtin_bswap32)
+#      define meowcoin_builtin_bswap32(x) __builtin_bswap32(x)
+#    endif
+#    if __has_builtin(__builtin_bswap64)
+#      define meowcoin_builtin_bswap64(x) __builtin_bswap64(x)
+#    endif
+#  elif defined(_MSC_VER)
+#      define meowcoin_builtin_bswap16(x) _byteswap_ushort(x)
+#      define meowcoin_builtin_bswap32(x) _byteswap_ulong(x)
+#      define meowcoin_builtin_bswap64(x) _byteswap_uint64(x)
+#  endif
 #endif
 
-#if defined(__APPLE__)
+// MSVC's _byteswap_* functions are not constexpr
 
-#if !defined(bswap_16)
-
-// Mac OS X / Darwin features; we include a check for bswap_16 because if it is already defined, protobuf has
-// defined these macros for us already; if it isn't, we do it ourselves. In either case, we get the exact same
-// result regardless which path was taken
-#include <libkern/OSByteOrder.h>
-#define bswap_16(x) OSSwapInt16(x)
-#define bswap_32(x) OSSwapInt32(x)
-#define bswap_64(x) OSSwapInt64(x)
-
-#endif // !defined(bswap_16)
-
+#ifndef _MSC_VER
+#define BSWAP_CONSTEXPR constexpr
 #else
-// Non-Mac OS X / non-Darwin
+#define BSWAP_CONSTEXPR
+#endif
 
-#if HAVE_DECL_BSWAP_16 == 0
-inline uint16_t bswap_16(uint16_t x)
+inline BSWAP_CONSTEXPR uint16_t internal_bswap_16(uint16_t x)
 {
+#ifdef meowcoin_builtin_bswap16
+    return meowcoin_builtin_bswap16(x);
+#else
     return (x >> 8) | (x << 8);
+#endif
 }
-#endif // HAVE_DECL_BSWAP16
 
-#if HAVE_DECL_BSWAP_32 == 0
-inline uint32_t bswap_32(uint32_t x)
+inline BSWAP_CONSTEXPR uint32_t internal_bswap_32(uint32_t x)
 {
+#ifdef meowcoin_builtin_bswap32
+    return meowcoin_builtin_bswap32(x);
+#else
     return (((x & 0xff000000U) >> 24) | ((x & 0x00ff0000U) >>  8) |
             ((x & 0x0000ff00U) <<  8) | ((x & 0x000000ffU) << 24));
+#endif
 }
-#endif // HAVE_DECL_BSWAP32
 
-#if HAVE_DECL_BSWAP_64 == 0
-inline uint64_t bswap_64(uint64_t x)
+inline BSWAP_CONSTEXPR uint64_t internal_bswap_64(uint64_t x)
 {
+#ifdef meowcoin_builtin_bswap64
+    return meowcoin_builtin_bswap64(x);
+#else
      return (((x & 0xff00000000000000ull) >> 56)
           | ((x & 0x00ff000000000000ull) >> 40)
           | ((x & 0x0000ff0000000000ull) >> 24)
@@ -59,9 +73,7 @@ inline uint64_t bswap_64(uint64_t x)
           | ((x & 0x0000000000ff0000ull) << 24)
           | ((x & 0x000000000000ff00ull) << 40)
           | ((x & 0x00000000000000ffull) << 56));
+#endif
 }
-#endif // HAVE_DECL_BSWAP64
 
-#endif // defined(__APPLE__)
-
-#endif // MEOWCOIN_COMPAT_BYTESWAP_H
+#endif // BITCOIN_COMPAT_BYTESWAP_H

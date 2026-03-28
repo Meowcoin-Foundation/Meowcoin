@@ -1,12 +1,11 @@
-// Copyright (c) 2011-2016 The Bitcoin Core developers
-// Copyright (c) 2017-2021 The Meowcoin Core developers
+// Copyright (c) 2011-2021 The Meowcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef MEOWCOIN_QT_RECEIVECOINSDIALOG_H
-#define MEOWCOIN_QT_RECEIVECOINSDIALOG_H
+#ifndef BITCOIN_QT_RECEIVECOINSDIALOG_H
+#define BITCOIN_QT_RECEIVECOINSDIALOG_H
 
-#include "guiutil.h"
+#include <qt/guiutil.h>
 
 #include <QDialog>
 #include <QHeaderView>
@@ -27,7 +26,7 @@ QT_BEGIN_NAMESPACE
 class QModelIndex;
 QT_END_NAMESPACE
 
-/** Dialog for requesting payment of meows */
+/** Dialog for requesting payment of meowcoins */
 class ReceiveCoinsDialog : public QDialog
 {
     Q_OBJECT
@@ -40,25 +39,23 @@ public:
         MINIMUM_COLUMN_WIDTH = 130
     };
 
-    explicit ReceiveCoinsDialog(const PlatformStyle *platformStyle, QWidget *parent = 0);
+    explicit ReceiveCoinsDialog(const PlatformStyle *platformStyle, QWidget *parent = nullptr);
     ~ReceiveCoinsDialog();
 
     void setModel(WalletModel *model);
-    void setupRequestFrame(const PlatformStyle *platformStyle);
-    void setupHistoryFrame(const PlatformStyle *platformStyle);
 
 public Q_SLOTS:
     void clear();
-    void reject();
-    void accept();
-
-protected:
-    virtual void keyPressEvent(QKeyEvent *event);
+    void reject() override;
+    void accept() override;
 
 private:
     Ui::ReceiveCoinsDialog *ui;
-    WalletModel *model;
+    WalletModel* model{nullptr};
     QMenu *contextMenu;
+    QAction* copyLabelAction;
+    QAction* copyMessageAction;
+    QAction* copyAmountAction;
     const PlatformStyle *platformStyle;
 
     QModelIndex selectedRow();
@@ -73,9 +70,10 @@ private Q_SLOTS:
     void updateDisplayUnit();
     void showMenu(const QPoint &point);
     void copyURI();
+    void copyAddress();
     void copyLabel();
     void copyMessage();
     void copyAmount();
 };
 
-#endif // MEOWCOIN_QT_RECEIVECOINSDIALOG_H
+#endif // BITCOIN_QT_RECEIVECOINSDIALOG_H

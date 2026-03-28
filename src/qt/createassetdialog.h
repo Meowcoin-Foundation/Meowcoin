@@ -3,10 +3,10 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef MEOWCOIN_QT_CREATEASSETDIALOG_H
-#define MEOWCOIN_QT_CREATEASSETDIALOG_H
+#ifndef AVIAN_QT_CREATEASSETDIALOG_H
+#define AVIAN_QT_CREATEASSETDIALOG_H
 
-#include "walletmodel.h"
+#include <qt/walletmodel.h>
 
 #include <QDialog>
 
@@ -31,7 +31,7 @@ class CreateAssetDialog : public QDialog
 Q_OBJECT
 
 public:
-    explicit CreateAssetDialog(const PlatformStyle *platformStyle, QWidget *parent = 0);
+    explicit CreateAssetDialog(const PlatformStyle *platformStyle, QWidget *parent = nullptr);
     ~CreateAssetDialog();
 
     void setClientModel(ClientModel *clientModel);
@@ -68,6 +68,7 @@ private:
     bool checkedAvailablity = false;
 
     void toggleIPFSText();
+    void toggleANSText();
     void setUpValues();
     void showMessage(QString string);
     void showValidMessage(QString string);
@@ -86,11 +87,11 @@ private:
     void setQualifierSelected();
     void clearSelected();
 
-    //CoinControl
+    // CoinControl
     // Update the passed in CCoinControl with state from the GUI
-    void updateCoinControlState(CCoinControl& ctrl);
+    void updateCoinControlState(wallet::CCoinControl& ctrl);
 
-    //Fee
+    // Fee
     void updateFeeMinimizedLabel();
     void minimizeFeeSection(bool fMinimize);
 
@@ -100,11 +101,14 @@ private:
 
 private Q_SLOTS:
     void ipfsStateChanged();
+    void ansStateChanged();
     void checkAvailabilityClicked();
     void openIpfsBrowser();
     void onNameChanged(QString name);
     void onAddressNameChanged(QString address);
     void onIPFSHashChanged(QString hash);
+    void onANSTypeChanged(int index);
+    void onANSDataChanged(QString data);
     void onCreateAssetClicked();
     void onUnitChanged(int value);
     void onChangeAddressChanged(QString changeAddress);
@@ -136,16 +140,15 @@ private Q_SLOTS:
     void updateSmartFeeLabel();
     void feeControlFeatureChanged(bool);
 
-    void setBalance(const CAmount& balance, const CAmount& unconfirmedBalance, const CAmount& immatureBalance,
-                    const CAmount& watchOnlyBalance, const CAmount& watchUnconfBalance, const CAmount& watchImmatureBalance);
+    void setBalance(const interfaces::WalletBalances& balances);
     void updateDisplayUnit();
 
-
+public Q_SLOTS:
     void focusSubAsset(const QModelIndex& index);
     void focusUniqueAsset(const QModelIndex& index);
 
 protected:
-    bool eventFilter( QObject* sender, QEvent* event);
+    bool eventFilter( QObject* sender, QEvent* event) override;
 
 
 Q_SIGNALS:
@@ -153,4 +156,4 @@ Q_SIGNALS:
     void message(const QString &title, const QString &message, unsigned int style);
 };
 
-#endif // MEOWCOIN_QT_CREATEASSETDIALOG_H
+#endif // AVIAN_QT_CREATEASSETDIALOG_H

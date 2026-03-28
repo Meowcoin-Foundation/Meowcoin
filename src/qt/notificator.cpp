@@ -1,14 +1,13 @@
-// Copyright (c) 2011-2016 The Bitcoin Core developers
-// Copyright (c) 2017-2019 The Meowcoin Core developers
+// Copyright (c) 2011-present The Meowcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
+#include <meowcoin-build-config.h> // IWYU pragma: keep
 
 #include <qt/notificator.h>
 
 #include <QApplication>
 #include <QByteArray>
-#include <QIcon>
-#include <QDBusInterface>
 #include <QImageWriter>
 #include <QMessageBox>
 #include <QMetaType>
@@ -17,17 +16,12 @@
 #include <QTemporaryFile>
 #include <QVariant>
 #ifdef USE_DBUS
-#include "notificator.h"
-#include <stdint.h>
+#include <QDBusMetaType>
 #include <QtDBus>
+#include <cstdint>
 #endif
-// Include ApplicationServices.h after QtDbus to avoid redefinition of check().
-// This affects at least OSX 10.6. See /usr/include/AssertMacros.h for details.
-// Note: This could also be worked around using:
-// #define __ASSERT_MACROS_DEFINE_VERSIONS_WITHOUT_UNDERSCORES 0
-#ifdef Q_OS_MAC
-#include <ApplicationServices/ApplicationServices.h>
-#include "macnotificationhandler.h"
+#ifdef Q_OS_MACOS
+#include <qt/macnotificationhandler.h>
 #endif
 
 
@@ -40,11 +34,7 @@ Notificator::Notificator(const QString &_programName, QSystemTrayIcon *_trayIcon
     QObject(_parent),
     parent(_parent),
     programName(_programName),
-    mode(None),
     trayIcon(_trayIcon)
-#ifdef USE_DBUS
-    ,interface(nullptr)
-#endif
 {
     if(_trayIcon && _trayIcon->supportsMessages())
     {
@@ -58,7 +48,7 @@ Notificator::Notificator(const QString &_programName, QSystemTrayIcon *_trayIcon
         mode = Freedesktop;
     }
 #endif
-#ifdef Q_OS_MAC
+#ifdef Q_OS_MACOS
     // check if users OS has support for NSUserNotification
     if( MacNotificationHandler::instance()->hasUserNotificationCenterSupport()) {
         mode = UserNotificationCenter;
@@ -75,14 +65,12 @@ Notificator::~Notificator()
 
 #ifdef USE_DBUS
 
-// Loosely based on http://www.qtcentre.org/archive/index.php/t-25879.html
+// Loosely based on https://www.qtcentre.org/archive/index.php/t-25879.html
 class FreedesktopImage
 {
 public:
-    FreedesktopImage() {}
+    FreedesktopImage() = default;
     explicit FreedesktopImage(const QImage &img);
-
-    static int metaType();
 
     // Image to variant that can be marshalled over DBus
     static QVariant toVariant(const QImage &img);
@@ -122,10 +110,10 @@ FreedesktopImage::FreedesktopImage(const QImage &img):
 
     for(unsigned int ptr = 0; ptr < num_pixels; ++ptr)
     {
-        image[ptr*BYTES_PER_PIXEL+0] = data[ptr] >> 16; // R
-        image[ptr*BYTES_PER_PIXEL+1] = data[ptr] >> 8;  // G
-        image[ptr*BYTES_PER_PIXEL+2] = data[ptr];       // B
-        image[ptr*BYTES_PER_PIXEL+3] = data[ptr] >> 24; // A
+        image[ptr * BYTES_PER_PIXEL + 0] = char(data[ptr] >> 16); // R
+        image[ptr * BYTES_PER_PIXEL + 1] = char(data[ptr] >> 8);  // G
+        image[ptr * BYTES_PER_PIXEL + 2] = char(data[ptr]);       // B
+        image[ptr * BYTES_PER_PIXEL + 3] = char(data[ptr] >> 24); // A
     }
 }
 
@@ -145,27 +133,21 @@ const QDBusArgument &operator>>(const QDBusArgument &a, FreedesktopImage &i)
     return a;
 }
 
-int FreedesktopImage::metaType()
-{
-    return qDBusRegisterMetaType<FreedesktopImage>();
-}
-
 QVariant FreedesktopImage::toVariant(const QImage &img)
 {
     FreedesktopImage fimg(img);
-    return QVariant(FreedesktopImage::metaType(), &fimg);
+    return QVariant(qDBusRegisterMetaType<FreedesktopImage>(), &fimg);
 }
 
 void Notificator::notifyDBus(Class cls, const QString &title, const QString &text, const QIcon &icon, int millisTimeout)
 {
-    Q_UNUSED(cls);
-    // Arguments for DBus call:
+    // Arguments for DBus "Notify" call:
     QList<QVariant> args;
 
     // Program Name:
     args.append(programName);
 
-    // Unique ID of this notification type:
+    // Replaces ID; A value of 0 means that this notification won't replace any existing notifications:
     args.append(0U);
 
     // Application Icon, empty string
@@ -213,9 +195,8 @@ void Notificator::notifyDBus(Class cls, const QString &title, const QString &tex
 }
 #endif
 
-void Notificator::notifySystray(Class cls, const QString &title, const QString &text, const QIcon &icon, int millisTimeout)
+void Notificator::notifySystray(Class cls, const QString &title, const QString &text, int millisTimeout)
 {
-    Q_UNUSED(icon);
     QSystemTrayIcon::MessageIcon sicon = QSystemTrayIcon::NoIcon;
     switch(cls) // Set icon based on class
     {
@@ -226,13 +207,12 @@ void Notificator::notifySystray(Class cls, const QString &title, const QString &
     trayIcon->showMessage(title, text, sicon, millisTimeout);
 }
 
-// Based on Qt's tray icon implementation
-#ifdef Q_OS_MAC
-void Notificator::notifyMacUserNotificationCenter(Class cls, const QString &title, const QString &text, const QIcon &icon) {
+#ifdef Q_OS_MACOS
+void Notificator::notifyMacUserNotificationCenter(const QString &title, const QString &text)
+{
     // icon is not supported by the user notification center yet. OSX will use the app icon.
     MacNotificationHandler::instance()->showNotification(title, text);
 }
-
 #endif
 
 void Notificator::notify(Class cls, const QString &title, const QString &text, const QIcon &icon, int millisTimeout)
@@ -245,11 +225,11 @@ void Notificator::notify(Class cls, const QString &title, const QString &text, c
         break;
 #endif
     case QSystemTray:
-        notifySystray(cls, title, text, icon, millisTimeout);
+        notifySystray(cls, title, text, millisTimeout);
         break;
-#ifdef Q_OS_MAC
+#ifdef Q_OS_MACOS
     case UserNotificationCenter:
-        notifyMacUserNotificationCenter(cls, title, text, icon);
+        notifyMacUserNotificationCenter(title, text);
         break;
 #endif
     default:

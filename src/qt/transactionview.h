@@ -1,17 +1,20 @@
-// Copyright (c) 2011-2016 The Bitcoin Core developers
-// Copyright (c) 2017-2021 The Meowcoin Core developers
+// Copyright (c) 2011-2021 The Meowcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef MEOWCOIN_QT_TRANSACTIONVIEW_H
-#define MEOWCOIN_QT_TRANSACTIONVIEW_H
+#ifndef BITCOIN_QT_TRANSACTIONVIEW_H
+#define BITCOIN_QT_TRANSACTIONVIEW_H
 
-#include "guiutil.h"
+#include <qt/guiutil.h>
+
+#include <primitives/transaction_identifier.h>
+#include <uint256.h>
 
 #include <QWidget>
 #include <QKeyEvent>
 
 class PlatformStyle;
+class TransactionDescDialog;
 class TransactionFilterProxy;
 class WalletModel;
 
@@ -22,7 +25,6 @@ class QFrame;
 class QLineEdit;
 class QMenu;
 class QModelIndex;
-class QSignalMapper;
 class QTableView;
 QT_END_NAMESPACE
 
@@ -34,10 +36,10 @@ class TransactionView : public QWidget
     Q_OBJECT
 
 public:
-    explicit TransactionView(const PlatformStyle *platformStyle, QWidget *parent = 0);
+    explicit TransactionView(const PlatformStyle *platformStyle, QWidget *parent = nullptr);
+    ~TransactionView();
 
     void setModel(WalletModel *model);
-    void showAssets();
 
     // Date ranges for filter
     enum DateEnum
@@ -53,40 +55,42 @@ public:
 
     enum ColumnWidths {
         STATUS_COLUMN_WIDTH = 30,
-        WATCHONLY_COLUMN_WIDTH = 23,
         DATE_COLUMN_WIDTH = 120,
         TYPE_COLUMN_WIDTH = 113,
-        ASSET_NAME_MINIMUM_COLUMN_WIDTH = 200,
         AMOUNT_MINIMUM_COLUMN_WIDTH = 120,
         MINIMUM_COLUMN_WIDTH = 23
     };
 
+protected:
+    void changeEvent(QEvent* e) override;
+
 private:
-    WalletModel *model;
-    TransactionFilterProxy *transactionProxyModel;
-    QTableView *transactionView;
+    WalletModel *model{nullptr};
+    TransactionFilterProxy *transactionProxyModel{nullptr};
+    QTableView *transactionView{nullptr};
 
     QComboBox *dateWidget;
     QComboBox *typeWidget;
-    QComboBox *watchOnlyWidget;
-    QLineEdit *addressWidget;
+    QLineEdit *search_widget;
     QLineEdit *amountWidget;
-    QLineEdit *assetNameWidget;
-
-    bool showingAssets;
 
     QMenu *contextMenu;
-    QSignalMapper *mapperThirdPartyTxUrls;
 
     QFrame *dateRangeWidget;
     QDateTimeEdit *dateFrom;
     QDateTimeEdit *dateTo;
-    QAction *abandonAction;
-    QAction *bumpFeeAction;
+    QAction *abandonAction{nullptr};
+    QAction *bumpFeeAction{nullptr};
+    QAction *copyAddressAction{nullptr};
+    QAction *copyLabelAction{nullptr};
 
     QWidget *createDateRangeWidget();
 
-    bool eventFilter(QObject *obj, QEvent *event);
+    bool eventFilter(QObject *obj, QEvent *event) override;
+
+    const PlatformStyle* m_platform_style;
+
+    QList<TransactionDescDialog*> m_opened_dialogs;
 
 private Q_SLOTS:
     void contextualMenu(const QPoint &);
@@ -95,15 +99,13 @@ private Q_SLOTS:
     void copyAddress();
     void editLabel();
     void copyLabel();
-    void copyAssetName();
     void copyAmount();
     void copyTxID();
     void copyTxHex();
     void copyTxPlainText();
     void openThirdPartyTxUrl(QString url);
-    void updateWatchOnlyColumn(bool fHaveWatchOnly);
     void abandonTx();
-    void bumpFee();
+    void bumpFee(bool checked);
 
 Q_SIGNALS:
     void doubleClicked(const QModelIndex&);
@@ -111,16 +113,17 @@ Q_SIGNALS:
     /**  Fired when a message should be reported to the user */
     void message(const QString &title, const QString &message, unsigned int style);
 
+    void bumpedFee(const Txid& txid);
+
 public Q_SLOTS:
     void chooseDate(int idx);
     void chooseType(int idx);
-    void chooseWatchonly(int idx);
     void changedAmount();
-    void changedAssetName();
-    void changedPrefix();
+    void changedSearch();
     void exportClicked();
+    void closeOpenedDialogs();
     void focusTransaction(const QModelIndex&);
-
+    void focusTransaction(const Txid& txid);
 };
 
-#endif // MEOWCOIN_QT_TRANSACTIONVIEW_H
+#endif // BITCOIN_QT_TRANSACTIONVIEW_H

@@ -3,10 +3,10 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef MEOWCOIN_QT_REISSUEASSETDIALOG_H
-#define MEOWCOIN_QT_REISSUEASSETDIALOG_H
+#ifndef AVIAN_QT_REISSUEASSETDIALOG_H
+#define AVIAN_QT_REISSUEASSETDIALOG_H
 
-#include "walletmodel.h"
+#include <qt/walletmodel.h>
 
 #include <QDialog>
 
@@ -18,8 +18,9 @@ class QStringListModel;
 class QSortFilterProxyModel;
 class QCompleter;
 
-namespace Ui {
-    class ReissueAssetDialog;
+namespace Ui
+{
+class ReissueAssetDialog;
 }
 
 QT_BEGIN_NAMESPACE
@@ -29,22 +30,23 @@ QT_END_NAMESPACE
 /** Dialog showing transaction details. */
 class ReissueAssetDialog : public QDialog
 {
-Q_OBJECT
+    Q_OBJECT
 
 public:
-    explicit ReissueAssetDialog(const PlatformStyle *platformStyle, QWidget *parent = 0);
+    explicit ReissueAssetDialog(const PlatformStyle* platformStyle, QWidget* parent = nullptr);
     ~ReissueAssetDialog();
 
-    void setClientModel(ClientModel *clientModel);
-    void setModel(WalletModel *model);
+    void setClientModel(ClientModel* clientModel);
+    void setModel(WalletModel* model);
 
     QString formatGreen;
     QString formatBlack;
 
-    void setupCoinControlFrame(const PlatformStyle *platformStyle);
-    void setupAssetDataView(const PlatformStyle *platformStyle);
-    void setupFeeControl(const PlatformStyle *platformStyle);
+    void setupCoinControlFrame(const PlatformStyle* platformStyle);
+    void setupAssetDataView(const PlatformStyle* platformStyle);
+    void setupFeeControl(const PlatformStyle* platformStyle);
     void updateAssetsList();
+    void updateAssetsListAsync();
 
     void clear();
 
@@ -53,15 +55,16 @@ public:
     QCompleter* completer;
 
 private:
-    Ui::ReissueAssetDialog *ui;
-    ClientModel *clientModel;
-    WalletModel *model;
-    const PlatformStyle *platformStyle;
+    Ui::ReissueAssetDialog* ui;
+    ClientModel* clientModel;
+    WalletModel* model;
+    const PlatformStyle* platformStyle;
     bool fFeeMinimized;
 
-    CNewAsset *asset;
+    CNewAsset* asset;
 
     void toggleIPFSText();
+    void toggleANSText();
     void setUpValues();
     void showMessage(QString string);
     void showValidMessage(QString string);
@@ -74,15 +77,15 @@ private:
     void buildUpdatedData();
     void setDisplayedDataToNone();
 
-    //CoinControl
-    // Update the passed in CCoinControl with state from the GUI
-    void updateCoinControlState(CCoinControl& ctrl);
+    // CoinControl
+    //  Update the passed in CCoinControl with state from the GUI
+    void updateCoinControlState(wallet::CCoinControl& ctrl);
 
-    //Fee
+    // Fee
     void updateFeeMinimizedLabel();
     void minimizeFeeSection(bool fMinimize);
 
-    //Validation of IPFS
+    // Validation of IPFS
     bool checkIPFSHash(QString hash);
 
     void restrictedAssetSelected();
@@ -92,13 +95,16 @@ private:
     void hideInvalidVerifierStringMessage();
 
 protected:
-    bool eventFilter( QObject* sender, QEvent* event);
+    bool eventFilter(QObject* sender, QEvent* event) override;
 
 private Q_SLOTS:
     void onAssetSelected(int index);
     void onQuantityChanged(double qty);
     void onIPFSStateChanged();
+    void onANSStateChanged();
     void onIPFSHashChanged(QString hash);
+    void onANSDataChanged(QString data);
+    void onANSTypeChanged(int index);
     void onAddressNameChanged(QString address);
     void onReissueAssetClicked();
     void onReissueBoxChanged();
@@ -107,11 +113,11 @@ private Q_SLOTS:
     void onVerifierStringChanged(QString verifier);
     void openIpfsBrowser();
 
-    //CoinControl
+    // CoinControl
     void coinControlFeatureChanged(bool);
     void coinControlButtonClicked();
     void coinControlChangeChecked(int);
-    void coinControlChangeEdited(const QString &);
+    void coinControlChangeEdited(const QString&);
     void coinControlClipboardQuantity();
     void coinControlClipboardAmount();
     void coinControlClipboardFee();
@@ -121,7 +127,7 @@ private Q_SLOTS:
     void coinControlClipboardChange();
     void coinControlUpdateLabels();
 
-    //Fee
+    // Fee
     void on_buttonChooseFee_clicked();
     void on_buttonMinimizeFee_clicked();
     void setMinimumFee();
@@ -130,15 +136,18 @@ private Q_SLOTS:
     void updateSmartFeeLabel();
     void feeControlFeatureChanged(bool);
 
-    void setBalance(const CAmount& balance, const CAmount& unconfirmedBalance, const CAmount& immatureBalance,
-                    const CAmount& watchOnlyBalance, const CAmount& watchUnconfBalance, const CAmount& watchImmatureBalance);
+    void setBalance(const interfaces::WalletBalances& balances);
     void updateDisplayUnit();
 
-    void focusReissueAsset(const QModelIndex &index);
+public Q_SLOTS:
+    void focusReissueAsset(const QModelIndex& index);
 
 Q_SIGNALS:
     // Fired when a message should be reported to the user
-    void message(const QString &title, const QString &message, unsigned int style);
+    void message(const QString& title, const QString& message, unsigned int style);
+
+private Q_SLOTS:
+    void onAssetsListLoaded(QStringList assetsList);
 };
 
-#endif // MEOWCOIN_QT_REISSUEASSETDIALOG_H
+#endif // AVIAN_QT_REISSUEASSETDIALOG_H

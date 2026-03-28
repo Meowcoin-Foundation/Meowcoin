@@ -1,33 +1,33 @@
 # /etc/conf.d/meowcoind: config file for /etc/init.d/meowcoind
 
 # Config file location
-#MEOWCOIND_CONFIGFILE="/etc/meowcoin/meowcoin.conf"
+#BITCOIND_CONFIGFILE="/etc/meowcoin/meowcoin.conf"
 
-# What directory to write pidfile to?  (created and owned by $MEOWCOIND_USER)
-#MEOWCOIND_PIDDIR="/var/run/meowcoind"
+# What directory to write pidfile to?  (created and owned by $BITCOIND_USER)
+#BITCOIND_PIDDIR="/var/run/meowcoind"
 
 # What filename to give the pidfile
-#MEOWCOIND_PIDFILE="${MEOWCOIND_PIDDIR}/meowcoind.pid"
+#BITCOIND_PIDFILE="${BITCOIND_PIDDIR}/meowcoind.pid"
 
 # Where to write meowcoind data (be mindful that the blockchain is large)
-#MEOWCOIND_DATADIR="/var/lib/meowcoind"
+#BITCOIND_DATADIR="/var/lib/meowcoind"
 
 # User and group to own meowcoind process
-#MEOWCOIND_USER="meowcoin"
-#MEOWCOIND_GROUP="meowcoin"
+#BITCOIND_USER="meowcoin"
+#BITCOIND_GROUP="meowcoin"
 
 # Path to meowcoind executable
-#MEOWCOIND_BIN="/usr/bin/meowcoind"
+#BITCOIND_BIN="/usr/bin/meowcoind"
 
 # Nice value to run meowcoind under
-#MEOWCOIND_NICE=0
+#BITCOIND_NICE=0
 
 # Additional options (avoid -conf and -datadir, use flags above)
-#MEOWCOIND_OPTS=""
+#BITCOIND_OPTS=""
 
 # The timeout in seconds OpenRC will wait for meowcoind to terminate
 # after a SIGTERM has been raised.
 # Note that this will be mapped as argument to start-stop-daemon's
 # '--retry' option, which means you can specify a retry schedule
 # here. For more information see man 8 start-stop-daemon.
-MEOWCOIND_SIGTERM_TIMEOUT=60
+BITCOIND_SIGTERM_TIMEOUT=600

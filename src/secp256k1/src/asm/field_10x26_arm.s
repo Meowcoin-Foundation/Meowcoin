@@ -1,9 +1,9 @@
 @ vim: set tabstop=8 softtabstop=8 shiftwidth=8 noexpandtab syntax=armasm:
-/**********************************************************************
- * Copyright (c) 2014 Wladimir J. van der Laan                        *
- * Distributed under the MIT software license, see the accompanying   *
- * file COPYING or http://www.opensource.org/licenses/mit-license.php.*
- **********************************************************************/
+/***********************************************************************
+ * Copyright (c) 2014 Wladimir J. van der Laan                         *
+ * Distributed under the MIT software license, see the accompanying    *
+ * file COPYING or https://www.opensource.org/licenses/mit-license.php.*
+ ***********************************************************************/
 /*
 ARM implementation of field_10x26 inner loops.
 
@@ -29,6 +29,7 @@ Note:
 	.align	2
 	.global secp256k1_fe_mul_inner
 	.type	secp256k1_fe_mul_inner, %function
+	.hidden secp256k1_fe_mul_inner
 	@ Arguments:
 	@  r0  r      Restrict: can overlap with a, not with b
 	@  r1  a
@@ -516,6 +517,7 @@ secp256k1_fe_mul_inner:
 	.align	2
 	.global secp256k1_fe_sqr_inner
 	.type	secp256k1_fe_sqr_inner, %function
+	.hidden secp256k1_fe_sqr_inner
 	@ Arguments:
 	@  r0  r	 Can overlap with a
 	@  r1  a
@@ -911,3 +913,4 @@ secp256k1_fe_sqr_inner:
 	ldmfd	sp!, {r4, r5, r6, r7, r8, r9, r10, r11, pc}
 	.size	secp256k1_fe_sqr_inner, .-secp256k1_fe_sqr_inner
 
+	.section .note.GNU-stack,"",%progbits

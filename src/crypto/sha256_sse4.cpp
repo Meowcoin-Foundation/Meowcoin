@@ -1,19 +1,29 @@
-// Copyright (c) 2017 The Bitcoin Core developers
-// Copyright (c) 2017-2019 The Meowcoin Core developers
+// Copyright (c) 2017-present The Meowcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 //
 // This is a translation to GCC extended asm syntax from YASM code by Intel
 // (available at the bottom of this file).
 
-#include <stdint.h>
-#include <stdlib.h>
+#include <cstdint>
+#include <cstdlib>
 
 #if defined(__x86_64__) || defined(__amd64__)
 
 namespace sha256_sse4
 {
 void Transform(uint32_t* s, const unsigned char* chunk, size_t blocks)
+#if defined(__clang__)
+  /*
+  clang is unable to compile this with -O0 and -fsanitize=address.
+  See upstream bug: https://github.com/llvm/llvm-project/issues/92182.
+  This also fails to compile with -O2, -fcf-protection & -fsanitize=address.
+  See https://github.com/meowcoin/meowcoin/issues/31913.
+  */
+#if __has_feature(address_sanitizer)
+  __attribute__((no_sanitize("address")))
+#endif
+#endif
 {
     static const uint32_t K256 alignas(16) [] = {
         0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5,
@@ -959,7 +969,7 @@ void Transform(uint32_t* s, const unsigned char* chunk, size_t blocks)
 
 /*
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-; Copyright (c) 2012, Intel Corporation
+; Copyright (c) 2012, Intel Corporation 
 ; 
 ; All rights reserved. 
 ; 
@@ -1002,7 +1012,7 @@ void Transform(uint32_t* s, const unsigned char* chunk, size_t blocks)
 ; This code is described in an Intel White-Paper:
 ; "Fast SHA-256 Implementations on Intel Architecture Processors"
 ;
-; To find it, surf to http://www.intel.com/p/en_US/embedded 
+; To find it, surf to https://www.intel.com/p/en_US/embedded
 ; and search for that title.
 ; The paper is expected to be released roughly at the end of April, 2012
 ;

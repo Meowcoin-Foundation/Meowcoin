@@ -3,10 +3,10 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef MEOWCOIN_QT_RESTRICTEDASSETSDIALOG_H
-#define MEOWCOIN_QT_RESTRICTEDASSETSDIALOG_H
+#ifndef AVIAN_QT_RESTRICTEDASSETSDIALOG_H
+#define AVIAN_QT_RESTRICTEDASSETSDIALOG_H
 
-#include "walletmodel.h"
+#include <qt/walletmodel.h>
 
 #include <QDialog>
 #include <QMessageBox>
@@ -31,13 +31,13 @@ QT_BEGIN_NAMESPACE
 class QUrl;
 QT_END_NAMESPACE
 
-/** Dialog for sending meows */
+/** Dialog for sending avians */
 class RestrictedAssetsDialog : public QDialog
 {
     Q_OBJECT
 
 public:
-    explicit RestrictedAssetsDialog(const PlatformStyle *platformStyle, QWidget *parent = 0);
+    explicit RestrictedAssetsDialog(const PlatformStyle *platformStyle, QWidget *parent = nullptr);
     ~RestrictedAssetsDialog();
 
     void setClientModel(ClientModel *clientModel);
@@ -48,8 +48,7 @@ public:
      */
     QWidget *setupTabChain(QWidget *prev);
 public Q_SLOTS:
-    void setBalance(const CAmount& balance, const CAmount& unconfirmedBalance, const CAmount& immatureBalance,
-                    const CAmount& watchOnlyBalance, const CAmount& watchUnconfBalance, const CAmount& watchImmatureBalance);
+    void setBalance(const interfaces::WalletBalances& balances);
 
 
 private:
@@ -73,4 +72,4 @@ private Q_SLOTS:
             void message(const QString &title, const QString &message, unsigned int style);
 };
 
-#endif // MEOWCOIN_QT_RESTRICTEDASSETSSDIALOG_H
+#endif // AVIAN_QT_RESTRICTEDASSETSSDIALOG_H

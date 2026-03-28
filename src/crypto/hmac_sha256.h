@@ -1,15 +1,14 @@
-// Copyright (c) 2014 The Bitcoin Core developers
-// Copyright (c) 2017-2019 The Meowcoin Core developers
+// Copyright (c) 2014-present The Meowcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef MEOWCOIN_CRYPTO_HMAC_SHA256_H
-#define MEOWCOIN_CRYPTO_HMAC_SHA256_H
+#ifndef BITCOIN_CRYPTO_HMAC_SHA256_H
+#define BITCOIN_CRYPTO_HMAC_SHA256_H
 
-#include "crypto/sha256.h"
+#include <crypto/sha256.h>
 
-#include <stdint.h>
-#include <stdlib.h>
+#include <cstdint>
+#include <cstdlib>
 
 /** A hasher class for HMAC-SHA-256. */
 class CHMAC_SHA256
@@ -30,4 +29,4 @@ public:
     void Finalize(unsigned char hash[OUTPUT_SIZE]);
 };
 
-#endif // MEOWCOIN_CRYPTO_HMAC_SHA256_H
+#endif // BITCOIN_CRYPTO_HMAC_SHA256_H

@@ -1,17 +1,16 @@
 // Copyright (c) 2010 Satoshi Nakamoto
-// Copyright (c) 2009-2016 The Bitcoin Core developers
-// Copyright (c) 2017-2021 The Meowcoin Core developers
+// Copyright (c) 2009-present The Meowcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include "rpc/client.h"
-#include "rpc/protocol.h"
-#include "util.h"
+#include <common/args.h>
+#include <rpc/client.h>
+#include <tinyformat.h>
 
+#include <cstdint>
 #include <set>
-#include <stdint.h>
-
-#include <univalue.h>
+#include <string>
+#include <string_view>
 
 class CRPCConvertParam
 {
@@ -21,6 +20,7 @@ public:
     std::string paramName;  //!< parameter name
 };
 
+// clang-format off
 /**
  * Specify a (method, idx, name) here if the argument is a non-string RPC
  * argument and needs to be converted from JSON.
@@ -29,94 +29,72 @@ public:
  */
 static const CRPCConvertParam vRPCConvertParams[] =
 {
-    { "issue", 1, "qty" },
-    { "issue", 4, "units" },
-    { "issue", 5, "reissuable" },
-    { "issue", 6, "has_ipfs" },
-    { "issuerestrictedasset", 1, "qty" },
-    { "issuerestrictedasset", 5, "units" },
-    { "issuerestrictedasset", 6, "reissuable" },
-    { "issuerestrictedasset", 7, "has_ipfs" },
-    { "issuequalifierasset", 1,  "qty"},
-    { "issuequalifierasset", 4, "has_ipfs" },
-    { "reissuerestrictedasset", 1, "qty" },
-    { "reissuerestrictedasset", 3, "change_verifier" },
-    { "reissuerestrictedasset", 6, "new_unit" },
-    { "reissuerestrictedasset", 7, "reissuable" },
-    { "issueunique", 1, "asset_tags"},
-    { "issueunique", 2, "ipfs_hashes"},
-    { "transfer", 1, "qty"},
-    { "transfer", 4, "expire_time"},
-    { "transferfromaddress", 2, "qty"},
-    { "transferfromaddress", 5, "expire_time"},
-    { "transferfromaddresses", 1, "from_addresses"},
-    { "transferfromaddresses", 2, "qty"},
-    { "transferfromaddresses", 5, "expire_time"},
-    { "transferqualifier", 1, "qty"},
-    { "transferqualifier", 5, "expire_time"},
-    { "reissue", 1, "qty"},
-    { "reissue", 4, "reissuable"},
-    { "reissue", 5, "new_unit"},
-    { "listmyassets", 1, "verbose" },
-    { "listmyassets", 2, "count" },
-    { "listmyassets", 3, "start"},
-    { "listmyassets", 4, "confs"},
-    { "listassets", 1, "verbose" },
-    { "listassets", 2, "count" },
-    { "listassets", 3, "start" },
     { "setmocktime", 0, "timestamp" },
-    { "generate", 0, "nblocks" },
-    { "generate", 1, "maxtries" },
-    { "setgenerate", 0, "generate" },
-    { "setgenerate", 1, "genproclimit" },
+    { "mockscheduler", 0, "delta_time" },
+    { "utxoupdatepsmt", 1, "descriptors" },
     { "generatetoaddress", 0, "nblocks" },
     { "generatetoaddress", 2, "maxtries" },
+    { "generatetodescriptor", 0, "num_blocks" },
+    { "generatetodescriptor", 2, "maxtries" },
+    { "generateblock", 1, "transactions" },
+    { "generateblock", 2, "submit" },
     { "getnetworkhashps", 0, "nblocks" },
     { "getnetworkhashps", 1, "height" },
     { "sendtoaddress", 1, "amount" },
     { "sendtoaddress", 4, "subtractfeefromamount" },
-//    { "sendtoaddress", 5 , "replaceable" },
-    { "sendtoaddress", 5 , "conf_target" },
-    { "sendfromaddress", 2, "amount" },
-    { "sendfromaddress", 5, "subtractfeefromamount" },
-    { "sendfromaddress", 6 , "conf_target" },
+    { "sendtoaddress", 5 , "replaceable" },
+    { "sendtoaddress", 6 , "conf_target" },
+    { "sendtoaddress", 8, "avoid_reuse" },
+    { "sendtoaddress", 9, "fee_rate"},
+    { "sendtoaddress", 10, "verbose"},
     { "settxfee", 0, "amount" },
     { "getreceivedbyaddress", 1, "minconf" },
-    { "getreceivedbyaccount", 1, "minconf" },
+    { "getreceivedbyaddress", 2, "include_immature_coinbase" },
+    { "getreceivedbylabel", 1, "minconf" },
+    { "getreceivedbylabel", 2, "include_immature_coinbase" },
     { "listreceivedbyaddress", 0, "minconf" },
     { "listreceivedbyaddress", 1, "include_empty" },
     { "listreceivedbyaddress", 2, "include_watchonly" },
-    { "listreceivedbyaccount", 0, "minconf" },
-    { "listreceivedbyaccount", 1, "include_empty" },
-    { "listreceivedbyaccount", 2, "include_watchonly" },
+    { "listreceivedbyaddress", 4, "include_immature_coinbase" },
+    { "listreceivedbylabel", 0, "minconf" },
+    { "listreceivedbylabel", 1, "include_empty" },
+    { "listreceivedbylabel", 2, "include_watchonly" },
+    { "listreceivedbylabel", 3, "include_immature_coinbase" },
     { "getbalance", 1, "minconf" },
     { "getbalance", 2, "include_watchonly" },
+    { "getbalance", 3, "avoid_reuse" },
+    { "getblockfrompeer", 1, "peer_id" },
     { "getblockhash", 0, "height" },
     { "waitforblockheight", 0, "height" },
     { "waitforblockheight", 1, "timeout" },
     { "waitforblock", 1, "timeout" },
     { "waitfornewblock", 0, "timeout" },
-    { "move", 2, "amount" },
-    { "move", 3, "minconf" },
-    { "sendfrom", 2, "amount" },
-    { "sendfrom", 3, "minconf" },
     { "listtransactions", 1, "count" },
     { "listtransactions", 2, "skip" },
     { "listtransactions", 3, "include_watchonly" },
-    { "listaccounts", 0, "minconf" },
-    { "listaccounts", 1, "include_watchonly" },
     { "walletpassphrase", 1, "timeout" },
     { "getblocktemplate", 0, "template_request" },
     { "listsinceblock", 1, "target_confirmations" },
     { "listsinceblock", 2, "include_watchonly" },
     { "listsinceblock", 3, "include_removed" },
+    { "listsinceblock", 4, "include_change" },
     { "sendmany", 1, "amounts" },
     { "sendmany", 2, "minconf" },
     { "sendmany", 4, "subtractfeefrom" },
-//    { "sendmany", 5 , "replaceable" },
-    { "sendmany", 5 , "conf_target" },
-    { "addmultisigaddress", 0, "nrequired" },
-    { "addmultisigaddress", 1, "keys" },
+    { "sendmany", 5 , "replaceable" },
+    { "sendmany", 6 , "conf_target" },
+    { "sendmany", 8, "fee_rate"},
+    { "sendmany", 9, "verbose" },
+    { "deriveaddresses", 1, "range" },
+    { "scanblocks", 1, "scanobjects" },
+    { "scanblocks", 2, "start_height" },
+    { "scanblocks", 3, "stop_height" },
+    { "scanblocks", 5, "options" },
+    { "scanblocks", 5, "filter_false_positives" },
+    { "getdescriptoractivity", 0, "blockhashes" },
+    { "getdescriptoractivity", 1, "scanobjects" },
+    { "getdescriptoractivity", 2, "include_mempool" },
+    { "scantxoutset", 1, "scanobjects" },
     { "createmultisig", 0, "nrequired" },
     { "createmultisig", 1, "keys" },
     { "listunspent", 0, "minconf" },
@@ -124,42 +102,157 @@ static const CRPCConvertParam vRPCConvertParams[] =
     { "listunspent", 2, "addresses" },
     { "listunspent", 3, "include_unsafe" },
     { "listunspent", 4, "query_options" },
+    { "listunspent", 4, "minimumAmount" },
+    { "listunspent", 4, "maximumAmount" },
+    { "listunspent", 4, "maximumCount" },
+    { "listunspent", 4, "minimumSumAmount" },
+    { "listunspent", 4, "include_immature_coinbase" },
     { "getblock", 1, "verbosity" },
     { "getblock", 1, "verbose" },
     { "getblockheader", 1, "verbose" },
-    { "getblockstats", 0, "hash_or_height" },
-    { "getblockstats", 1, "stats" },
     { "getchaintxstats", 0, "nblocks" },
     { "gettransaction", 1, "include_watchonly" },
+    { "gettransaction", 2, "verbose" },
+    { "getrawtransaction", 1, "verbosity" },
     { "getrawtransaction", 1, "verbose" },
     { "createrawtransaction", 0, "inputs" },
     { "createrawtransaction", 1, "outputs" },
     { "createrawtransaction", 2, "locktime" },
-//    { "createrawtransaction", 3, "replaceable" },
-    { "signrawtransaction", 1, "prevtxs" },
-    { "signrawtransaction", 2, "privkeys" },
-    { "sendrawtransaction", 1, "allowhighfees" },
+    { "createrawtransaction", 3, "replaceable" },
+    { "createrawtransaction", 4, "version" },
+    { "decoderawtransaction", 1, "iswitness" },
+    { "signrawtransactionwithkey", 1, "privkeys" },
+    { "signrawtransactionwithkey", 2, "prevtxs" },
+    { "signrawtransactionwithwallet", 1, "prevtxs" },
+    { "sendrawtransaction", 1, "maxfeerate" },
+    { "sendrawtransaction", 2, "maxburnamount" },
     { "testmempoolaccept", 0, "rawtxs" },
-    { "testmempoolaccept", 1, "allowhighfees" },
+    { "testmempoolaccept", 1, "maxfeerate" },
+    { "submitpackage", 0, "package" },
+    { "submitpackage", 1, "maxfeerate" },
+    { "submitpackage", 2, "maxburnamount" },
     { "combinerawtransaction", 0, "txs" },
     { "fundrawtransaction", 1, "options" },
+    { "fundrawtransaction", 1, "add_inputs"},
+    { "fundrawtransaction", 1, "include_unsafe"},
+    { "fundrawtransaction", 1, "minconf"},
+    { "fundrawtransaction", 1, "maxconf"},
+    { "fundrawtransaction", 1, "changePosition"},
+    { "fundrawtransaction", 1, "includeWatching"},
+    { "fundrawtransaction", 1, "lockUnspents"},
+    { "fundrawtransaction", 1, "fee_rate"},
+    { "fundrawtransaction", 1, "feeRate"},
+    { "fundrawtransaction", 1, "subtractFeeFromOutputs"},
+    { "fundrawtransaction", 1, "input_weights"},
+    { "fundrawtransaction", 1, "conf_target"},
+    { "fundrawtransaction", 1, "replaceable"},
+    { "fundrawtransaction", 1, "solving_data"},
+    { "fundrawtransaction", 1, "max_tx_weight"},
+    { "fundrawtransaction", 2, "iswitness" },
+    { "walletcreatefundedpsmt", 0, "inputs" },
+    { "walletcreatefundedpsmt", 1, "outputs" },
+    { "walletcreatefundedpsmt", 2, "locktime" },
+    { "walletcreatefundedpsmt", 3, "options" },
+    { "walletcreatefundedpsmt", 3, "add_inputs"},
+    { "walletcreatefundedpsmt", 3, "include_unsafe"},
+    { "walletcreatefundedpsmt", 3, "minconf"},
+    { "walletcreatefundedpsmt", 3, "maxconf"},
+    { "walletcreatefundedpsmt", 3, "changePosition"},
+    { "walletcreatefundedpsmt", 3, "includeWatching"},
+    { "walletcreatefundedpsmt", 3, "lockUnspents"},
+    { "walletcreatefundedpsmt", 3, "fee_rate"},
+    { "walletcreatefundedpsmt", 3, "feeRate"},
+    { "walletcreatefundedpsmt", 3, "subtractFeeFromOutputs"},
+    { "walletcreatefundedpsmt", 3, "conf_target"},
+    { "walletcreatefundedpsmt", 3, "replaceable"},
+    { "walletcreatefundedpsmt", 3, "solving_data"},
+    { "walletcreatefundedpsmt", 3, "max_tx_weight"},
+    { "walletcreatefundedpsmt", 4, "bip32derivs" },
+    { "walletcreatefundedpsmt", 5, "version" },
+    { "walletprocesspsmt", 1, "sign" },
+    { "walletprocesspsmt", 3, "bip32derivs" },
+    { "walletprocesspsmt", 4, "finalize" },
+    { "descriptorprocesspsmt", 1, "descriptors"},
+    { "descriptorprocesspsmt", 3, "bip32derivs" },
+    { "descriptorprocesspsmt", 4, "finalize" },
+    { "createpsmt", 0, "inputs" },
+    { "createpsmt", 1, "outputs" },
+    { "createpsmt", 2, "locktime" },
+    { "createpsmt", 3, "replaceable" },
+    { "createpsmt", 4, "version" },
+    { "combinepsmt", 0, "txs"},
+    { "joinpsmts", 0, "txs"},
+    { "finalizepsmt", 1, "extract"},
+    { "converttopsmt", 1, "permitsigdata"},
+    { "converttopsmt", 2, "iswitness"},
     { "gettxout", 1, "n" },
     { "gettxout", 2, "include_mempool" },
     { "gettxoutproof", 0, "txids" },
+    { "gettxoutsetinfo", 1, "hash_or_height" },
+    { "gettxoutsetinfo", 2, "use_index"},
+    { "dumptxoutset", 2, "options" },
+    { "dumptxoutset", 2, "rollback" },
     { "lockunspent", 0, "unlock" },
     { "lockunspent", 1, "transactions" },
-    { "importprivkey", 2, "rescan" },
-    { "importaddress", 2, "rescan" },
-    { "importaddress", 3, "p2sh" },
-    { "importpubkey", 2, "rescan" },
-    { "importmulti", 0, "requests" },
-    { "importmulti", 1, "options" },
+    { "lockunspent", 2, "persistent" },
+    { "send", 0, "outputs" },
+    { "send", 1, "conf_target" },
+    { "send", 3, "fee_rate"},
+    { "send", 4, "options" },
+    { "send", 4, "add_inputs"},
+    { "send", 4, "include_unsafe"},
+    { "send", 4, "minconf"},
+    { "send", 4, "maxconf"},
+    { "send", 4, "add_to_wallet"},
+    { "send", 4, "change_position"},
+    { "send", 4, "fee_rate"},
+    { "send", 4, "include_watching"},
+    { "send", 4, "inputs"},
+    { "send", 4, "locktime"},
+    { "send", 4, "lock_unspents"},
+    { "send", 4, "psmt"},
+    { "send", 4, "subtract_fee_from_outputs"},
+    { "send", 4, "conf_target"},
+    { "send", 4, "replaceable"},
+    { "send", 4, "solving_data"},
+    { "send", 4, "max_tx_weight"},
+    { "send", 5, "version"},
+    { "sendall", 0, "recipients" },
+    { "sendall", 1, "conf_target" },
+    { "sendall", 3, "fee_rate"},
+    { "sendall", 4, "options" },
+    { "sendall", 4, "add_to_wallet"},
+    { "sendall", 4, "fee_rate"},
+    { "sendall", 4, "include_watching"},
+    { "sendall", 4, "inputs"},
+    { "sendall", 4, "locktime"},
+    { "sendall", 4, "lock_unspents"},
+    { "sendall", 4, "psmt"},
+    { "sendall", 4, "send_max"},
+    { "sendall", 4, "minconf"},
+    { "sendall", 4, "maxconf"},
+    { "sendall", 4, "conf_target"},
+    { "sendall", 4, "replaceable"},
+    { "sendall", 4, "solving_data"},
+    { "sendall", 4, "version"},
+    { "simulaterawtransaction", 0, "rawtxs" },
+    { "simulaterawtransaction", 1, "options" },
+    { "simulaterawtransaction", 1, "include_watchonly"},
+    { "importmempool", 1, "options" },
+    { "importmempool", 1, "apply_fee_delta_priority" },
+    { "importmempool", 1, "use_current_time" },
+    { "importmempool", 1, "apply_unbroadcast_set" },
+    { "importdescriptors", 0, "requests" },
+    { "listdescriptors", 0, "private" },
     { "verifychain", 0, "checklevel" },
     { "verifychain", 1, "nblocks" },
+    { "getblockstats", 0, "hash_or_height" },
+    { "getblockstats", 1, "stats" },
     { "pruneblockchain", 0, "height" },
     { "keypoolrefill", 0, "newsize" },
     { "getrawmempool", 0, "verbose" },
-    { "estimatefee", 0, "nblocks" },
+    { "getrawmempool", 1, "mempool_sequence" },
+    { "getorphantxs", 0, "verbosity" },
     { "estimatesmartfee", 0, "conf_target" },
     { "estimaterawfee", 0, "conf_target" },
     { "estimaterawfee", 1, "threshold" },
@@ -168,24 +261,30 @@ static const CRPCConvertParam vRPCConvertParams[] =
     { "setban", 2, "bantime" },
     { "setban", 3, "absolute" },
     { "setnetworkactive", 0, "state" },
+    { "setwalletflag", 1, "value" },
     { "getmempoolancestors", 1, "verbose" },
     { "getmempooldescendants", 1, "verbose" },
-    { "getblockhashes", 0 , "high"},
-    { "getblockhashes", 1, "low"},
-    { "getblockhashes", 2, "options" },
-    { "getspentinfo", 0, "txid_index"},
-    { "getaddresstxids", 0, "addresses"},
-    { "getaddresstxids", 1, "includeAssets"},
-    { "getaddressbalance", 0, "addresses"},
-    { "getaddressbalance", 1, "includeAssets"},
-    { "getaddressdeltas", 0, "addresses"},
-    { "getaddressutxos", 0, "addresses"},
-    { "getaddressmempool", 0, "addresses"},
-    { "getaddressmempool", 1, "includeAssets"},
+    { "gettxspendingprevout", 0, "outputs" },
     { "bumpfee", 1, "options" },
+    { "bumpfee", 1, "conf_target"},
+    { "bumpfee", 1, "fee_rate"},
+    { "bumpfee", 1, "replaceable"},
+    { "bumpfee", 1, "outputs"},
+    { "bumpfee", 1, "original_change_index"},
+    { "psmtbumpfee", 1, "options" },
+    { "psmtbumpfee", 1, "conf_target"},
+    { "psmtbumpfee", 1, "fee_rate"},
+    { "psmtbumpfee", 1, "replaceable"},
+    { "psmtbumpfee", 1, "outputs"},
+    { "psmtbumpfee", 1, "original_change_index"},
     { "logging", 0, "include" },
     { "logging", 1, "exclude" },
     { "disconnectnode", 1, "nodeid" },
+    { "gethdkeys", 0, "active_only" },
+    { "gethdkeys", 0, "options" },
+    { "gethdkeys", 0, "private" },
+    { "createwalletdescriptor", 1, "options" },
+    { "createwalletdescriptor", 1, "internal" },
     // Echo with conversion (For testing only)
     { "echojson", 0, "arg0" },
     { "echojson", 1, "arg1" },
@@ -199,27 +298,32 @@ static const CRPCConvertParam vRPCConvertParams[] =
     { "echojson", 9, "arg9" },
     { "rescanblockchain", 0, "start_height"},
     { "rescanblockchain", 1, "stop_height"},
-    { "listaddressesbyasset", 1, "totalonly"},
-    { "listaddressesbyasset", 2, "count"},
-    { "listaddressesbyasset", 3, "start"},
-    { "listassetbalancesbyaddress", 1, "totalonly"},
-    { "listassetbalancesbyaddress", 2, "count"},
-    { "listassetbalancesbyaddress", 3, "start"},
-    { "sendmessage", 2, "expire_time"},
-    { "requestsnapshot", 1, "block_height"},
-    { "getsnapshotrequest", 1, "block_height"},
-    { "listsnapshotrequests", 1, "block_height"},
-    { "cancelsnapshotrequest", 1, "block_height"},
-    { "distributereward", 1, "snapshot_height"},
-    { "distributereward", 3, "gross_distribution_amount"},
-    { "getdistributestatus", 1, "snapshot_height"},
-    { "getdistributestatus", 3, "gross_distribution_amount"},
-    { "getsnapshot", 1, "block_height"},
-    { "purgesnapshot", 1, "block_height"},
-    { "stop", 0, "wait"},
-    { "getkawpowhash", 3, "height"},
-    { "getmeowpowhash", 3, "height"},
+    { "createwallet", 1, "disable_private_keys"},
+    { "createwallet", 2, "blank"},
+    { "createwallet", 4, "avoid_reuse"},
+    { "createwallet", 5, "descriptors"},
+    { "createwallet", 6, "load_on_startup"},
+    { "createwallet", 7, "external_signer"},
+    { "restorewallet", 2, "load_on_startup"},
+    { "loadwallet", 1, "load_on_startup"},
+    { "unloadwallet", 1, "load_on_startup"},
+    { "getnodeaddresses", 0, "count"},
+    { "addpeeraddress", 1, "port"},
+    { "addpeeraddress", 2, "tried"},
+    { "sendmsgtopeer", 0, "peer_id" },
+    { "stop", 0, "wait" },
+    { "addnode", 2, "v2transport" },
+    { "addconnection", 2, "v2transport" },
 };
+// clang-format on
+
+/** Parse string to UniValue or throw runtime_error if string contains invalid JSON */
+static UniValue Parse(std::string_view raw)
+{
+    UniValue parsed;
+    if (!parsed.read(raw)) throw std::runtime_error(tfm::format("Error parsing JSON: %s", raw));
+    return parsed;
+}
 
 class CRPCConvertTable
 {
@@ -230,55 +334,36 @@ private:
 public:
     CRPCConvertTable();
 
-    bool convert(const std::string& method, int idx) {
-        return (members.count(std::make_pair(method, idx)) > 0);
+    /** Return arg_value as UniValue, and first parse it if it is a non-string parameter */
+    UniValue ArgToUniValue(std::string_view arg_value, const std::string& method, int param_idx)
+    {
+        return members.count({method, param_idx}) > 0 ? Parse(arg_value) : arg_value;
     }
-    bool convert(const std::string& method, const std::string& name) {
-        return (membersByName.count(std::make_pair(method, name)) > 0);
+
+    /** Return arg_value as UniValue, and first parse it if it is a non-string parameter */
+    UniValue ArgToUniValue(std::string_view arg_value, const std::string& method, const std::string& param_name)
+    {
+        return membersByName.count({method, param_name}) > 0 ? Parse(arg_value) : arg_value;
     }
 };
 
 CRPCConvertTable::CRPCConvertTable()
 {
-    const unsigned int n_elem =
-        (sizeof(vRPCConvertParams) / sizeof(vRPCConvertParams[0]));
-
-    for (unsigned int i = 0; i < n_elem; i++) {
-        members.insert(std::make_pair(vRPCConvertParams[i].methodName,
-                                      vRPCConvertParams[i].paramIdx));
-        membersByName.insert(std::make_pair(vRPCConvertParams[i].methodName,
-                                            vRPCConvertParams[i].paramName));
+    for (const auto& cp : vRPCConvertParams) {
+        members.emplace(cp.methodName, cp.paramIdx);
+        membersByName.emplace(cp.methodName, cp.paramName);
     }
 }
 
 static CRPCConvertTable rpcCvtTable;
-
-/** Non-RFC4627 JSON parser, accepts internal values (such as numbers, true, false, null)
- * as well as objects and arrays.
- */
-UniValue ParseNonRFCJSONValue(const std::string& strVal)
-{
-    UniValue jVal;
-    if (!jVal.read(std::string("[")+strVal+std::string("]")) ||
-        !jVal.isArray() || jVal.size()!=1)
-        throw std::runtime_error(std::string("Error parsing JSON:")+strVal);
-    return jVal[0];
-}
 
 UniValue RPCConvertValues(const std::string &strMethod, const std::vector<std::string> &strParams)
 {
     UniValue params(UniValue::VARR);
 
     for (unsigned int idx = 0; idx < strParams.size(); idx++) {
-        const std::string& strVal = strParams[idx];
-
-        if (!rpcCvtTable.convert(strMethod, idx)) {
-            // insert string value directly
-            params.push_back(strVal);
-        } else {
-            // parse string as JSON, insert bool/number/object/etc. value
-            params.push_back(ParseNonRFCJSONValue(strVal));
-        }
+        std::string_view value{strParams[idx]};
+        params.push_back(rpcCvtTable.ArgToUniValue(value, strMethod, idx));
     }
 
     return params;
@@ -287,23 +372,29 @@ UniValue RPCConvertValues(const std::string &strMethod, const std::vector<std::s
 UniValue RPCConvertNamedValues(const std::string &strMethod, const std::vector<std::string> &strParams)
 {
     UniValue params(UniValue::VOBJ);
+    UniValue positional_args{UniValue::VARR};
 
-    for (const std::string &s: strParams) {
-        size_t pos = s.find("=");
+    for (std::string_view s: strParams) {
+        size_t pos = s.find('=');
         if (pos == std::string::npos) {
-            throw(std::runtime_error("No '=' in named argument '"+s+"', this needs to be present for every argument (even if it is empty)"));
+            positional_args.push_back(rpcCvtTable.ArgToUniValue(s, strMethod, positional_args.size()));
+            continue;
         }
 
-        std::string name = s.substr(0, pos);
-        std::string value = s.substr(pos+1);
+        std::string name{s.substr(0, pos)};
+        std::string_view value{s.substr(pos+1)};
 
-        if (!rpcCvtTable.convert(strMethod, name)) {
-            // insert string value directly
-            params.pushKV(name, value);
-        } else {
-            // parse string as JSON, insert bool/number/object/etc. value
-            params.pushKV(name, ParseNonRFCJSONValue(value));
-        }
+        // Intentionally overwrite earlier named values with later ones as a
+        // convenience for scripts and command line users that want to merge
+        // options.
+        params.pushKV(name, rpcCvtTable.ArgToUniValue(value, strMethod, name));
+    }
+
+    if (!positional_args.empty()) {
+        // Use pushKVEnd instead of pushKV to avoid overwriting an explicit
+        // "args" value with an implicit one. Let the RPC server handle the
+        // request as given.
+        params.pushKVEnd("args", std::move(positional_args));
     }
 
     return params;

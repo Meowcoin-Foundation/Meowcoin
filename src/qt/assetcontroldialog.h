@@ -3,10 +3,10 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef MEOWCOIN_QT_ASSETCONTROLDIALOG_H
-#define MEOWCOIN_QT_ASSETCONTROLDIALOG_H
+#ifndef AVIAN_QT_ASSETCONTROLDIALOG_H
+#define AVIAN_QT_ASSETCONTROLDIALOG_H
 
-#include "amount.h"
+#include <consensus/amount.h>
 
 #include <QAbstractButton>
 #include <QAction>
@@ -21,7 +21,9 @@
 class PlatformStyle;
 class WalletModel;
 
+namespace wallet {
 class CCoinControl;
+} // namespace wallet
 
 class QStringListModel;
 class QSortFilterProxyModel;
@@ -40,7 +42,7 @@ public:
     explicit CAssetControlWidgetItem(int type = Type) : QTreeWidgetItem(type) {}
     explicit CAssetControlWidgetItem(QTreeWidgetItem *parent, int type = Type) : QTreeWidgetItem(parent, type) {}
 
-    bool operator<(const QTreeWidgetItem &other) const;
+    bool operator<(const QTreeWidgetItem &other) const override;
 };
 
 class AssetControlDialog : public QDialog
@@ -48,7 +50,7 @@ class AssetControlDialog : public QDialog
     Q_OBJECT
 
 public:
-    explicit AssetControlDialog(const PlatformStyle *platformStyle, QWidget *parent = 0);
+    explicit AssetControlDialog(const PlatformStyle *platformStyle, QWidget *parent = nullptr);
     ~AssetControlDialog();
 
     void setModel(WalletModel *model);
@@ -60,7 +62,7 @@ public:
     void updateAssetList(bool fSetOnStart = false);
 
     static QList<CAmount> payAmounts;
-    static CCoinControl *assetControl;
+    static wallet::CCoinControl *assetControl();
     static bool fSubtractFeeFromAmount;
     bool fOnStartUp;
 
@@ -125,4 +127,4 @@ private Q_SLOTS:
     void onAssetSelected(QString name);
 };
 
-#endif // MEOWCOIN_QT_ASSETCONTROLDIALOG_H
+#endif // AVIAN_QT_ASSETCONTROLDIALOG_H

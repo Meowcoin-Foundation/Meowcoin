@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Meowcoin Core Security Policy
+    url: https://github.com/Meowcoin-Foundation/Meowcoin/blob/master/SECURITY.md
+    about: View security policy
+  - name: Meowcoin Core Developers
+    url: https://meowcoincore.org
+    about: Meowcoin Core homepage

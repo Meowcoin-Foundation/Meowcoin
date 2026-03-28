@@ -1,26 +1,63 @@
 // Copyright (c) 2011-2016 The Bitcoin Core developers
-// Copyright (c) 2017-2020 The Meowcoin Core developers
+// Copyright (c) 2017-2019 The Meowcoin Core developers
+// Copyright (c) 2022 The Meowcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include "assettablemodel.h"
-#include "assetrecord.h"
+#include <qt/assettablemodel.h>
+#include <qt/assetrecord.h>
 
-#include "guiconstants.h"
-#include "guiutil.h"
-#include "walletmodel.h"
-#include "wallet/wallet.h"
+#include <qt/guiconstants.h>
+#include <qt/guiutil.h>
+#include <qt/walletmodel.h>
+#include <wallet/wallet.h>
 
-#include "core_io.h"
-
-#include "amount.h"
-#include "assets/assets.h"
-#include "validation.h"
-#include "platformstyle.h"
+#include <consensus/amount.h>
+#include <assets/assets.h>
+#include <validation.h>
+#include <qt/platformstyle.h>
 
 #include <QDebug>
 #include <QStringList>
 
+/** AVN: Get all asset balances for a wallet.
+ *
+ * Light-weight scan that only iterates asset UTXOs (via GetTXOs()),
+ * skipping the expensive AvailableCoins() regular-coin scan and the
+ * per-output signing-provider / input-size calculations that are only
+ * needed for coin selection. Uses TRY_LOCK so the GUI thread is never
+ * blocked waiting for cs_wallet.
+ */
+static bool GetAllMyAssetBalances(wallet::CWallet* pwallet,
+    std::map<std::string, CAmount>& amounts)
+{
+    if (!pwallet) return false;
+
+    TRY_LOCK(pwallet->cs_wallet, locked_wallet);
+    if (!locked_wallet) return false;
+
+    for (const auto& [outpoint, txo] : pwallet->GetTXOs()) {
+        const CTxOut& output = txo.GetTxOut();
+
+        if (!output.scriptPubKey.IsAssetScript())
+            continue;
+        if (pwallet->IsSpent(outpoint))
+            continue;
+
+        const wallet::CWalletTx& wtx = txo.GetWalletTx();
+        int nDepth = pwallet->GetTxDepthInMainChain(wtx);
+        if (nDepth < 0)
+            continue;
+        if (nDepth == 0 && !wtx.InMempool())
+            continue;
+
+        CAssetOutputEntry data;
+        if (GetAssetData(output.scriptPubKey, data))
+            amounts[data.assetName] += data.nAmount;
+    }
+
+    return true;
+}
 
 
 class AssetTablePriv {
@@ -33,22 +70,35 @@ public:
     AssetTableModel *parent;
 
     QList<AssetRecord> cachedBalances;
+    // Cache of last-seen balances for change detection
+    std::map<std::string, CAmount> cachedAmounts;
 
     // loads all current balances into cache
 #ifdef ENABLE_WALLET
-    void refreshWallet() {
-        qDebug() << "AssetTablePriv::refreshWallet";
+    /** Rebuild the display cache from pre-computed balances.
+     *  If no balances are provided, fetch them now. */
+    void refreshWallet(const std::map<std::string, CAmount>* precomputedBalances = nullptr) {
         cachedBalances.clear();
         auto currentActiveAssetCache = GetCurrentAssetCache();
         if (currentActiveAssetCache) {
-            {
-                LOCK(cs_main);
-                std::map<std::string, CAmount> balances;
-                std::map<std::string, std::vector<COutput> > outputs;
-                if (!GetAllMyAssetBalances(outputs, balances)) {
-                    qWarning("AssetTablePriv::refreshWallet: Error retrieving asset balances");
+            // Phase 1: Get asset balances under cs_wallet only (no cs_main).
+            // These two locks must never be held simultaneously to avoid
+            // deadlocking with the block-processing / mempool-submission
+            // threads which acquire cs_main then cs_wallet.
+            std::map<std::string, CAmount> fetchedBalances;
+            const std::map<std::string, CAmount>& balances =
+                precomputedBalances ? *precomputedBalances : fetchedBalances;
+
+            if (!precomputedBalances) {
+                wallet::CWallet* pwallet = parent->walletModel ? parent->walletModel->wallet().wallet() : nullptr;
+                if (!GetAllMyAssetBalances(pwallet, fetchedBalances)) {
                     return;
                 }
+            }
+
+            // Phase 2: Look up asset metadata under cs_main only (no cs_wallet).
+            {
+                LOCK(cs_main);
                 std::set<std::string> setAssetsToSkip;
                 auto bal = balances.begin();
                 for (; bal != balances.end(); bal++) {
@@ -56,6 +106,7 @@ public:
                     uint8_t units = OWNER_UNITS;
                     bool fIsAdministrator = true;
                     std::string ipfsHash = "";
+                    std::string ansID = "";
 
                     if (setAssetsToSkip.count(bal->first))
                         continue;
@@ -69,7 +120,8 @@ public:
                         }
                         units = assetData.units;
                         ipfsHash = assetData.strIPFSHash;
-                        // If we have the administrator asset, add it to the skip listå
+                        ansID = assetData.strANSID;
+                        // If we have the administrator asset, add it to the skip list
                         if (balances.count(bal->first + OWNER_TAG)) {
                             setAssetsToSkip.insert(bal->first + OWNER_TAG);
                         } else {
@@ -83,8 +135,14 @@ public:
                             setAssetsToSkip.insert(bal->first);
                             continue;
                         }
+                        // Owner-only token: look up base asset metadata for IPFS/ANS
+                        CNewAsset assetData;
+                        if (currentActiveAssetCache->GetAssetMetaDataIfExists(name, assetData)) {
+                            ipfsHash = assetData.strIPFSHash;
+                            ansID = assetData.strANSID;
+                        }
                     }
-                    cachedBalances.append(AssetRecord(bal->first, bal->second, units, fIsAdministrator, EncodeAssetData(ipfsHash)));
+                    cachedBalances.append(AssetRecord(bal->first, bal->second, units, fIsAdministrator, EncodeAssetData(ipfsHash), ansID));
                 }
             }
         }
@@ -111,9 +169,11 @@ AssetTableModel::AssetTableModel(WalletModel *parent) :
         priv(new AssetTablePriv(this))
 {
     columns << tr("Name") << tr("Quantity");
-#ifdef ENABLE_WALLET
-    priv->refreshWallet();
-#endif
+    // Note: Do NOT call refreshWallet() here. The constructor runs on a
+    // worker thread (LoadWalletsActivity), and refreshWallet() acquires
+    // cs_wallet then cs_main via chain interface calls, which conflicts
+    // with other threads. The first checkBalanceChanged() call on the GUI
+    // thread will populate the asset table safely.
 };
 
 AssetTableModel::~AssetTableModel()
@@ -122,14 +182,26 @@ AssetTableModel::~AssetTableModel()
 };
 
 void AssetTableModel::checkBalanceChanged() {
-    qDebug() << "AssetTableModel::CheckBalanceChanged";
-    // TODO: optimize by 1) updating cache incrementally; and 2) emitting more specific dataChanged signals
-    Q_EMIT layoutAboutToBeChanged();
 #ifdef ENABLE_WALLET
-    priv->refreshWallet();
-#endif
+    // Quick check: get new balances and compare with cached to avoid
+    // expensive cs_main lock and Qt model reset when nothing changed.
+    // Uses TRY_LOCK internally — returns false if the wallet lock is
+    // busy, so we never block the GUI thread; the next 250ms poll retries.
+    wallet::CWallet* pwallet = walletModel ? walletModel->wallet().wallet() : nullptr;
+    std::map<std::string, CAmount> newAmounts;
+    if (!GetAllMyAssetBalances(pwallet, newAmounts)) {
+        return; // Wallet locked or no wallet — skip, try next poll
+    }
+    if (newAmounts == priv->cachedAmounts) {
+        return; // No change — skip full refresh
+    }
+    priv->cachedAmounts = newAmounts;
+
+    Q_EMIT layoutAboutToBeChanged();
+    priv->refreshWallet(&newAmounts);
     Q_EMIT dataChanged(index(0, 0, QModelIndex()), index(priv->size(), columns.length()-1, QModelIndex()));
     Q_EMIT layoutChanged();
+#endif
 }
 
 int AssetTableModel::rowCount(const QModelIndex &parent) const
@@ -146,7 +218,6 @@ int AssetTableModel::columnCount(const QModelIndex &parent) const
 
 QVariant AssetTableModel::data(const QModelIndex &index, int role) const
 {
-    Q_UNUSED(role);
     if(!index.isValid())
         return QVariant();
     AssetRecord *rec = static_cast<AssetRecord*>(index.internalPointer());
@@ -180,16 +251,34 @@ QVariant AssetTableModel::data(const QModelIndex &index, int role) const
 
             return pixmap;
         }
+        case AssetANSRole:
+            return QString::fromStdString(rec->ansID);
+        case AssetANSDecorationRole:
+        {
+            if (index.column() == Quantity)
+                return QVariant();
+
+            if (rec->ansID.size() == 0)
+                return QVariant();
+
+            QPixmap pixmap;
+
+            if (darkModeEnabled)
+                pixmap = QPixmap::fromImage(QImage(":/icons/export"));
+            else
+                pixmap = QPixmap::fromImage(QImage(":/icons/export"));
+
+            return pixmap;
+        }
         case Qt::DecorationRole:
         {
             if (index.column() == Quantity)
                 return QVariant();
 
             if (!rec->fIsAdministrator)
-                QVariant();
+                return QVariant();
 
             QPixmap pixmap;
-
             if (darkModeEnabled)
                 pixmap = QPixmap::fromImage(QImage(":/icons/asset_administrator_dark"));
             else
@@ -202,14 +291,16 @@ QVariant AssetTableModel::data(const QModelIndex &index, int role) const
                 return QString::fromStdString(rec->name);
             else if (index.column() == Quantity)
                 return QString::fromStdString(rec->formattedQuantity());
+            return QVariant();
         }
         case Qt::ToolTipRole:
             return formatTooltip(rec);
         case Qt::TextAlignmentRole:
         {
             if (index.column() == Quantity) {
-                return Qt::AlignRight + Qt::AlignVCenter;
+                return QVariant(int(Qt::AlignRight | Qt::AlignVCenter));
             }
+            return QVariant();
         }
         default:
             return QVariant();
@@ -231,9 +322,9 @@ QVariant AssetTableModel::headerData(int section, Qt::Orientation orientation, i
             return QSize(30, 50);
     } else if (role == Qt::TextAlignmentRole) {
         if (orientation == Qt::Vertical)
-            return Qt::AlignLeft + Qt::AlignVCenter;
+            return QVariant(int(Qt::AlignLeft | Qt::AlignVCenter));
 
-        return Qt::AlignHCenter + Qt::AlignVCenter;
+        return QVariant(int(Qt::AlignHCenter | Qt::AlignVCenter));
     }
 
     return QVariant();

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 #  meowcoind The meowcoin core server.
 #
@@ -19,14 +19,14 @@ fi
 RETVAL=0
 
 prog=meowcoind
-# you can override the lockfile via MEOWCOIND_LOCKFILE in /etc/sysconfig/meowcoind
-lockfile=${MEOWCOIND_LOCKFILE-/var/lock/subsys/meowcoind}
+# you can override the lockfile via BITCOIND_LOCKFILE in /etc/sysconfig/meowcoind
+lockfile=${BITCOIND_LOCKFILE-/var/lock/subsys/meowcoind}
 
-# meowcoind defaults to /usr/bin/meowcoind, override with MEOWCOIND_BIN
-meowcoind=${MEOWCOIND_BIN-/usr/bin/meowcoind}
+# meowcoind defaults to /usr/bin/meowcoind, override with BITCOIND_BIN
+meowcoind=${BITCOIND_BIN-/usr/bin/meowcoind}
 
-# meowcoind opts default to -disablewallet, override with MEOWCOIND_OPTS
-meowcoind_opts=${MEOWCOIND_OPTS--disablewallet}
+# meowcoind opts default to -disablewallet, override with BITCOIND_OPTS
+meowcoind_opts=${BITCOIND_OPTS--disablewallet}
 
 start() {
     echo -n $"Starting $prog: "
@@ -39,7 +39,7 @@ start() {
 
 stop() {
     echo -n $"Stopping $prog: "
-    killproc $prog
+    killproc $prog -t600
     RETVAL=$?
     echo
     [ $RETVAL -eq 0 ] && rm -f $lockfile

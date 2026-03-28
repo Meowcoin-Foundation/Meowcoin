@@ -1,17 +1,21 @@
 // Copyright (c) 2019 The Meowcoin Core developers
+// Copyright (c) 2022 The Meowcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-
-#ifndef MEOWCOINCOIN_RESTRICTEDDB_H
-#define MEOWCOINCOIN_RESTRICTEDDB_H
+#ifndef BITCOIN_ASSETS_RESTRICTEDDB_H
+#define BITCOIN_ASSETS_RESTRICTEDDB_H
 
 #include <dbwrapper.h>
+#include <util/fs.h>
 
-class CRestrictedDB  : public CDBWrapper {
+#include <string>
+#include <vector>
+
+class CRestrictedDB : public CDBWrapper {
 
 public:
-    explicit CRestrictedDB(size_t nCacheSize, bool fMemory = false, bool fWipe = false);
+    explicit CRestrictedDB(const fs::path& datadir, size_t nCacheSize, bool fMemory = false, bool fWipe = false);
 
     CRestrictedDB(const CRestrictedDB&) = delete;
     CRestrictedDB& operator=(const CRestrictedDB&) = delete;
@@ -51,9 +55,7 @@ public:
     bool GetGlobalRestrictions(std::vector<std::string>& restrictions);
 
     bool CheckForAddressRootQualifier(const std::string& address, const std::string& qualifier);
-
-    bool Flush();
 };
 
 
-#endif //MEOWCOINCOIN_RESTRICTEDDB_H
+#endif // BITCOIN_ASSETS_RESTRICTEDDB_H

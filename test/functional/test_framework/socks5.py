@@ -1,17 +1,22 @@
 #!/usr/bin/env python3
-# Copyright (c) 2015-2016 The Bitcoin Core developers
-# Copyright (c) 2017-2020 The Meowcoin Core developers
+# Copyright (c) 2015-2019 The Meowcoin Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
-
 """Dummy Socks5 server for testing."""
 
-import socket, threading, queue
+import select
+import socket
+import threading
+import queue
 import logging
+
+from .netutil import (
+    format_addr_port
+)
 
 logger = logging.getLogger("TestFramework.socks5")
 
-### Protocol constants
+# Protocol constants
 class Command:
     CONNECT = 0x01
 
@@ -20,7 +25,7 @@ class AddressType:
     DOMAINNAME = 0x03
     IPV6 = 0x04
 
-### Utility functions
+# Utility functions
 def recvall(s, n):
     """Receive n bytes from a socket, or fail."""
     rv = bytearray()
@@ -32,16 +37,66 @@ def recvall(s, n):
         n -= len(d)
     return rv
 
-### Implementation classes
-class Socks5Configuration:
+def sendall(s, data):
+    """Send all data to a socket, or fail."""
+    sent = 0
+    while sent < len(data):
+        _, wlist, _ = select.select([], [s], [])
+        if len(wlist) > 0:
+            n = s.send(data[sent:])
+            if n == 0:
+                raise IOError('send() on socket returned 0')
+            sent += n
+
+def forward_sockets(a, b):
+    """Forward data received on socket a to socket b and vice versa, until EOF is received on one of the sockets."""
+    # Mark as non-blocking so that we do not end up in a deadlock-like situation
+    # where we block and wait on data from `a` while there is data ready to be
+    # received on `b` and forwarded to `a`. And at the same time the application
+    # at `a` is not sending anything because it waits for the data from `b` to
+    # respond.
+    a.setblocking(False)
+    b.setblocking(False)
+    sockets = [a, b]
+    done = False
+    while not done:
+        rlist, _, xlist = select.select(sockets, [], sockets)
+        if len(xlist) > 0:
+            raise IOError('Exceptional condition on socket')
+        for s in rlist:
+            data = s.recv(4096)
+            if data is None or len(data) == 0:
+                done = True
+                break
+            if s == a:
+                sendall(b, data)
+            else:
+                sendall(a, data)
+
+# Implementation classes
+class Socks5Configuration():
     """Proxy configuration."""
     def __init__(self):
         self.addr = None # Bind address (must be set)
         self.af = socket.AF_INET # Bind address family
         self.unauth = False  # Support unauthenticated
         self.auth = False  # Support authentication
+        self.keep_alive = False  # Do not automatically close connections
+        # This function is called whenever a new connection arrives to the proxy
+        # and it decides where the connection is redirected to. It is passed:
+        # - the address the client requested to connect to
+        # - the port the client requested to connect to
+        # It is supposed to return an object like:
+        # {
+        #     "actual_to_addr": "127.0.0.1"
+        #     "actual_to_port": 28276
+        # }
+        # or None.
+        # If it returns an object then the connection is redirected to actual_to_addr:actual_to_port.
+        # If it returns None, or destinations_factory itself is None then the connection is closed.
+        self.destinations_factory = None
 
-class Socks5Command:
+class Socks5Command():
     """Information about an incoming socks5 command."""
     def __init__(self, cmd, atyp, addr, port, username, password):
         self.cmd = cmd # Command (one of Command.*)
@@ -53,14 +108,13 @@ class Socks5Command:
     def __repr__(self):
         return 'Socks5Command(%s,%s,%s,%s,%s,%s)' % (self.cmd, self.atyp, self.addr, self.port, self.username, self.password)
 
-class Socks5Connection:
-    def __init__(self, serv, conn, peer):
+class Socks5Connection():
+    def __init__(self, serv, conn):
         self.serv = serv
         self.conn = conn
-        self.peer = peer
 
     def handle(self):
-        """Handle socks5 request according to RFC192."""
+        """Handle socks5 request according to RFC1928."""
         try:
             # Verify socks version
             ver = recvall(self.conn, 1)[0]
@@ -116,15 +170,34 @@ class Socks5Connection:
 
             cmdin = Socks5Command(cmd, atyp, addr, port, username, password)
             self.serv.queue.put(cmdin)
-            logger.info('Proxy: %s', cmdin)
+            logger.debug('Proxy: %s', cmdin)
+
+            requested_to_addr = addr.decode("utf-8")
+            requested_to = format_addr_port(requested_to_addr, port)
+
+            if self.serv.conf.destinations_factory is not None:
+                dest = self.serv.conf.destinations_factory(requested_to_addr, port)
+                if dest is not None:
+                    logger.debug(f"Serving connection to {requested_to}, will redirect it to "
+                                 f"{dest['actual_to_addr']}:{dest['actual_to_port']} instead")
+                    with socket.create_connection((dest["actual_to_addr"], dest["actual_to_port"])) as conn_to:
+                        forward_sockets(self.conn, conn_to)
+                else:
+                    logger.debug(f"Can't serve the connection to {requested_to}: the destinations factory returned None")
+            else:
+                logger.debug(f"Can't serve the connection to {requested_to}: no destinations factory")
+
             # Fall through to disconnect
         except Exception as e:
             logger.exception("socks5 request handling failed.")
             self.serv.queue.put(e)
         finally:
-            self.conn.close()
+            if not self.serv.keep_alive:
+                self.conn.close()
+            else:
+                logger.debug("Keeping client connection alive")
 
-class Socks5Server:
+class Socks5Server():
     def __init__(self, conf):
         self.conf = conf
         self.s = socket.socket(conf.af)
@@ -134,18 +207,19 @@ class Socks5Server:
         self.running = False
         self.thread = None
         self.queue = queue.Queue() # report connections and exceptions to client
+        self.keep_alive = conf.keep_alive
 
     def run(self):
         while self.running:
-            (sockconn, peer) = self.s.accept()
+            (sockconn, _) = self.s.accept()
             if self.running:
-                conn = Socks5Connection(self, sockconn, peer)
+                conn = Socks5Connection(self, sockconn)
                 thread = threading.Thread(None, conn.handle)
                 thread.daemon = True
                 thread.start()
-    
+
     def start(self):
-        assert(not self.running)
+        assert not self.running
         self.running = True
         self.thread = threading.Thread(None, self.run)
         self.thread.daemon = True
@@ -158,4 +232,3 @@ class Socks5Server:
         s.connect(self.conf.addr)
         s.close()
         self.thread.join()
-

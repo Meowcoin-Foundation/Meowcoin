@@ -1,43 +1,51 @@
-Dependencies
-============
+# Dependencies
 
-These are the dependencies currently used by Meowcoin Core. You can find instructions for installing them in the `build-*.md` file for your platform.
+These are the dependencies used by Meowcoin Core.
+You can find installation instructions in the `/doc/build-*.md` file for your platform, or self-compile
+them using [depends](/depends/README.md).
 
-| Dependency | Version used | Minimum required | CVEs | Shared | [Bundled Qt library](https://doc.qt.io/qt-5/configure-options.html) |
-| --- | --- | --- | --- | --- | --- |
-| Berkeley DB | [4.8.30](http://www.oracle.com/technetwork/database/database-technologies/berkeleydb/downloads/index.html) | 4.8.x | No |  |  |
-| biplist | 0.9 | | | | |
-| Boost | [1.71.0](http://www.boost.org/users/download/) | [1.47.0](https://github.com/bitcoin/bitcoin/pull/8920) | No |  |  |
-| ccache | [3.3.4](https://ccache.samba.org/download.html) |  | No |  |  |
-| cctools | | | | | |
-| cdrkit | 1.1.11 | | | | |
-| Clang | [11.0.1](http://llvm.org/releases/download.html) |  (C++11 support) |  |  |  |
-| D-Bus | [1.10.18](https://cgit.freedesktop.org/dbus/dbus/tree/NEWS?h=dbus-1.10) |  | No | Yes |  |
-| ds_store    | 1.3.0  | | | | |
-| Expat | [2.4.1](https://libexpat.github.io/) |  | Yes | Yes |  |
-| fontconfig | [2.12.1](https://www.freedesktop.org/software/fontconfig/release/) |  | No | Yes |  |
-| FreeType | [2.7.1](http://download.savannah.gnu.org/releases/freetype) |  | No |  |  |
-| GCC |  | [4.7+](https://gcc.gnu.org/) |  |  |  |
-| HarfBuzz-NG |  |  |  |  |  |
-| libdmg-hfsplus | | | | | |
-| libevent | [2.1.12-stable](https://github.com/libevent/libevent/releases) | 2.0.22 | No |  |  |
-| libICE    | 1.0.9  | | | | |
-| libjpeg |  |  |  |  | [Yes](https://github.com/JustAResearcher/Meowcoin/blob/master/depends/packages/qt.mk#L75) |
-| libpng |  |  |  |  | [Yes](https://github.com/JustAResearcher/Meowcoin/blob/master/depends/packages/qt.mk#L74) |
-| libtapi    |   | | | | |
-| libSM    | 1.2.2  | | | | |
-| libX11    | 1.6.2  | | | | |
-| libXau    | 1.0.8  | | | | |
-| libXext    | 1.3.2  | | | | |
-| mac_alias    | 2.2.0  | | | | |
-| MiniUPnPc | [2.0.20170509](http://miniupnp.free.fr/files) |  | No |  |  |
-| OpenSSL | [1.1.1k](https://www.openssl.org/source) |  | Yes |  |  |
-| PCRE |  |  |  |  | [Yes](https://github.com/JustAResearcher/Meowcoin/blob/master/depends/packages/qt.mk#L76) |
-| protobuf | [2.6.1](https://github.com/google/protobuf/releases) |  | No |  |  |
-| Python (tests) |  | [3.4](https://www.python.org/downloads) |  |  |  |
-| qrencode | [3.4.4](https://fukuchi.org/works/qrencode) |  | No |  |  |
-| Qt | [5.12.11](https://download.qt.io/official_releases/qt/) | 4.7+ | No |  |  |
-| XCB | 1.10 |  |  |  | [Yes](https://github.com/JustAResearcher/Meowcoin/blob/master/depends/packages/qt.mk#L94) (Linux only) |
-| xkbcommon | 0.8.4 |  |  |  | [Yes](https://github.com/JustAResearcher/Meowcoin/blob/master/depends/packages/qt.mk#L93) (Linux only) |
-| ZeroMQ | [4.1.5](https://github.com/zeromq/libzmq/releases) |  | No |  |  |
-| zlib | [1.2.11](http://zlib.net/) |  |  |  | No |
+## Compiler
+
+Meowcoin Core requires one of the following compilers.
+
+| Dependency | Minimum required |
+| --- | --- |
+| [Clang](https://clang.llvm.org) | [16.0](https://github.com/meowcoin/meowcoin/pull/30263) |
+| [GCC](https://gcc.gnu.org) | [11.1](https://github.com/meowcoin/meowcoin/pull/29091) |
+
+## Required
+
+### Build
+
+| Dependency | Releases | Minimum required |
+| --- | --- | --- |
+| [Boost](../depends/packages/boost.mk) | [link](https://www.boost.org/users/download/) | [1.74.0](https://github.com/meowcoin/meowcoin/pull/34107) |
+| CMake | [link](https://cmake.org/) | [3.22](https://github.com/meowcoin/meowcoin/pull/30454) |
+| [libevent](../depends/packages/libevent.mk) | [link](https://github.com/libevent/libevent/releases) | [2.1.8](https://github.com/meowcoin/meowcoin/pull/24681) |
+
+### Runtime
+
+| Dependency | Releases | Minimum required |
+| --- | --- | --- |
+| glibc | [link](https://www.gnu.org/software/libc/) | [2.31](https://github.com/meowcoin/meowcoin/pull/29987)
+
+## Optional
+
+### Build
+
+| Dependency | Releases | Minimum required |
+| --- | --- | --- |
+| [Cap'n Proto](../depends/packages/capnp.mk) | [link](https://capnproto.org) | [0.7.1](https://github.com/meowcoin/meowcoin/pull/28907) |
+| Python (scripts, tests) | [link](https://www.python.org) | [3.10](https://github.com/meowcoin/meowcoin/pull/30527) |
+| [Qt](../depends/packages/qt.mk) (gui) | [link](https://download.qt.io/archive/qt/) | [6.2](https://github.com/meowcoin/meowcoin/pull/30997) |
+| [qrencode](../depends/packages/qrencode.mk) (gui) | [link](https://fukuchi.org/works/qrencode/) | N/A |
+| [SQLite](../depends/packages/sqlite.mk) (wallet) | [link](https://sqlite.org) | [3.7.17](https://github.com/meowcoin/meowcoin/pull/19077) |
+| [systemtap](../depends/packages/systemtap.mk) ([tracing](tracing.md)) | [link](https://sourceware.org/systemtap/) | N/A |
+| [ZeroMQ](../depends/packages/zeromq.mk) (notifications) | [link](https://github.com/zeromq/libzmq/releases) | 4.0.0 |
+
+### Runtime
+
+| Dependency | Releases | Minimum required |
+| --- | --- | --- |
+| [Fontconfig](../depends/packages/fontconfig.mk) (gui) | [link](https://www.freedesktop.org/wiki/Software/fontconfig/) | 2.6 |
+| [FreeType](../depends/packages/freetype.mk) (gui) | [link](https://freetype.org) | 2.3.0 |

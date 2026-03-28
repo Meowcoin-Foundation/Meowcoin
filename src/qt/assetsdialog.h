@@ -3,10 +3,12 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef MEOWCOIN_QT_ASSETSDIALOG_H
-#define MEOWCOIN_QT_ASSETSDIALOG_H
+#ifndef AVIAN_QT_ASSETSDIALOG_H
+#define AVIAN_QT_ASSETSDIALOG_H
 
-#include "walletmodel.h"
+#include <qt/walletmodel.h>
+#include <qt/sendcoinsrecipient.h>
+#include <psmt.h>
 
 #include <QDialog>
 #include <QMessageBox>
@@ -26,7 +28,7 @@ QT_BEGIN_NAMESPACE
 class QUrl;
 QT_END_NAMESPACE
 
-/** Dialog for sending meows */
+/** Dialog for sending avians */
 class AssetsDialog : public QDialog
 {
     Q_OBJECT
@@ -56,12 +58,11 @@ public:
 
 public Q_SLOTS:
     void clear();
-    void reject();
-    void accept();
+    void reject() override;
+    void accept() override;
     SendAssetsEntry *addEntry();
     void updateTabsAndLabels();
-    void setBalance(const CAmount& balance, const CAmount& unconfirmedBalance, const CAmount& immatureBalance,
-                    const CAmount& watchOnlyBalance, const CAmount& watchUnconfBalance, const CAmount& watchImmatureBalance);
+    void setBalance(const interfaces::WalletBalances& balances);
     void focusAssetListBox();
 
 private:
@@ -79,7 +80,8 @@ private:
     void minimizeFeeSection(bool fMinimize);
     void updateFeeMinimizedLabel();
     // Update the passed in CCoinControl with state from the GUI
-    void updateAssetControlState(CCoinControl& ctrl);
+    void updateAssetControlState(wallet::CCoinControl& ctrl);
+    void presentPSMT(PartiallySignedTransaction& psmtx);
 
 
 
@@ -108,14 +110,16 @@ private Q_SLOTS:
 
     void customFeeFeatureChanged(bool);
 
-    /** MEWC START */
+    /** AVN START */
     void assetControlUpdateSendCoinsDialog();
+    /** AVN END */
+
+public Q_SLOTS:
     void focusAsset(const QModelIndex& index);
-    /** MEWC END */
 
     Q_SIGNALS:
             // Fired when a message should be reported to the user
             void message(const QString &title, const QString &message, unsigned int style);
 };
 
-#endif // MEOWCOIN_QT_ASSETSSDIALOG_H
+#endif // AVIAN_QT_ASSETSSDIALOG_H

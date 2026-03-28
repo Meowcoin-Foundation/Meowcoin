@@ -3,19 +3,20 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include "myrestrictedassetrecord.h"
+#include <qt/myrestrictedassetrecord.h>
 
-#include "assets/assets.h"
-#include "base58.h"
-#include "consensus/consensus.h"
-#include "validation.h"
-#include "timedata.h"
-#include "wallet/wallet.h"
+#include <assets/assets.h>
+#include <key_io.h>
+#include <consensus/consensus.h>
+#include <validation.h>
+#include <wallet/wallet.h>
 
 #include <stdint.h>
 
 #include <QDebug>
 
+using wallet::CWallet;
+using wallet::CWalletTx;
 
 /* Return positive answer if transaction should be shown in list.
  */
@@ -34,12 +35,12 @@ QList<MyRestrictedAssetRecord> MyRestrictedAssetRecord::decomposeTransaction(con
 {
     QList<MyRestrictedAssetRecord> parts;
     int64_t nTime = wtx.GetTxTime();
-    uint256 hash = wtx.GetHash();
+    uint256 hash = wtx.GetHash().ToUint256();
     std::map<std::string, std::string> mapValue = wtx.mapValue;
 
+    LOCK(wallet->cs_wallet);
     for(unsigned int i = 0; i < wtx.tx->vout.size(); i++) {
         const CTxOut &txout = wtx.tx->vout[i];
-        isminetype mine = ISMINE_NO;
 
         if (txout.scriptPubKey.IsNullAssetTxDataScript()) {
             CNullAssetTxData data;
@@ -47,10 +48,10 @@ QList<MyRestrictedAssetRecord> MyRestrictedAssetRecord::decomposeTransaction(con
             if (!AssetNullDataFromScript(txout.scriptPubKey, data, address)) {
                 continue;
             }
-            mine = IsMine(*wallet, DecodeDestination(address));
-            if (mine & ISMINE_ALL) {
+            bool isMine = wallet->IsMine(DecodeDestination(address));
+            if (isMine) {
                 MyRestrictedAssetRecord sub(hash, nTime);
-                sub.involvesWatchAddress = mine & ISMINE_SPENDABLE ? false : true;
+                sub.involvesWatchAddress = false;
                 sub.assetName = data.asset_name;
                 sub.address = address;
 

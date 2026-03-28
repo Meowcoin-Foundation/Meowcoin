@@ -1,36 +1,26 @@
-// Copyright (c) 2016 The Bitcoin Core developers
-// Copyright (c) 2017-2019 The Meowcoin Core developers
+// Copyright (c) 2016-2022 The Meowcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include "wallet/test/wallet_test_fixture.h"
+#include <wallet/test/util.h>
+#include <wallet/test/wallet_test_fixture.h>
 
-#include "rpc/server.h"
-#include "wallet/db.h"
-#include "wallet/wallet.h"
+#include <scheduler.h>
+#include <util/chaintype.h>
 
-CWallet *pwalletMain;
-
-WalletTestingSetup::WalletTestingSetup(const std::string &chainName) :
-        TestingSetup(chainName)
+namespace wallet {
+WalletTestingSetup::WalletTestingSetup(const ChainType chainType)
+    : TestingSetup(chainType),
+      m_wallet_loader{interfaces::MakeWalletLoader(*m_node.chain, *Assert(m_node.args))},
+      m_wallet(m_node.chain.get(), "", CreateMockableWalletDatabase())
 {
-    bitdb.MakeMock();
-
-    bool fFirstRun;
-    std::unique_ptr<CWalletDBWrapper> dbw(new CWalletDBWrapper(&bitdb, "wallet_test.dat"));
-    pwalletMain = new CWallet(std::move(dbw));
-    pwalletMain->LoadWallet(fFirstRun);
-    RegisterValidationInterface(pwalletMain);
-
-    RegisterWalletRPCCommands(tableRPC);
+    m_wallet.LoadWallet();
+    m_chain_notifications_handler = m_node.chain->handleNotifications({ &m_wallet, [](CWallet*) {} });
+    m_wallet_loader->registerRpcs();
 }
 
 WalletTestingSetup::~WalletTestingSetup()
 {
-    UnregisterValidationInterface(pwalletMain);
-    delete pwalletMain;
-    pwalletMain = nullptr;
-
-    bitdb.Flush(true);
-    bitdb.Reset();
+    if (m_node.scheduler) m_node.scheduler->stop();
 }
+} // namespace wallet

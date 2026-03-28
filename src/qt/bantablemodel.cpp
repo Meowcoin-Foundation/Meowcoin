@@ -1,19 +1,19 @@
-// Copyright (c) 2011-2016 The Bitcoin Core developers
-// Copyright (c) 2017-2021 The Meowcoin Core developers
+// Copyright (c) 2011-present The Meowcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include "bantablemodel.h"
+#include <qt/bantablemodel.h>
 
-#include "clientmodel.h"
-#include "guiconstants.h"
-#include "guiutil.h"
+#include <interfaces/node.h>
+#include <net_types.h>
 
-#include "sync.h"
-#include "utiltime.h"
+#include <utility>
 
-#include <QDebug>
+#include <QDateTime>
 #include <QList>
+#include <QLocale>
+#include <QModelIndex>
+#include <QVariant>
 
 bool BannedNodeLessThan::operator()(const CCombinedBan& left, const CCombinedBan& right) const
 {
@@ -38,27 +38,24 @@ class BanTablePriv
 public:
     /** Local cache of peer information */
     QList<CCombinedBan> cachedBanlist;
-    /** Column to sort nodes by */
-    int sortColumn;
+    /** Column to sort nodes by (default to unsorted) */
+    int sortColumn{-1};
     /** Order (ascending or descending) to sort nodes by */
     Qt::SortOrder sortOrder;
 
-    /** Pull a full list of banned nodes from CNode into our cache */
-    void refreshBanlist()
+    /** Pull a full list of banned nodes from interfaces::Node into our cache */
+    void refreshBanlist(interfaces::Node& node)
     {
         banmap_t banMap;
-        if(g_connman)
-            g_connman->GetBanned(banMap);
+        node.getBanned(banMap);
 
         cachedBanlist.clear();
-#if QT_VERSION >= 0x040700
         cachedBanlist.reserve(banMap.size());
-#endif
-        for (banmap_t::iterator it = banMap.begin(); it != banMap.end(); it++)
+        for (const auto& entry : banMap)
         {
             CCombinedBan banEntry;
-            banEntry.subnet = (*it).first;
-            banEntry.banEntry = (*it).second;
+            banEntry.subnet = entry.first;
+            banEntry.banEntry = entry.second;
             cachedBanlist.append(banEntry);
         }
 
@@ -77,37 +74,36 @@ public:
         if (idx >= 0 && idx < cachedBanlist.size())
             return &cachedBanlist[idx];
 
-        return 0;
+        return nullptr;
     }
 };
 
-BanTableModel::BanTableModel(ClientModel *parent) :
+BanTableModel::BanTableModel(interfaces::Node& node, QObject* parent) :
     QAbstractTableModel(parent),
-    clientModel(parent)
+    m_node(node)
 {
     columns << tr("IP/Netmask") << tr("Banned Until");
     priv.reset(new BanTablePriv());
-    // default to unsorted
-    priv->sortColumn = -1;
 
     // load initial data
     refresh();
 }
 
-BanTableModel::~BanTableModel()
-{
-    // Intentionally left empty
-}
+BanTableModel::~BanTableModel() = default;
 
 int BanTableModel::rowCount(const QModelIndex &parent) const
 {
-    Q_UNUSED(parent);
+    if (parent.isValid()) {
+        return 0;
+    }
     return priv->size();
 }
 
 int BanTableModel::columnCount(const QModelIndex &parent) const
 {
-    Q_UNUSED(parent);
+    if (parent.isValid()) {
+        return 0;
+    }
     return columns.length();
 }
 
@@ -148,7 +144,7 @@ QVariant BanTableModel::headerData(int section, Qt::Orientation orientation, int
 
 Qt::ItemFlags BanTableModel::flags(const QModelIndex &index) const
 {
-    if(!index.isValid()) return Qt::NoItemFlags;
+    if (!index.isValid()) return Qt::NoItemFlags;
 
     Qt::ItemFlags retval = Qt::ItemIsSelectable | Qt::ItemIsEnabled;
     return retval;
@@ -167,7 +163,7 @@ QModelIndex BanTableModel::index(int row, int column, const QModelIndex &parent)
 void BanTableModel::refresh()
 {
     Q_EMIT layoutAboutToBeChanged();
-    priv->refreshBanlist();
+    priv->refreshBanlist(m_node);
     Q_EMIT layoutChanged();
 }
 
@@ -181,4 +177,10 @@ void BanTableModel::sort(int column, Qt::SortOrder order)
 bool BanTableModel::shouldShow()
 {
     return priv->size() > 0;
+}
+
+bool BanTableModel::unban(const QModelIndex& index)
+{
+    CCombinedBan* ban{static_cast<CCombinedBan*>(index.internalPointer())};
+    return ban != nullptr && m_node.unban(ban->subnet);
 }

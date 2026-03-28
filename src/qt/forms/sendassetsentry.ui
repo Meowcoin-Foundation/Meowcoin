@@ -42,7 +42,7 @@
     <item row="9" column="1">
      <widget class="QLabel" name="messageTextLabel">
       <property name="toolTip">
-       <string>A message that was attached to the meowcoin: URI which will be stored with the transaction for your reference. Note: This message will not be sent over the Meowcoin network.</string>
+       <string>A message that was attached to the avian: URI which will be stored with the transaction for your reference. Note: This message will not be sent over the Avian network.</string>
       </property>
       <property name="textFormat">
        <enum>Qt::PlainText</enum>
@@ -131,7 +131,7 @@
       <item>
        <widget class="QValidatedLineEdit" name="payTo">
         <property name="toolTip">
-         <string>The Meowcoin address to send the payment to</string>
+         <string>The Avian address to send the payment to</string>
         </property>
        </widget>
       </item>
@@ -142,10 +142,6 @@
         </property>
         <property name="text">
          <string/>
-        </property>
-        <property name="icon">
-         <iconset resource="../meowcoin.qrc">
-          <normaloff>:/icons/address-book</normaloff>:/icons/address-book</iconset>
         </property>
         <property name="iconSize">
          <size>
@@ -166,10 +162,6 @@
         <property name="text">
          <string/>
         </property>
-        <property name="icon">
-         <iconset resource="../meowcoin.qrc">
-          <normaloff>:/icons/editpaste</normaloff>:/icons/editpaste</iconset>
-        </property>
         <property name="iconSize">
          <size>
           <width>22</width>
@@ -188,10 +180,6 @@
         </property>
         <property name="text">
          <string/>
-        </property>
-        <property name="icon">
-         <iconset resource="../meowcoin.qrc">
-          <normaloff>:/icons/remove</normaloff>:/icons/remove</iconset>
         </property>
         <property name="iconSize">
          <size>
@@ -727,10 +715,6 @@
         <property name="text">
          <string/>
         </property>
-        <property name="icon">
-         <iconset resource="../meowcoin.qrc">
-          <normaloff>:/icons/remove</normaloff>:/icons/remove</iconset>
-        </property>
        </widget>
       </item>
      </layout>
@@ -1260,10 +1244,6 @@
         <property name="text">
          <string/>
         </property>
-        <property name="icon">
-         <iconset resource="../meowcoin.qrc">
-          <normaloff>:/icons/remove</normaloff>:/icons/remove</iconset>
-        </property>
        </widget>
       </item>
      </layout>
@@ -1299,7 +1279,7 @@
      </widget>
     </item>
     <item row="2" column="1">
-     <widget class="MeowcoinAmountField" name="payAmount_s">
+     <widget class="BitcoinAmountField" name="payAmount_s">
       <property name="acceptDrops">
        <bool>false</bool>
       </property>
@@ -1312,18 +1292,18 @@
   <customwidget>
    <class>QValidatedLineEdit</class>
    <extends>QLineEdit</extends>
-   <header>qvalidatedlineedit.h</header>
+   <header>qt/qvalidatedlineedit.h</header>
   </customwidget>
   <customwidget>
-   <class>MeowcoinAmountField</class>
+   <class>BitcoinAmountField</class>
    <extends>QLineEdit</extends>
-   <header>meowcoinamountfield.h</header>
+   <header>qt/bitcoinamountfield.h</header>
    <container>1</container>
   </customwidget>
   <customwidget>
    <class>AssetAmountField</class>
    <extends>QLineEdit</extends>
-   <header location="global">meowcoinamountfield.h</header>
+   <header location="global">qt/meowcoinamountfield.h</header>
   </customwidget>
  </customwidgets>
  <tabstops>
@@ -1338,7 +1318,7 @@
   <tabstop>deleteButton_s</tabstop>
  </tabstops>
  <resources>
-  <include location="../meowcoin.qrc"/>
+  <include location="../avian.qrc"/>
  </resources>
  <connections/>
 </ui>

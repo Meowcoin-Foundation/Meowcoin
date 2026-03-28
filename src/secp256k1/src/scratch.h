@@ -1,11 +1,11 @@
-/**********************************************************************
- * Copyright (c) 2017 Andrew Poelstra	                              *
- * Distributed under the MIT software license, see the accompanying   *
- * file COPYING or http://www.opensource.org/licenses/mit-license.php.*
- **********************************************************************/
+/***********************************************************************
+ * Copyright (c) 2017 Andrew Poelstra                                  *
+ * Distributed under the MIT software license, see the accompanying    *
+ * file COPYING or https://www.opensource.org/licenses/mit-license.php.*
+ ***********************************************************************/
 
-#ifndef _SECP256K1_SCRATCH_
-#define _SECP256K1_SCRATCH_
+#ifndef SECP256K1_SCRATCH_H
+#define SECP256K1_SCRATCH_H
 
 /* The typedef is used internally; the struct name is used in the public API
  * (where it is exposed as a different typedef) */
@@ -20,6 +20,8 @@ typedef struct secp256k1_scratch_space_struct {
     /** maximum size available to allocate */
     size_t max_size;
 } secp256k1_scratch;
+
+typedef struct secp256k1_scratch_space_struct secp256k1_scratch_space;
 
 static secp256k1_scratch* secp256k1_scratch_create(const secp256k1_callback* error_callback, size_t max_size);
 

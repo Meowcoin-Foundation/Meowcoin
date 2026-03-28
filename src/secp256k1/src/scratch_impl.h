@@ -1,11 +1,11 @@
-/**********************************************************************
- * Copyright (c) 2017 Andrew Poelstra                                 *
- * Distributed under the MIT software license, see the accompanying   *
- * file COPYING or http://www.opensource.org/licenses/mit-license.php.*
- **********************************************************************/
+/***********************************************************************
+ * Copyright (c) 2017 Andrew Poelstra                                  *
+ * Distributed under the MIT software license, see the accompanying    *
+ * file COPYING or https://www.opensource.org/licenses/mit-license.php.*
+ ***********************************************************************/
 
-#ifndef _SECP256K1_SCRATCH_IMPL_H_
-#define _SECP256K1_SCRATCH_IMPL_H_
+#ifndef SECP256K1_SCRATCH_IMPL_H
+#define SECP256K1_SCRATCH_IMPL_H
 
 #include "util.h"
 #include "scratch.h"
@@ -25,11 +25,11 @@ static secp256k1_scratch* secp256k1_scratch_create(const secp256k1_callback* err
 
 static void secp256k1_scratch_destroy(const secp256k1_callback* error_callback, secp256k1_scratch* scratch) {
     if (scratch != NULL) {
-        VERIFY_CHECK(scratch->alloc_size == 0); /* all checkpoints should be applied */
         if (secp256k1_memcmp_var(scratch->magic, "scratch", 8) != 0) {
             secp256k1_callback_call(error_callback, "invalid scratch space");
             return;
         }
+        VERIFY_CHECK(scratch->alloc_size == 0); /* all checkpoints should be applied */
         memset(scratch->magic, 0, sizeof(scratch->magic));
         free(scratch);
     }

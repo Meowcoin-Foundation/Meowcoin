@@ -1,95 +1,91 @@
-(note: this is a temporary file, to be added-to by anybody, and moved to
-release-notes at release time)
+v30.2 Release Notes
+===================
 
-Meowcoin Core version *version* is now available from:
+Meowcoin Core version v30.2 is now available from:
 
-  <https://mewccrypto.com/bin/meowcoin-core-*version*/>
+  <https://meowcoincore.org/bin/meowcoin-core-30.2/>
 
-This is a new major version release, including new features, various bugfixes
-and performance improvements, as well as updated translations.
+This release includes new features, various bug fixes and performance
+improvements, as well as updated translations.
 
 Please report bugs using the issue tracker at GitHub:
 
-  <https://github.com/JustAResearcher/Meowcoin/issues>
+  <https://github.com/meowcoin/meowcoin/issues>
 
 To receive security and update notifications, please subscribe to:
 
-  <https://mewccrypto.com/en/list/announcements/join/>
+  <https://meowcoincore.org/en/list/announcements/join/>
 
 How to Upgrade
 ==============
 
 If you are running an older version, shut it down. Wait until it has completely
-shut down (which might take a few minutes for older versions), then run the
-installer (on Windows) or just copy over `/Applications/Meowcoin-Qt` (on Mac)
+shut down (which might take a few minutes in some cases), then run the
+installer (on Windows) or just copy over `/Applications/Meowcoin-Qt` (on macOS)
 or `meowcoind`/`meowcoin-qt` (on Linux).
 
-The first time you run version 0.15.0, your chainstate database will be converted to a
-new format, which will take anywhere from a few minutes to half an hour,
-depending on the speed of your machine.
-
-Note that the block database format also changed in version 0.8.0 and there is no
-automatic upgrade code from before version 0.8 to version 0.15.0. Upgrading
-directly from 0.7.x and earlier without redownloading the blockchain is not supported.
-However, as usual, old wallet versions are still supported.
-
-Downgrading warning
--------------------
-
-The chainstate database for this release is not compatible with previous
-releases, so if you run 0.15 and then decide to switch back to any
-older version, you will need to run the old release with the `-reindex-chainstate`
-option to rebuild the chainstate data structures in the old format.
-
-If your node has pruning enabled, this will entail re-downloading and
-processing the entire blockchain.
+Upgrading directly from a version of Meowcoin Core that has reached its EOL is
+possible, but it might take some time if the data directory needs to be migrated. Old
+wallet versions of Meowcoin Core are generally supported.
 
 Compatibility
 ==============
 
-Meowcoin Core is extensively tested on multiple operating systems using
-the Linux kernel, macOS 10.8+, and Windows Vista and later. Windows XP is not supported.
-
-Meowcoin Core should also work on most other Unix-like systems but is not
-frequently tested on them.
+Meowcoin Core is supported and tested on operating systems using the
+Linux Kernel 3.17+, macOS 13+, and Windows 10+. Meowcoin
+Core should also work on most other Unix-like systems but is not as
+frequently tested on them. It is not recommended to use Meowcoin Core on
+unsupported systems.
 
 Notable changes
 ===============
 
-Miner block size limiting deprecated
-------------------------------------
+### Wallet
 
-Though blockmaxweight has been preferred for limiting the size of blocks returned by
-getblocktemplate since 0.13.0, blockmaxsize remained as an option for those who wished
-to limit their block size directly. Using this option resulted in a few UI issues as
-well as non-optimal fee selection and ever-so-slightly worse performance, and has thus
-now been deprecated. Further, the blockmaxsize option is now used only to calculate an
-implied blockmaxweight, instead of limiting block size directly. Any miners who wish
-to limit their blocks by size, instead of by weight, will have to do so manually by
-removing transactions from their block template directly.
+- #34156 wallet: fix unnamed legacy wallet migration failure
+- #34215 wallettool: fix unnamed createfromdump failure walletsdir deletion
+- #34221 test: migration, avoid backup name mismatch in default_wallet_failure
 
-HD-wallets by default
----------------------
-Due to a backward-incompatible change in the wallet database, wallets created
-with version 0.16.0 will be rejected by previous versions. Also, version 0.16.0
-will only create hierarchical deterministic (HD) wallets.
+### IPC
 
-Low-level RPC changes
-----------------------
-- The "currentblocksize" value in getmininginfo has been removed.
-- The deprecated RPC `getinfo` was removed. It is recommended that the more specific RPCs are used:
-  * `getblockchaininfo`
-  * `getnetworkinfo`
-  * `getwalletinfo`
-  * `getmininginfo`
+- #33511 init: Fix Ctrl-C shutdown hangs during wait calls
 
-- `dumpwallet` no longer allows overwriting files. This is a security measure
-  as well as prevents dangerous user mistakes.
+### Build
+
+- #33950 guix: reduce allowed exported symbols
+- #34107 build: Update minimum required Boost version
+- #34227 guix: Fix osslsigncode tests
+
+### Test
+
+- #34137 test: Avoid hard time.sleep(1) in feature_init.py
+- #34226 wallet: test: Relative wallet failed migration cleanup
+
+### Fuzz
+
+- #34091 fuzz: doc: remove any mention to address_deserialize_v2
+
+### Doc
+
+- #34182 doc: Update OpenBSD Build Guide
+
+### Misc
+
+- #34174 doc: update copyright year to 2026
 
 Credits
 =======
 
 Thanks to everyone who directly contributed to this release:
 
+- Ava Chow
+- brunoerg
+- davidgumberg
+- fanquake
+- furszy
+- Hennadii Stepanov
+- MarcoFalke
+- Ryan Ofsky
 
-As well as everyone that helped translating on [Transifex](https://www.transifex.com/projects/p/meowcoin/).
+As well as to everyone that helped with translations on
+[Transifex](https://explore.transifex.com/meowcoin/meowcoin/).

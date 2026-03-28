@@ -2,15 +2,15 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <assets/snapshotrequestdb.h>
+
+#include <logging.h>
 #include <set>
-#include <boost/thread.hpp>
 
-#include "snapshotrequestdb.h"
+static const uint8_t SNAPSHOTREQUEST_FLAG = 'S';
 
-static const char SNAPSHOTREQUEST_FLAG = 'S';
-
-static const char DISTRIBUTEREQUEST_FLAG = 'D';
-static const char DISTRIBUTETRANSACTION_FLAG = 'T';
+static const uint8_t DISTRIBUTEREQUEST_FLAG = 'D';
+static const uint8_t DISTRIBUTETRANSACTION_FLAG = 'T';
 
 CSnapshotRequestDBEntry::CSnapshotRequestDBEntry()
 {
@@ -30,15 +30,20 @@ CSnapshotRequestDBEntry::CSnapshotRequestDBEntry(
 }
 
 CSnapshotRequestDB::CSnapshotRequestDB(
-    size_t nCacheSize, bool fMemory, bool fWipe)
-    : CDBWrapper(GetDataDir() / "rewards" / "snapshotrequest", nCacheSize, fMemory, fWipe) {
+    const fs::path& datadir, size_t nCacheSize, bool fMemory, bool fWipe)
+    : CDBWrapper(DBParams{
+          .path = datadir / "rewards" / "snapshotrequest",
+          .cache_bytes = nCacheSize,
+          .memory_only = fMemory,
+          .wipe_data = fWipe})
+{
 }
 
 bool CSnapshotRequestDB::ScheduleSnapshot(
     const std::string & p_assetName, int p_heightForSnapshot
 )
 {
-    LogPrint(BCLog::REWARDS, "%s : Requesting snapshot: assetName='%s', height=%d\n",
+    LogPrintf( "%s : Requesting snapshot: assetName='%s', height=%d\n",
         __func__,
         p_assetName.c_str(), p_heightForSnapshot);
 
@@ -47,7 +52,7 @@ bool CSnapshotRequestDB::ScheduleSnapshot(
     //  Add the entry to the database
     bool succeeded = Write(std::make_pair(SNAPSHOTREQUEST_FLAG, snapshotRequest.heightAndName), snapshotRequest);
 
-    LogPrint(BCLog::REWARDS, "%s : Snapshot request for '%s' at height %d %s!\n",
+    LogPrintf( "%s : Snapshot request for '%s' at height %d %s!\n",
         __func__,
         p_assetName.c_str(), p_heightForSnapshot,
         succeeded ? "succeeded" : "failed");
@@ -63,12 +68,12 @@ bool CSnapshotRequestDB::RetrieveSnapshotRequest(
     //  Load up the snapshot entries at this height
     std::string heightAndName = std::to_string(p_heightForSnapshot) + p_assetName;
 
-    LogPrint(BCLog::REWARDS, "%s : Looking for snapshot request '%s'\n",
+    LogPrintf( "%s : Looking for snapshot request '%s'\n",
         __func__, heightAndName.c_str());
 
     bool succeeded = Read(std::make_pair(SNAPSHOTREQUEST_FLAG, heightAndName), p_snapshotRequest);
 
-    LogPrint(BCLog::REWARDS, "%s : Retrieval of snapshot request for '%s' %s!\n",
+    LogPrintf( "%s : Retrieval of snapshot request for '%s' %s!\n",
         __func__,
         heightAndName.c_str(),
         succeeded ? "succeeded" : "failed");
@@ -91,14 +96,14 @@ bool CSnapshotRequestDB::RemoveSnapshotRequest(
     //  Load up the snapshot entries at this height
     std::string heightAndName = std::to_string(p_heightForSnapshot) + p_assetName;
 
-    LogPrint(BCLog::REWARDS, "%s : Attempting to remove snapshot request '%s'\n",
+    LogPrintf( "%s : Attempting to remove snapshot request '%s'\n",
         __func__,
         heightAndName.c_str());
 
     //  Otherwise, erase the entire entry since none are left.
     bool succeeded = Erase(std::make_pair(SNAPSHOTREQUEST_FLAG, heightAndName), true);
 
-    LogPrint(BCLog::REWARDS, "%s : Removal of snapshot request for '%s' %s!\n",
+    LogPrintf( "%s : Removal of snapshot request for '%s' %s!\n",
         __func__,
         heightAndName.c_str(),
         succeeded ? "succeeded" : "failed");
@@ -112,12 +117,12 @@ bool CSnapshotRequestDB::RetrieveSnapshotRequestsForHeight(
 {
     bool assetNameProvided = p_assetName.length() > 0;
     if (assetNameProvided) {
-        LogPrint(BCLog::REWARDS, "%s : Looking for snapshot requests for asset '%s' at height %d!\n",
+        LogPrintf( "%s : Looking for snapshot requests for asset '%s' at height %d!\n",
             __func__,
             p_assetName.c_str(), p_blockHeight);
     }
     else {
-        LogPrint(BCLog::REWARDS, "%s : Looking for all snapshot requests at height %d!\n",
+        LogPrintf( "%s : Looking for all snapshot requests at height %d!\n",
             __func__,
             p_blockHeight);
     }
@@ -130,8 +135,7 @@ bool CSnapshotRequestDB::RetrieveSnapshotRequestsForHeight(
 
     // Load all pending rewards
     while (pcursor->Valid()) {
-        boost::this_thread::interruption_point();
-        std::pair<char, int> key;
+        std::pair<uint8_t, int> key;
 
         //  Only retrieve entries at the provided block height
         if (pcursor->GetKey(key) && key.first == SNAPSHOTREQUEST_FLAG) {
@@ -146,7 +150,7 @@ bool CSnapshotRequestDB::RetrieveSnapshotRequestsForHeight(
                     }
                 }
             } else {
-                LogPrint(BCLog::REWARDS, "%s: Failed to read snapshot request\n", __func__);
+                LogPrintf( "%s: Failed to read snapshot request\n", __func__);
             }
         }
 
@@ -157,8 +161,13 @@ bool CSnapshotRequestDB::RetrieveSnapshotRequestsForHeight(
 }
 
 CDistributeSnapshotRequestDB::CDistributeSnapshotRequestDB(
-        size_t nCacheSize, bool fMemory, bool fWipe)
-        : CDBWrapper(GetDataDir() / "rewards" / "distributerequests", nCacheSize, fMemory, fWipe) {
+        const fs::path& datadir, size_t nCacheSize, bool fMemory, bool fWipe)
+        : CDBWrapper(DBParams{
+              .path = datadir / "rewards" / "distributerequests",
+              .cache_bytes = nCacheSize,
+              .memory_only = fMemory,
+              .wipe_data = fWipe})
+{
 }
 
 // Schedule a distribution to occur
@@ -171,8 +180,6 @@ bool CDistributeSnapshotRequestDB::OverrideDistributeSnapshot(const uint256& has
 {
     return  Write(std::make_pair(DISTRIBUTEREQUEST_FLAG, hash), p_rewardSnapshot);
 }
-
-bool OverrideDistributeSnapshot(const uint256& hash, const CRewardSnapshot& p_rewardSnapshot);
 
 // Add a new distribution transaction
 bool CDistributeSnapshotRequestDB::AddDistributeTransaction(const uint256& hash, const int& nBatchNumber, const uint256& txid)
@@ -207,8 +214,7 @@ void CDistributeSnapshotRequestDB::LoadAllDistributeSnapshot(std::map<uint256, C
 
     // Load all pending rewards
     while (pcursor->Valid()) {
-        boost::this_thread::interruption_point();
-        std::pair<char, uint256> key;
+        std::pair<uint8_t, uint256> key;
 
         //  Only retrieve entries at the provided block height
         if (pcursor->GetKey(key) && key.first == DISTRIBUTEREQUEST_FLAG) {
@@ -217,7 +223,7 @@ void CDistributeSnapshotRequestDB::LoadAllDistributeSnapshot(std::map<uint256, C
             if (pcursor->GetValue(distributeDbEntry)) {
                 mapRewardSnapshots[key.second] = distributeDbEntry;
             } else {
-                LogPrint(BCLog::REWARDS, "%s: Failed to read snapshot distribution for key: %s\n", __func__, key.second.GetHex());
+                LogPrintf( "%s: Failed to read snapshot distribution for key: %s\n", __func__, key.second.GetHex());
             }
         }
 
@@ -225,7 +231,7 @@ void CDistributeSnapshotRequestDB::LoadAllDistributeSnapshot(std::map<uint256, C
     }
 
     for (auto const & item : mapRewardSnapshots) {
-        LogPrint(BCLog::REWARDS, "%s : Found snapshot distribution request for Owner: %s,  Distribution: %s, Exception: %s, Height: %d, Status: %d\n",
+        LogPrintf( "%s : Found snapshot distribution request for Owner: %s,  Distribution: %s, Exception: %s, Height: %d, Status: %d\n",
                  __func__,
                  item.second.strOwnershipAsset,
                  item.second.strDistributionAsset,

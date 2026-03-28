@@ -2,12 +2,12 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef MEOWCOINCOIN_REWARDS_H
-#define MEOWCOINCOIN_REWARDS_H
+#ifndef BITCOIN_ASSETS_REWARDS_H
+#define BITCOIN_ASSETS_REWARDS_H
 
-#include "amount.h"
-#include "tinyformat.h"
-#include "assettypes.h"
+#include <consensus/amount.h>
+#include <tinyformat.h>
+#include <assets/assettypes.h>
 
 #include <string>
 #include <set>
@@ -17,7 +17,6 @@
 
 
 class CRewardSnapshot;
-class CWallet;
 class CRewardSnapshot;
 
 extern std::map<uint256, CRewardSnapshot> mapRewardSnapshots;
@@ -66,13 +65,10 @@ class CRewardTransaction {
         nHeight = 0;
     }
 
-    ADD_SERIALIZE_METHODS;
-
-    template <typename Stream, typename Operation>
-    inline void SerializationOp(Stream& s, Operation ser_action)
+    SERIALIZE_METHODS(CRewardTransaction, obj)
     {
-        READWRITE(nHeight);
-        READWRITE(txid);
+        READWRITE(obj.nHeight);
+        READWRITE(obj.txid);
     }
 
 
@@ -125,40 +121,32 @@ public:
 
     uint256 GetHash() const;
 
-    ADD_SERIALIZE_METHODS;
-
-    template <typename Stream, typename Operation>
-    inline void SerializationOp(Stream& s, Operation ser_action)
+    template <typename Stream>
+    void Serialize(Stream& s) const
     {
-        READWRITE(strOwnershipAsset);
-        READWRITE(strDistributionAsset);
-        READWRITE(strExceptionAddresses);
-        READWRITE(nDistributionAmount);
-        READWRITE(nHeight);
-        // We don't want to add the status when computing the hash because it changes as the distribution is sent out
-        if (!(s.GetType() & SER_GETHASH))
-            READWRITE(nStatus);
+        ::Serialize(s, strOwnershipAsset);
+        ::Serialize(s, strDistributionAsset);
+        ::Serialize(s, strExceptionAddresses);
+        ::Serialize(s, nDistributionAmount);
+        ::Serialize(s, nHeight);
+        ::Serialize(s, nStatus);
     }
-};
 
-enum {
-    FAILED_GETTING_DISTRIBUTION_LIST = 1,
-    FAILED_
+    template <typename Stream>
+    void Unserialize(Stream& s)
+    {
+        ::Unserialize(s, strOwnershipAsset);
+        ::Unserialize(s, strDistributionAsset);
+        ::Unserialize(s, strExceptionAddresses);
+        ::Unserialize(s, nDistributionAmount);
+        ::Unserialize(s, nHeight);
+        ::Unserialize(s, nStatus);
+    }
 };
 
 bool GenerateDistributionList(const CRewardSnapshot& p_rewardSnapshot, std::vector<OwnerAndAmount>& vecDistributionList);
 bool AddDistributeRewardSnapshot(CRewardSnapshot& p_rewardSnapshot);
 
-#ifdef ENABLE_WALLET
-void DistributeRewardSnapshot(CWallet * p_wallet, const CRewardSnapshot& p_rewardSnapshot);
-
-bool BuildTransaction(
-        CWallet * const p_walletPtr, const CRewardSnapshot& p_rewardSnapshot,
-        const std::vector<OwnerAndAmount> & p_pendingPayments, const int& start,
-        std::string& change_address, uint256& retTxid);
-
-void CheckRewardDistributions(CWallet * p_wallet);
-#endif //ENABLE_WALLET
 
 
 
@@ -166,5 +154,4 @@ void CheckRewardDistributions(CWallet * p_wallet);
 
 
 
-
-#endif //MEOWCOINCOIN_REWARDS_H
+#endif // BITCOIN_ASSETS_REWARDS_H

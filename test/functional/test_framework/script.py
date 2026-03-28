@@ -1,38 +1,48 @@
 #!/usr/bin/env python3
-# Copyright (c) 2015-2016 The Bitcoin Core developers
-# Copyright (c) 2017-2020 The Meowcoin Core developers
+# Copyright (c) 2015-2022 The Meowcoin Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
+"""Functionality to build scripts, as well as signature hash functions.
 
-"""
-Functionality to build scripts, as well as signature_hash().
-
-This file is modified from python-meowlib.
+This file is modified from python-meowcoinlib.
 """
 
-from .mininode import CTransaction, CTxOut, sha256, hash256, uint256_from_str, ser_uint256, ser_string
-from binascii import hexlify
-from .bignum import bn2vch
-import hashlib
-import struct
+from collections import namedtuple
+import unittest
 
-import sys
+from .key import TaggedHash, tweak_add_pubkey, compute_xonly_pubkey
 
-bchr = chr
-bord = ord
-if sys.version > '3':
-    long = int
-    bchr = lambda x: bytes([x])
-    bord = lambda x: x
+from .messages import (
+    CTransaction,
+    CTxOut,
+    hash256,
+    ser_string,
+    sha256,
+)
+
+from .crypto.ripemd160 import ripemd160
 
 MAX_SCRIPT_ELEMENT_SIZE = 520
-OPCODE_NAMES = {}
-_opcode_instances = []
+MAX_SCRIPT_SIZE = 10000
+MAX_PUBKEYS_PER_MULTI_A = 999
+LOCKTIME_THRESHOLD = 500000000
+ANNEX_TAG = 0x50
 
+LEAF_VERSION_TAPSCRIPT = 0xc0
 
 def hash160(s):
-    return hashlib.new('ripemd160', sha256(s)).digest()
+    return ripemd160(sha256(s))
 
+def bn2vch(v):
+    """Convert number to meowcoin-specific little endian format."""
+    # We need v.bit_length() bits, plus a sign bit for every nonzero number.
+    n_bits = v.bit_length() + (v != 0)
+    # The number of bytes for that is:
+    n_bytes = (n_bits + 7) // 8
+    # Convert number to absolute value + sign in top bit.
+    encoded_v = 0 if v == 0 else abs(v) | ((v < 0) << (n_bytes * 8 - 1))
+    # Serialize to bytes
+    return encoded_v.to_bytes(n_bytes, 'little')
 
 class CScriptOp(int):
     """A single script opcode"""
@@ -42,26 +52,26 @@ class CScriptOp(int):
     def encode_op_pushdata(d):
         """Encode a PUSHDATA op, returning bytes"""
         if len(d) < 0x4c:
-            return b'' + bchr(len(d)) + d  # OP_PUSHDATA
+            return b'' + bytes([len(d)]) + d  # OP_PUSHDATA
         elif len(d) <= 0xff:
-            return b'\x4c' + bchr(len(d)) + d  # OP_PUSHDATA1
+            return b'\x4c' + bytes([len(d)]) + d  # OP_PUSHDATA1
         elif len(d) <= 0xffff:
-            return b'\x4d' + struct.pack(b'<H', len(d)) + d  # OP_PUSHDATA2
+            return b'\x4d' + len(d).to_bytes(2, "little") + d  # OP_PUSHDATA2
         elif len(d) <= 0xffffffff:
-            return b'\x4e' + struct.pack(b'<I', len(d)) + d  # OP_PUSHDATA4
+            return b'\x4e' + len(d).to_bytes(4, "little") + d  # OP_PUSHDATA4
         else:
             raise ValueError("Data too long to encode in a PUSHDATA op")
 
     @staticmethod
-    def encode_op_n(number):
+    def encode_op_n(n):
         """Encode a small integer op, returning an opcode"""
-        if not (0 <= number <= 16):
-            raise ValueError('Integer must be in range 0 <= n <= 16, got %d' % number)
+        if not (0 <= n <= 16):
+            raise ValueError('Integer must be in range 0 <= n <= 16, got %d' % n)
 
-        if number == 0:
+        if n == 0:
             return OP_0
         else:
-            return CScriptOp(OP_1 + number - 1)
+            return CScriptOp(OP_1 + n - 1)
 
     def decode_op_n(self):
         """Decode a small integer opcode, returning an integer"""
@@ -89,18 +99,21 @@ class CScriptOp(int):
         else:
             return 'CScriptOp(0x%x)' % self
 
-    def __new__(cls, number):
+    def __new__(cls, n):
         try:
-            return _opcode_instances[number]
+            return _opcode_instances[n]
         except IndexError:
-            assert len(_opcode_instances) == number
-            _opcode_instances.append(super(CScriptOp, cls).__new__(cls, number))
-            return _opcode_instances[number]
+            assert len(_opcode_instances) == n
+            _opcode_instances.append(super().__new__(cls, n))
+            return _opcode_instances[n]
 
+OPCODE_NAMES: dict[CScriptOp, str] = {}
+_opcode_instances: list[CScriptOp] = []
 
 # Populate opcode instance table
 for n in range(0xff + 1):
     CScriptOp(n)
+
 
 # push value
 OP_0 = CScriptOp(0x00)
@@ -234,13 +247,8 @@ OP_NOP8 = CScriptOp(0xb7)
 OP_NOP9 = CScriptOp(0xb8)
 OP_NOP10 = CScriptOp(0xb9)
 
-OP_MEWC_ASSET = CScriptOp(0xc0)
-
-# template matching params
-OP_SMALLINTEGER = CScriptOp(0xfa)
-OP_PUBKEYS = CScriptOp(0xfb)
-OP_PUBKEYHASH = CScriptOp(0xfd)
-OP_PUBKEY = CScriptOp(0xfe)
+# BIP 342 opcodes (Tapscript)
+OP_CHECKSIGADD = CScriptOp(0xba)
 
 OP_INVALIDOPCODE = CScriptOp(0xff)
 
@@ -356,31 +364,24 @@ OPCODE_NAMES.update({
     OP_NOP8: 'OP_NOP8',
     OP_NOP9: 'OP_NOP9',
     OP_NOP10: 'OP_NOP10',
-    OP_MEWC_ASSET: 'OP_MEWC_ASSET',
-    OP_SMALLINTEGER: 'OP_SMALLINTEGER',
-    OP_PUBKEYS: 'OP_PUBKEYS',
-    OP_PUBKEYHASH: 'OP_PUBKEYHASH',
-    OP_PUBKEY: 'OP_PUBKEY',
+    OP_CHECKSIGADD: 'OP_CHECKSIGADD',
     OP_INVALIDOPCODE: 'OP_INVALIDOPCODE',
 })
-
 
 class CScriptInvalidError(Exception):
     """Base class for CScript exceptions"""
     pass
 
-
 class CScriptTruncatedPushDataError(CScriptInvalidError):
     """Invalid pushdata due to truncation"""
-
     def __init__(self, msg, data):
         self.data = data
-        super(CScriptTruncatedPushDataError, self).__init__(msg)
+        super().__init__(msg)
 
 
 # This is used, eg, for blockchain heights in coinbase scripts (bip34)
 class CScriptNum:
-    __slots__ = "value"
+    __slots__ = ("value",)
 
     def __init__(self, d=0):
         self.value = d
@@ -392,14 +393,30 @@ class CScriptNum:
             return bytes(r)
         neg = obj.value < 0
         absvalue = -obj.value if neg else obj.value
-        while absvalue:
+        while (absvalue):
             r.append(absvalue & 0xff)
             absvalue >>= 8
         if r[-1] & 0x80:
             r.append(0x80 if neg else 0)
         elif neg:
             r[-1] |= 0x80
-        return bytes(bchr(len(r)) + r)
+        return bytes([len(r)]) + r
+
+    @staticmethod
+    def decode(vch):
+        result = 0
+        # We assume valid push_size and minimal encoding
+        value = vch[1:]
+        if len(value) == 0:
+            return result
+        for i, byte in enumerate(value):
+            result |= int(byte) << 8 * i
+        if value[-1] >= 0x80:
+            # Mask for all but the highest result bit
+            num_mask = (2**(len(value) * 8) - 1) >> 1
+            result &= num_mask
+            result *= -1
+        return result
 
 
 class CScript(bytes):
@@ -418,17 +435,17 @@ class CScript(bytes):
     def __coerce_instance(cls, other):
         # Coerce other into bytes
         if isinstance(other, CScriptOp):
-            other = bchr(other)
+            other = bytes([other])
         elif isinstance(other, CScriptNum):
-            if other.value == 0:
-                other = bchr(CScriptOp(OP_0))
+            if (other.value == 0):
+                other = bytes([CScriptOp(OP_0)])
             else:
                 other = CScriptNum.encode(other)
         elif isinstance(other, int):
             if 0 <= other <= 16:
-                other = bytes(bchr(CScriptOp.encode_op_n(other)))
+                other = bytes([CScriptOp.encode_op_n(other)])
             elif other == -1:
-                other = bytes(bchr(OP_1NEGATE))
+                other = bytes([OP_1NEGATE])
             else:
                 other = CScriptOp.encode_op_pushdata(bn2vch(other))
         elif isinstance(other, (bytes, bytearray)):
@@ -436,15 +453,8 @@ class CScript(bytes):
         return other
 
     def __add__(self, other):
-        # Do the coercion outside of the try block so that errors in it are
-        # noticed.
-        other = self.__coerce_instance(other)
-
-        try:
-            # bytes.__add__ always returns bytes instances unfortunately
-            return CScript(super(CScript, self).__add__(other))
-        except TypeError:
-            raise TypeError('Can not add a %r instance to a CScript' % other.__class__)
+        # add makes no sense for a CScript()
+        raise NotImplementedError
 
     def join(self, iterable):
         # join makes no sense for a CScript()
@@ -452,15 +462,14 @@ class CScript(bytes):
 
     def __new__(cls, value=b''):
         if isinstance(value, bytes) or isinstance(value, bytearray):
-            return super(CScript, cls).__new__(cls, value)
+            return super().__new__(cls, value)
         else:
             def coerce_iterable(iterable):
                 for instance in iterable:
                     yield cls.__coerce_instance(instance)
-
             # Annoyingly on both python2 and python3 bytes.join() always
             # returns a bytes instance even when subclassed.
-            return super(CScript, cls).__new__(cls, b''.join(coerce_iterable(value)))
+            return super().__new__(cls, b''.join(coerce_iterable(value)))
 
     def raw_iter(self):
         """Raw iteration
@@ -472,49 +481,51 @@ class CScript(bytes):
         i = 0
         while i < len(self):
             sop_idx = i
-            opcode = bord(self[i])
+            opcode = CScriptOp(self[i])
             i += 1
 
             if opcode > OP_PUSHDATA4:
-                yield opcode, None, sop_idx
+                yield (opcode, None, sop_idx)
             else:
+                datasize = None
+                pushdata_type = None
                 if opcode < OP_PUSHDATA1:
                     pushdata_type = 'PUSHDATA(%d)' % opcode
-                    data_size = opcode
+                    datasize = opcode
 
                 elif opcode == OP_PUSHDATA1:
                     pushdata_type = 'PUSHDATA1'
                     if i >= len(self):
                         raise CScriptInvalidError('PUSHDATA1: missing data length')
-                    data_size = bord(self[i])
+                    datasize = self[i]
                     i += 1
 
                 elif opcode == OP_PUSHDATA2:
                     pushdata_type = 'PUSHDATA2'
                     if i + 1 >= len(self):
                         raise CScriptInvalidError('PUSHDATA2: missing data length')
-                    data_size = bord(self[i]) + (bord(self[i + 1]) << 8)
+                    datasize = self[i] + (self[i + 1] << 8)
                     i += 2
 
                 elif opcode == OP_PUSHDATA4:
                     pushdata_type = 'PUSHDATA4'
                     if i + 3 >= len(self):
                         raise CScriptInvalidError('PUSHDATA4: missing data length')
-                    data_size = bord(self[i]) + (bord(self[i + 1]) << 8) + (bord(self[i + 2]) << 16) + (bord(self[i + 3]) << 24)
+                    datasize = self[i] + (self[i + 1] << 8) + (self[i + 2] << 16) + (self[i + 3] << 24)
                     i += 4
 
                 else:
                     assert False  # shouldn't happen
 
-                data = bytes(self[i:i + data_size])
+                data = bytes(self[i:i + datasize])
 
                 # Check for truncation
-                if len(data) < data_size:
+                if len(data) < datasize:
                     raise CScriptTruncatedPushDataError('%s: truncated data' % pushdata_type, data)
 
-                i += data_size
+                i += datasize
 
-                yield opcode, data, sop_idx
+                yield (opcode, data, sop_idx)
 
     def __iter__(self):
         """'Cooked' iteration
@@ -537,11 +548,9 @@ class CScript(bytes):
                     yield CScriptOp(opcode)
 
     def __repr__(self):
-        # For Python3 compatibility add b before strings so testcases don't
-        # need to change
         def _repr(o):
             if isinstance(o, bytes):
-                return b"x('%s')" % hexlify(o).decode('ascii')
+                return "x('%s')" % o.hex()
             else:
                 return repr(o)
 
@@ -565,36 +574,42 @@ class CScript(bytes):
 
         return "CScript([%s])" % ', '.join(ops)
 
-    def get_sig_op_count(self, f_accurate):
+    def GetSigOpCount(self, fAccurate):
         """Get the SigOp count.
 
         fAccurate - Accurately count CHECKMULTISIG, see BIP16 for details.
 
         Note that this is consensus-critical.
         """
-        number = 0
-        last_opcode = OP_INVALIDOPCODE
+        n = 0
+        lastOpcode = OP_INVALIDOPCODE
         for (opcode, data, sop_idx) in self.raw_iter():
             if opcode in (OP_CHECKSIG, OP_CHECKSIGVERIFY):
-                number += 1
+                n += 1
             elif opcode in (OP_CHECKMULTISIG, OP_CHECKMULTISIGVERIFY):
-                if f_accurate and (OP_1 <= last_opcode <= OP_16):
-                    number += opcode.decode_op_n()
+                if fAccurate and (OP_1 <= lastOpcode <= OP_16):
+                    n += lastOpcode.decode_op_n()
                 else:
-                    number += 20
-            last_opcode = opcode
-        return number
+                    n += 20
+            lastOpcode = opcode
+        return n
+
+    def IsWitnessProgram(self):
+        """A witness program is any valid CScript that consists of a 1-byte
+           push opcode followed by a data push between 2 and 40 bytes."""
+        return ((4 <= len(self) <= 42) and
+                (self[0] == OP_0 or (OP_1 <= self[0] <= OP_16)) and
+                (self[1] + 2 == len(self)))
 
 
+SIGHASH_DEFAULT = 0 # Taproot-only default, semantics same as SIGHASH_ALL
 SIGHASH_ALL = 1
 SIGHASH_NONE = 2
 SIGHASH_SINGLE = 3
 SIGHASH_ANYONECANPAY = 0x80
 
-
-# noinspection PyUnusedLocal
-def find_and_delete(script, sig):
-    """Consensus critical, see find_and_delete() in Satoshi codebase"""
+def FindAndDelete(script, sig):
+    """Consensus critical, see FindAndDelete() in Satoshi codebase"""
     r = b''
     last_sop_idx = sop_idx = 0
     skip = True
@@ -610,98 +625,314 @@ def find_and_delete(script, sig):
         r += script[last_sop_idx:]
     return CScript(r)
 
+def LegacySignatureMsg(script, txTo, inIdx, hashtype):
+    """Preimage of the signature hash, if it exists.
 
-def signature_hash(script, tx_to, in_idx, hash_type):
-    """Consensus-correct signature_hash
+    Returns either (None, err) to indicate error (which translates to sighash 1),
+    or (msg, None).
+    """
+
+    if inIdx >= len(txTo.vin):
+        return (None, "inIdx %d out of range (%d)" % (inIdx, len(txTo.vin)))
+    txtmp = CTransaction(txTo)
+
+    for txin in txtmp.vin:
+        txin.scriptSig = b''
+    txtmp.vin[inIdx].scriptSig = FindAndDelete(script, CScript([OP_CODESEPARATOR]))
+
+    if (hashtype & 0x1f) == SIGHASH_NONE:
+        txtmp.vout = []
+
+        for i in range(len(txtmp.vin)):
+            if i != inIdx:
+                txtmp.vin[i].nSequence = 0
+
+    elif (hashtype & 0x1f) == SIGHASH_SINGLE:
+        outIdx = inIdx
+        if outIdx >= len(txtmp.vout):
+            return (None, "outIdx %d out of range (%d)" % (outIdx, len(txtmp.vout)))
+
+        tmp = txtmp.vout[outIdx]
+        txtmp.vout = []
+        for _ in range(outIdx):
+            txtmp.vout.append(CTxOut(-1))
+        txtmp.vout.append(tmp)
+
+        for i in range(len(txtmp.vin)):
+            if i != inIdx:
+                txtmp.vin[i].nSequence = 0
+
+    if hashtype & SIGHASH_ANYONECANPAY:
+        tmp = txtmp.vin[inIdx]
+        txtmp.vin = []
+        txtmp.vin.append(tmp)
+
+    s = txtmp.serialize_without_witness()
+    s += hashtype.to_bytes(4, "little")
+
+    return (s, None)
+
+def LegacySignatureHash(*args, **kwargs):
+    """Consensus-correct SignatureHash
 
     Returns (hash, err) to precisely match the consensus-critical behavior of
     the SIGHASH_SINGLE bug. (inIdx is *not* checked for validity)
     """
-    hash_one = b'\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'
 
-    if in_idx >= len(tx_to.vin):
-        return hash_one, "inIdx %d out of range (%d)" % (in_idx, len(tx_to.vin))
-    tx_tmp = CTransaction(tx_to)
+    HASH_ONE = b'\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'
+    msg, err = LegacySignatureMsg(*args, **kwargs)
+    if msg is None:
+        return (HASH_ONE, err)
+    else:
+        return (hash256(msg), err)
 
-    for txin in tx_tmp.vin:
-        txin.scriptSig = b''
-    tx_tmp.vin[in_idx].scriptSig = find_and_delete(script, CScript(OP_CODESEPARATOR))
+def sign_input_legacy(tx, input_index, input_scriptpubkey, privkey, sighash_type=SIGHASH_ALL):
+    """Add legacy ECDSA signature for a given transaction input. Note that the signature
+       is prepended to the scriptSig field, i.e. additional data pushes necessary for more
+       complex spends than P2PK (e.g. pubkey for P2PKH) can be already set before."""
+    (sighash, err) = LegacySignatureHash(input_scriptpubkey, tx, input_index, sighash_type)
+    assert err is None
+    der_sig = privkey.sign_ecdsa(sighash)
+    tx.vin[input_index].scriptSig = bytes(CScript([der_sig + bytes([sighash_type])])) + tx.vin[input_index].scriptSig
 
-    if (hash_type & 0x1f) == SIGHASH_NONE:
-        tx_tmp.vout = []
-
-        for i in range(len(tx_tmp.vin)):
-            if i != in_idx:
-                tx_tmp.vin[i].nSequence = 0
-
-    elif (hash_type & 0x1f) == SIGHASH_SINGLE:
-        out_idx = in_idx
-        if out_idx >= len(tx_tmp.vout):
-            return hash_one, "outIdx %d out of range (%d)" % (out_idx, len(tx_tmp.vout))
-
-        tmp = tx_tmp.vout[out_idx]
-        tx_tmp.vout = []
-        for i in range(out_idx):
-            tx_tmp.vout.append(CTxOut(-1))
-        tx_tmp.vout.append(tmp)
-
-        for i in range(len(tx_tmp.vin)):
-            if i != in_idx:
-                tx_tmp.vin[i].nSequence = 0
-
-    if hash_type & SIGHASH_ANYONECANPAY:
-        tmp = tx_tmp.vin[in_idx]
-        tx_tmp.vin = []
-        tx_tmp.vin.append(tmp)
-
-    s = tx_tmp.serialize()
-    s += struct.pack(b"<I", hash_type)
-
-    hash_data = hash256(s)
-
-    return hash_data, None
-
+def sign_input_segwitv0(tx, input_index, input_scriptpubkey, input_amount, privkey, sighash_type=SIGHASH_ALL):
+    """Add segwitv0 ECDSA signature for a given transaction input. Note that the signature
+       is inserted at the bottom of the witness stack, i.e. additional witness data
+       needed (e.g. pubkey for P2WPKH) can already be set before."""
+    sighash = SegwitV0SignatureHash(input_scriptpubkey, tx, input_index, sighash_type, input_amount)
+    der_sig = privkey.sign_ecdsa(sighash)
+    tx.wit.vtxinwit[input_index].scriptWitness.stack.insert(0, der_sig + bytes([sighash_type]))
 
 # TODO: Allow cached hashPrevouts/hashSequence/hashOutputs to be provided.
 # Performance optimization probably not necessary for python tests, however.
 # Note that this corresponds to sigversion == 1 in EvalScript, which is used
 # for version 0 witnesses.
-def segwit_version1_signature_hash(script, tx_to, in_idx, hash_type, amount):
-    hash_prevouts = 0
-    hash_sequence = 0
-    hash_outputs = 0
+def SegwitV0SignatureMsg(script, txTo, inIdx, hashtype, amount):
+    ZERO_HASH = bytes([0]*32)
 
-    if not (hash_type & SIGHASH_ANYONECANPAY):
+    hashPrevouts = ZERO_HASH
+    hashSequence = ZERO_HASH
+    hashOutputs = ZERO_HASH
+
+    if not (hashtype & SIGHASH_ANYONECANPAY):
         serialize_prevouts = bytes()
-        for i in tx_to.vin:
+        for i in txTo.vin:
             serialize_prevouts += i.prevout.serialize()
-        hash_prevouts = uint256_from_str(hash256(serialize_prevouts))
+        hashPrevouts = hash256(serialize_prevouts)
 
-    if not (hash_type & SIGHASH_ANYONECANPAY) and (hash_type & 0x1f) != SIGHASH_SINGLE and (hash_type & 0x1f) != SIGHASH_NONE:
+    if (not (hashtype & SIGHASH_ANYONECANPAY) and (hashtype & 0x1f) != SIGHASH_SINGLE and (hashtype & 0x1f) != SIGHASH_NONE):
         serialize_sequence = bytes()
-        for i in tx_to.vin:
-            serialize_sequence += struct.pack("<I", i.nSequence)
-        hash_sequence = uint256_from_str(hash256(serialize_sequence))
+        for i in txTo.vin:
+            serialize_sequence += i.nSequence.to_bytes(4, "little")
+        hashSequence = hash256(serialize_sequence)
 
-    if (hash_type & 0x1f) != SIGHASH_SINGLE and (hash_type & 0x1f) != SIGHASH_NONE:
+    if ((hashtype & 0x1f) != SIGHASH_SINGLE and (hashtype & 0x1f) != SIGHASH_NONE):
         serialize_outputs = bytes()
-        for o in tx_to.vout:
+        for o in txTo.vout:
             serialize_outputs += o.serialize()
-        hash_outputs = uint256_from_str(hash256(serialize_outputs))
-    elif (hash_type & 0x1f) == SIGHASH_SINGLE and in_idx < len(tx_to.vout):
-        serialize_outputs = tx_to.vout[in_idx].serialize()
-        hash_outputs = uint256_from_str(hash256(serialize_outputs))
+        hashOutputs = hash256(serialize_outputs)
+    elif ((hashtype & 0x1f) == SIGHASH_SINGLE and inIdx < len(txTo.vout)):
+        serialize_outputs = txTo.vout[inIdx].serialize()
+        hashOutputs = hash256(serialize_outputs)
 
     ss = bytes()
-    ss += struct.pack("<i", tx_to.nVersion)
-    ss += ser_uint256(hash_prevouts)
-    ss += ser_uint256(hash_sequence)
-    ss += tx_to.vin[in_idx].prevout.serialize()
+    ss += txTo.version.to_bytes(4, "little")
+    ss += hashPrevouts
+    ss += hashSequence
+    ss += txTo.vin[inIdx].prevout.serialize()
     ss += ser_string(script)
-    ss += struct.pack("<q", amount)
-    ss += struct.pack("<I", tx_to.vin[in_idx].nSequence)
-    ss += ser_uint256(hash_outputs)
-    ss += struct.pack("<i", tx_to.nLockTime)
-    ss += struct.pack("<I", hash_type)
+    ss += amount.to_bytes(8, "little", signed=True)
+    ss += txTo.vin[inIdx].nSequence.to_bytes(4, "little")
+    ss += hashOutputs
+    ss += txTo.nLockTime.to_bytes(4, "little")
+    ss += hashtype.to_bytes(4, "little")
+    return ss
 
-    return hash256(ss)
+def SegwitV0SignatureHash(*args, **kwargs):
+    return hash256(SegwitV0SignatureMsg(*args, **kwargs))
+
+class TestFrameworkScript(unittest.TestCase):
+    def test_bn2vch(self):
+        self.assertEqual(bn2vch(0), bytes([]))
+        self.assertEqual(bn2vch(1), bytes([0x01]))
+        self.assertEqual(bn2vch(-1), bytes([0x81]))
+        self.assertEqual(bn2vch(0x7F), bytes([0x7F]))
+        self.assertEqual(bn2vch(-0x7F), bytes([0xFF]))
+        self.assertEqual(bn2vch(0x80), bytes([0x80, 0x00]))
+        self.assertEqual(bn2vch(-0x80), bytes([0x80, 0x80]))
+        self.assertEqual(bn2vch(0xFF), bytes([0xFF, 0x00]))
+        self.assertEqual(bn2vch(-0xFF), bytes([0xFF, 0x80]))
+        self.assertEqual(bn2vch(0x100), bytes([0x00, 0x01]))
+        self.assertEqual(bn2vch(-0x100), bytes([0x00, 0x81]))
+        self.assertEqual(bn2vch(0x7FFF), bytes([0xFF, 0x7F]))
+        self.assertEqual(bn2vch(-0x8000), bytes([0x00, 0x80, 0x80]))
+        self.assertEqual(bn2vch(-0x7FFFFF), bytes([0xFF, 0xFF, 0xFF]))
+        self.assertEqual(bn2vch(0x80000000), bytes([0x00, 0x00, 0x00, 0x80, 0x00]))
+        self.assertEqual(bn2vch(-0x80000000), bytes([0x00, 0x00, 0x00, 0x80, 0x80]))
+        self.assertEqual(bn2vch(0xFFFFFFFF), bytes([0xFF, 0xFF, 0xFF, 0xFF, 0x00]))
+        self.assertEqual(bn2vch(123456789), bytes([0x15, 0xCD, 0x5B, 0x07]))
+        self.assertEqual(bn2vch(-54321), bytes([0x31, 0xD4, 0x80]))
+
+    def test_cscriptnum_encoding(self):
+        # round-trip negative and multi-byte CScriptNums
+        values = [0, 1, -1, -2, 127, 128, -255, 256, (1 << 15) - 1, -(1 << 16), (1 << 24) - 1, (1 << 31), 1 - (1 << 32), 1 << 40, 1500, -1500]
+        for value in values:
+            self.assertEqual(CScriptNum.decode(CScriptNum.encode(CScriptNum(value))), value)
+
+    def test_legacy_sigopcount(self):
+        # test repeated single sig ops
+        for n_ops in range(1, 100, 10):
+            for singlesig_op in (OP_CHECKSIG, OP_CHECKSIGVERIFY):
+                singlesigs_script = CScript([singlesig_op]*n_ops)
+                self.assertEqual(singlesigs_script.GetSigOpCount(fAccurate=False), n_ops)
+                self.assertEqual(singlesigs_script.GetSigOpCount(fAccurate=True), n_ops)
+        # test multisig op (including accurate counting, i.e. BIP16)
+        for n in range(1, 16+1):
+            for multisig_op in (OP_CHECKMULTISIG, OP_CHECKMULTISIGVERIFY):
+                multisig_script = CScript([CScriptOp.encode_op_n(n), multisig_op])
+                self.assertEqual(multisig_script.GetSigOpCount(fAccurate=False), 20)
+                self.assertEqual(multisig_script.GetSigOpCount(fAccurate=True), n)
+
+def BIP341_sha_prevouts(txTo):
+    return sha256(b"".join(i.prevout.serialize() for i in txTo.vin))
+
+def BIP341_sha_amounts(spent_utxos):
+    return sha256(b"".join(u.nValue.to_bytes(8, "little", signed=True) for u in spent_utxos))
+
+def BIP341_sha_scriptpubkeys(spent_utxos):
+    return sha256(b"".join(ser_string(u.scriptPubKey) for u in spent_utxos))
+
+def BIP341_sha_sequences(txTo):
+    return sha256(b"".join(i.nSequence.to_bytes(4, "little") for i in txTo.vin))
+
+def BIP341_sha_outputs(txTo):
+    return sha256(b"".join(o.serialize() for o in txTo.vout))
+
+def TaprootSignatureMsg(txTo, spent_utxos, hash_type, input_index=0, *, scriptpath=False, leaf_script=None, codeseparator_pos=-1, annex=None, leaf_ver=LEAF_VERSION_TAPSCRIPT):
+    assert (len(txTo.vin) == len(spent_utxos))
+    assert (input_index < len(txTo.vin))
+    out_type = SIGHASH_ALL if hash_type == 0 else hash_type & 3
+    in_type = hash_type & SIGHASH_ANYONECANPAY
+    spk = spent_utxos[input_index].scriptPubKey
+    ss = bytes([0, hash_type]) # epoch, hash_type
+    ss += txTo.version.to_bytes(4, "little")
+    ss += txTo.nLockTime.to_bytes(4, "little")
+    if in_type != SIGHASH_ANYONECANPAY:
+        ss += BIP341_sha_prevouts(txTo)
+        ss += BIP341_sha_amounts(spent_utxos)
+        ss += BIP341_sha_scriptpubkeys(spent_utxos)
+        ss += BIP341_sha_sequences(txTo)
+    if out_type == SIGHASH_ALL:
+        ss += BIP341_sha_outputs(txTo)
+    spend_type = 0
+    if annex is not None:
+        spend_type |= 1
+    if scriptpath:
+        spend_type |= 2
+    ss += bytes([spend_type])
+    if in_type == SIGHASH_ANYONECANPAY:
+        ss += txTo.vin[input_index].prevout.serialize()
+        ss += spent_utxos[input_index].nValue.to_bytes(8, "little", signed=True)
+        ss += ser_string(spk)
+        ss += txTo.vin[input_index].nSequence.to_bytes(4, "little")
+    else:
+        ss += input_index.to_bytes(4, "little")
+    if (spend_type & 1):
+        ss += sha256(ser_string(annex))
+    if out_type == SIGHASH_SINGLE:
+        if input_index < len(txTo.vout):
+            ss += sha256(txTo.vout[input_index].serialize())
+        else:
+            ss += bytes(0 for _ in range(32))
+    if scriptpath:
+        ss += TaggedHash("TapLeaf", bytes([leaf_ver]) + ser_string(leaf_script))
+        ss += bytes([0])
+        ss += codeseparator_pos.to_bytes(4, "little", signed=True)
+    assert len(ss) == 175 - (in_type == SIGHASH_ANYONECANPAY) * 49 - (out_type != SIGHASH_ALL and out_type != SIGHASH_SINGLE) * 32 + (annex is not None) * 32 + scriptpath * 37
+    return ss
+
+def TaprootSignatureHash(*args, **kwargs):
+    return TaggedHash("TapSighash", TaprootSignatureMsg(*args, **kwargs))
+
+def taproot_tree_helper(scripts):
+    if len(scripts) == 0:
+        return ([], bytes())
+    if len(scripts) == 1:
+        # One entry: treat as a leaf
+        script = scripts[0]
+        assert not callable(script)
+        if isinstance(script, list):
+            return taproot_tree_helper(script)
+        assert isinstance(script, tuple)
+        version = LEAF_VERSION_TAPSCRIPT
+        name = script[0]
+        code = script[1]
+        if len(script) == 3:
+            version = script[2]
+        assert version & 1 == 0
+        assert isinstance(code, bytes)
+        h = TaggedHash("TapLeaf", bytes([version]) + ser_string(code))
+        if name is None:
+            return ([], h)
+        return ([(name, version, code, bytes(), h)], h)
+    elif len(scripts) == 2 and callable(scripts[1]):
+        # Two entries, and the right one is a function
+        left, left_h = taproot_tree_helper(scripts[0:1])
+        right_h = scripts[1](left_h)
+        left = [(name, version, script, control + right_h, leaf) for name, version, script, control, leaf in left]
+        right = []
+    else:
+        # Two or more entries: descend into each side
+        split_pos = len(scripts) // 2
+        left, left_h = taproot_tree_helper(scripts[0:split_pos])
+        right, right_h = taproot_tree_helper(scripts[split_pos:])
+        left = [(name, version, script, control + right_h, leaf) for name, version, script, control, leaf in left]
+        right = [(name, version, script, control + left_h, leaf) for name, version, script, control, leaf in right]
+    if right_h < left_h:
+        right_h, left_h = left_h, right_h
+    h = TaggedHash("TapBranch", left_h + right_h)
+    return (left + right, h)
+
+# A TaprootInfo object has the following fields:
+# - scriptPubKey: the scriptPubKey (witness v1 CScript)
+# - internal_pubkey: the internal pubkey (32 bytes)
+# - negflag: whether the pubkey in the scriptPubKey was negated from internal_pubkey+tweak*G (bool).
+# - tweak: the tweak (32 bytes)
+# - leaves: a dict of name -> TaprootLeafInfo objects for all known leaves
+# - merkle_root: the script tree's Merkle root, or bytes() if no leaves are present
+TaprootInfo = namedtuple("TaprootInfo", "scriptPubKey,internal_pubkey,negflag,tweak,leaves,merkle_root,output_pubkey")
+
+# A TaprootLeafInfo object has the following fields:
+# - script: the leaf script (CScript or bytes)
+# - version: the leaf version (0xc0 for BIP342 tapscript)
+# - merklebranch: the merkle branch to use for this leaf (32*N bytes)
+TaprootLeafInfo = namedtuple("TaprootLeafInfo", "script,version,merklebranch,leaf_hash")
+
+def taproot_construct(pubkey, scripts=None, treat_internal_as_infinity=False):
+    """Construct a tree of Taproot spending conditions
+
+    pubkey: a 32-byte xonly pubkey for the internal pubkey (bytes)
+    scripts: a list of items; each item is either:
+             - a (name, CScript or bytes, leaf version) tuple
+             - a (name, CScript or bytes) tuple (defaulting to leaf version 0xc0)
+             - another list of items (with the same structure)
+             - a list of two items; the first of which is an item itself, and the
+               second is a function. The function takes as input the Merkle root of the
+               first item, and produces a (fictitious) partner to hash with.
+
+    Returns: a TaprootInfo object
+    """
+    if scripts is None:
+        scripts = []
+
+    ret, h = taproot_tree_helper(scripts)
+    tweak = TaggedHash("TapTweak", pubkey + h)
+    if treat_internal_as_infinity:
+        tweaked, negated = compute_xonly_pubkey(tweak)
+    else:
+        tweaked, negated = tweak_add_pubkey(pubkey, tweak)
+    leaves = dict((name, TaprootLeafInfo(script, version, merklebranch, leaf)) for name, version, script, merklebranch, leaf in ret)
+    return TaprootInfo(CScript([OP_1, tweaked]), pubkey, negated + 0, tweak, leaves, h, tweaked)
+
+def is_op_success(o):
+    return o == 0x50 or o == 0x62 or o == 0x89 or o == 0x8a or o == 0x8d or o == 0x8e or (o >= 0x7e and o <= 0x81) or (o >= 0x83 and o <= 0x86) or (o >= 0x95 and o <= 0x99) or (o >= 0xbb and o <= 0xfe)

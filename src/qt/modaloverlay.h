@@ -1,12 +1,12 @@
-// Copyright (c) 2016 The Bitcoin Core developers
-// Copyright (c) 2017-2019 The Meowcoin Core developers
+// Copyright (c) 2016-2022 The Meowcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef MEOWCOIN_QT_MODALOVERLAY_H
-#define MEOWCOIN_QT_MODALOVERLAY_H
+#ifndef BITCOIN_QT_MODALOVERLAY_H
+#define BITCOIN_QT_MODALOVERLAY_H
 
 #include <QDateTime>
+#include <QPropertyAnimation>
 #include <QWidget>
 
 //! The required delta of headers to the estimated number of available headers until we show the IBD progress
@@ -22,30 +22,37 @@ class ModalOverlay : public QWidget
     Q_OBJECT
 
 public:
-    explicit ModalOverlay(QWidget *parent);
+    explicit ModalOverlay(bool enable_wallet, QWidget *parent);
     ~ModalOverlay();
 
-public Q_SLOTS:
     void tipUpdate(int count, const QDateTime& blockDate, double nVerificationProgress);
-    void setKnownBestHeight(int count, const QDateTime& blockDate);
+    void setKnownBestHeight(int count, const QDateTime& blockDate, bool presync);
 
-    void toggleVisibility();
     // will show or hide the modal layer
     void showHide(bool hide = false, bool userRequested = false);
-    void closeClicked();
     bool isLayerVisible() const { return layerIsVisible; }
 
+public Q_SLOTS:
+    void toggleVisibility();
+    void closeClicked();
+
+Q_SIGNALS:
+    void triggered(bool hidden);
+
 protected:
-    bool eventFilter(QObject * obj, QEvent * ev);
-    bool event(QEvent* ev);
+    bool eventFilter(QObject * obj, QEvent * ev) override;
+    bool event(QEvent* ev) override;
 
 private:
     Ui::ModalOverlay *ui;
-    int bestHeaderHeight; //best known height (based on the headers)
+    int bestHeaderHeight{0}; // best known height (based on the headers)
     QDateTime bestHeaderDate;
     QVector<QPair<qint64, double> > blockProcessTime;
-    bool layerIsVisible;
-    bool userClosed;
+    bool layerIsVisible{false};
+    bool userClosed{false};
+    QPropertyAnimation m_animation;
+    void UpdateHeaderSyncLabel();
+    void UpdateHeaderPresyncLabel(int height, const QDateTime& blockDate);
 };
 
-#endif // MEOWCOIN_QT_MODALOVERLAY_H
+#endif // BITCOIN_QT_MODALOVERLAY_H

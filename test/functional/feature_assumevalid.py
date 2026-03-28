@@ -1,14 +1,11 @@
 #!/usr/bin/env python3
-# Copyright (c) 2014-2016 The Bitcoin Core developers
-# Copyright (c) 2017-2021 The Meowcoin Core developers
+# Copyright (c) 2014-2022 The Meowcoin Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
-
-"""
-Test logic for skipping signature validation on old blocks.
+"""Test logic for skipping signature validation on old blocks.
 
 Test logic for skipping signature validation on blocks which we've assumed
-valid (https://github.com/bitcoin/bitcoin/pull/9484)
+valid (https://github.com/meowcoin/meowcoin/pull/9484)
 
 We build a chain that includes and invalid signature for one of the
 transactions:
@@ -33,26 +30,42 @@ Start three nodes:
       isn't buried by at least two weeks' work.
 """
 
-import time
-from test_framework.blocktools import create_block, create_coinbase
-from test_framework.key import ECKey
-from test_framework.mininode import CBlockHeader, COutPoint, CTransaction, CTxIn, CTxOut, NetworkThread, NodeConn, NodeConnCB, MsgBlock, MsgHeaders
-from test_framework.script import CScript, OP_TRUE
-from test_framework.test_framework import MeowcoinTestFramework
-from test_framework.util import p2p_port, assert_equal
+from test_framework.blocktools import (
+    COINBASE_MATURITY,
+    create_block,
+    create_coinbase,
+)
+from test_framework.messages import (
+    CBlockHeader,
+    COutPoint,
+    CTransaction,
+    CTxIn,
+    CTxOut,
+    msg_block,
+    msg_headers,
+)
+from test_framework.p2p import P2PInterface
+from test_framework.script import (
+    CScript,
+    OP_TRUE,
+)
+from test_framework.test_framework import BitcoinTestFramework
+from test_framework.util import assert_equal
+from test_framework.wallet_util import generate_keypair
 
 
-class BaseNode(NodeConnCB):
+class BaseNode(P2PInterface):
     def send_header_for_blocks(self, new_blocks):
-        headers_message = MsgHeaders()
+        headers_message = msg_headers()
         headers_message.headers = [CBlockHeader(b) for b in new_blocks]
-        self.send_message(headers_message)
+        self.send_without_ping(headers_message)
 
 
-class AssumeValidTest(MeowcoinTestFramework):
+class AssumeValidTest(BitcoinTestFramework):
     def set_test_params(self):
         self.setup_clean_chain = True
         self.num_nodes = 3
+        self.rpc_timeout = 120
 
     def setup_network(self):
         self.add_nodes(3)
@@ -61,46 +74,18 @@ class AssumeValidTest(MeowcoinTestFramework):
         # signature so we can pass in the block hash as assumevalid.
         self.start_node(0)
 
-    def send_blocks_until_disconnected(self, node):
+    def send_blocks_until_disconnected(self, p2p_conn):
         """Keep sending blocks to the node until we're disconnected."""
         for i in range(len(self.blocks)):
-            if not node.connection:
+            if not p2p_conn.is_connected:
                 break
             try:
-                node.send_message(MsgBlock(self.blocks[i]))
-            except IOError as e:
-                assert str(e) == 'Not connected, no pushbuf'
-                break
-
-    @staticmethod
-    def assert_blockchain_height(node, height):
-        """Wait until the blockchain is no longer advancing and verify it's reached the expected height."""
-        last_height = node.getblock(node.getbestblockhash())['height']
-        timeout = 10
-        while True:
-            time.sleep(0.25)
-            current_height = node.getblock(node.getbestblockhash())['height']
-            if current_height != last_height:
-                last_height = current_height
-                if timeout < 0:
-                    assert False, "blockchain too short after timeout: %d" % current_height
-                timeout = timeout - 0.25
-                continue
-            elif current_height > height:
-                assert False, "blockchain too long: %d" % current_height
-            elif current_height == height:
+                p2p_conn.send_without_ping(msg_block(self.blocks[i]))
+            except IOError:
+                assert not p2p_conn.is_connected
                 break
 
     def run_test(self):
-
-        # Connect to node0
-        node0 = BaseNode()
-        connections = [NodeConn('127.0.0.1', p2p_port(0), self.nodes[0], node0)]
-        node0.add_connection(connections[0])
-
-        NetworkThread().start()  # Start up network handling in another thread
-        node0.wait_for_verack()
-
         # Build the blockchain
         self.tip = int(self.nodes[0].getbestblockhash(), 16)
         self.block_time = self.nodes[0].getblock(self.nodes[0].getbestblockhash())['time'] + 1
@@ -108,9 +93,7 @@ class AssumeValidTest(MeowcoinTestFramework):
         self.blocks = []
 
         # Get a pubkey for the coinbase TXO
-        coinbase_key = ECKey()
-        coinbase_key.generate()
-        coinbase_pubkey = coinbase_key.get_pubkey().get_bytes()
+        _, coinbase_pubkey = generate_keypair()
 
         # Create the first block with a coinbase output to our key
         height = 1
@@ -120,80 +103,72 @@ class AssumeValidTest(MeowcoinTestFramework):
         block.solve()
         # Save the coinbase for later
         self.block1 = block
-        self.tip = block.x16r
+        self.tip = block.hash_int
         height += 1
 
         # Bury the block 100 deep so the coinbase output is spendable
-        for i in range(100):
+        for _ in range(100):
             block = create_block(self.tip, create_coinbase(height), self.block_time)
             block.solve()
             self.blocks.append(block)
-            self.tip = block.x16r
+            self.tip = block.hash_int
             self.block_time += 1
             height += 1
 
         # Create a transaction spending the coinbase output with an invalid (null) signature
         tx = CTransaction()
-        tx.vin.append(CTxIn(COutPoint(self.block1.vtx[0].x16r, 0), script_sig=b""))
+        tx.vin.append(CTxIn(COutPoint(self.block1.vtx[0].txid_int, 0), scriptSig=b""))
         tx.vout.append(CTxOut(49 * 100000000, CScript([OP_TRUE])))
-        tx.calc_x16r()
 
-        block102 = create_block(self.tip, create_coinbase(height), self.block_time)
+        block102 = create_block(self.tip, create_coinbase(height), self.block_time, txlist=[tx])
         self.block_time += 1
-        block102.vtx.extend([tx])
-        block102.hashMerkleRoot = block102.calc_merkle_root()
-        block102.rehash()
         block102.solve()
         self.blocks.append(block102)
-        self.tip = block102.x16r
+        self.tip = block102.hash_int
         self.block_time += 1
         height += 1
 
         # Bury the assumed valid block 2100 deep
-        for i in range(2100):
+        for _ in range(2100):
             block = create_block(self.tip, create_coinbase(height), self.block_time)
-            block.nVersion = 4
             block.solve()
             self.blocks.append(block)
-            self.tip = block.x16r
+            self.tip = block.hash_int
             self.block_time += 1
             height += 1
 
         # Start node1 and node2 with assumevalid so they accept a block with a bad signature.
-        self.start_node(1, extra_args=["-assumevalid=" + hex(block102.x16r)])
-        node1 = BaseNode()  # connects to node1
-        connections.append(NodeConn('127.0.0.1', p2p_port(1), self.nodes[1], node1))
-        node1.add_connection(connections[1])
-        node1.wait_for_verack()
+        self.start_node(1, extra_args=["-assumevalid=" + block102.hash_hex])
+        self.start_node(2, extra_args=["-assumevalid=" + block102.hash_hex])
 
-        self.start_node(2, extra_args=["-assumevalid=" + hex(block102.x16r)])
-        node2 = BaseNode()  # connects to node2
-        connections.append(NodeConn('127.0.0.1', p2p_port(2), self.nodes[2], node2))
-        node2.add_connection(connections[2])
-        node2.wait_for_verack()
-
-        # send header lists to all three nodes
-        node0.send_header_for_blocks(self.blocks[0:2000])
-        node0.send_header_for_blocks(self.blocks[2000:])
-        node1.send_header_for_blocks(self.blocks[0:2000])
-        node1.send_header_for_blocks(self.blocks[2000:])
-        node2.send_header_for_blocks(self.blocks[0:200])
+        p2p0 = self.nodes[0].add_p2p_connection(BaseNode())
+        p2p0.send_header_for_blocks(self.blocks[0:2000])
+        p2p0.send_header_for_blocks(self.blocks[2000:])
 
         # Send blocks to node0. Block 102 will be rejected.
-        self.send_blocks_until_disconnected(node0)
-        self.assert_blockchain_height(self.nodes[0], 101)
+        self.send_blocks_until_disconnected(p2p0)
+        self.wait_until(lambda: self.nodes[0].getblockcount() >= COINBASE_MATURITY + 1)
+        assert_equal(self.nodes[0].getblockcount(), COINBASE_MATURITY + 1)
 
-        # Send all blocks to node1. All blocks will be accepted.
-        for i in range(2202):
-            node1.send_message(MsgBlock(self.blocks[i]))
-        # Syncing 2200 blocks can take a while on slow systems. Give it plenty of time to sync.
-        node1.sync_with_ping(120)
+        p2p1 = self.nodes[1].add_p2p_connection(BaseNode())
+        p2p1.send_header_for_blocks(self.blocks[0:2000])
+        p2p1.send_header_for_blocks(self.blocks[2000:])
+        with self.nodes[1].assert_debug_log(expected_msgs=['Disabling signature validations at block #1', 'Enabling signature validations at block #103']):
+            # Send all blocks to node1. All blocks will be accepted.
+            for i in range(2202):
+                p2p1.send_without_ping(msg_block(self.blocks[i]))
+            # Syncing 2200 blocks can take a while on slow systems. Give it plenty of time to sync.
+            p2p1.sync_with_ping(timeout=960)
         assert_equal(self.nodes[1].getblock(self.nodes[1].getbestblockhash())['height'], 2202)
 
+        p2p2 = self.nodes[2].add_p2p_connection(BaseNode())
+        p2p2.send_header_for_blocks(self.blocks[0:200])
+
         # Send blocks to node2. Block 102 will be rejected.
-        self.send_blocks_until_disconnected(node2)
-        self.assert_blockchain_height(self.nodes[2], 101)
+        self.send_blocks_until_disconnected(p2p2)
+        self.wait_until(lambda: self.nodes[2].getblockcount() >= COINBASE_MATURITY + 1)
+        assert_equal(self.nodes[2].getblockcount(), COINBASE_MATURITY + 1)
 
 
 if __name__ == '__main__':
-    AssumeValidTest().main()
+    AssumeValidTest(__file__).main()

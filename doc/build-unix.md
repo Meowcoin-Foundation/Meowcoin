@@ -1,74 +1,95 @@
-UNIX/LINUX BUILD NOTES
+UNIX BUILD NOTES
 ====================
-Some notes on how to build Meowcoin Core in *nix.
+Some notes on how to build Meowcoin Core in Unix.
 
-
-Note
----------------------
-Always use absolute paths to configure and compile meowcoin and the dependencies,
-for example, when specifying the path of the dependency:
-
-	../dist/configure --enable-cxx --disable-shared --with-pic --prefix=$BDB_PREFIX
-
-Here BDB_PREFIX must be an absolute path - it is defined using $(pwd) which ensures
-the usage of the absolute path.
+(For BSD specific instructions, see `build-*bsd.md` in this directory.)
 
 To Build
 ---------------------
 
 ```bash
-./autogen.sh
-./configure
-make
-make install # optional
+cmake -B build
 ```
+Run `cmake -B build -LH` to see the full list of available options.
 
-This will build meowcoin-qt as well if the dependencies are met.
-
-On most Linux distros the "fPIC" flag needs to be set.  If this flag is not specified it is possible that the build will fail with an error similar to:
 ```bash
-relocation R_X86_64_32 against `.rodata' can not be used when making a shared object; recompile with -fPIC
-```
- 
-To resolve or avoid the following build error specify the following configure parameters, make clean, and then build:
-```bash
-./configure --enable-cxx --disable-shared --with-pic --prefix=$BDB_PREFIX CXXFLAGS="-fPIC" CPPFLAGS="-fPIC" --enable-sse2 --disable-tests
-make clean
-make
+cmake --build build    # Append "-j N" for N parallel jobs
+cmake --install build  # Optional
 ```
 
-Dependencies
----------------------
+See below for instructions on how to [install the dependencies on popular Linux
+distributions](#linux-distribution-specific-instructions), or the
+[dependencies](#dependencies) section for a complete overview.
 
-These dependencies are required:
+## Memory Requirements
 
- Library     | Purpose          | Description
- ------------|------------------|----------------------
- libssl      | Crypto           | Random Number Generation, Elliptic Curve Cryptography
- libboost    | Utility          | Library for threading, data structures, etc
- libevent    | Networking       | OS independent asynchronous networking
- libdb++     | Utility          | Contains headers and static libraries for the Berkeley DB library
+C++ compilers are memory-hungry. It is recommended to have at least 1.5 GB of
+memory available when compiling Meowcoin Core. On systems with less, gcc can be
+tuned to conserve memory with additional `CMAKE_CXX_FLAGS`:
 
-Optional dependencies:
 
- Library     | Purpose          | Description
- ------------|------------------|----------------------
- miniupnpc   | UPnP Support     | Firewall-jumping support
- libdb4.8    | Berkeley DB      | Wallet storage (only needed when wallet enabled)
- qt          | GUI              | GUI toolkit (only needed when GUI enabled)
- protobuf    | Payments in GUI  | Data interchange format used for payment protocol (only needed when GUI enabled)
- libqrencode | QR codes in GUI  | Optional for generating QR codes (only needed when GUI enabled)
- univalue    | Utility          | JSON parsing and encoding (bundled version will be used unless --with-system-univalue passed to configure)
- libzmq3     | ZMQ notification | Optional, allows generating ZMQ notifications (requires ZMQ version >= 4.x)
+    cmake -B build -DCMAKE_CXX_FLAGS="--param ggc-min-expand=1 --param ggc-min-heapsize=32768"
 
-For the versions used, see [dependencies.md](dependencies.md)
+Alternatively, or in addition, debugging information can be skipped for compilation.
+For the default build type `RelWithDebInfo`, the default compile flags are
+`-O2 -g`, and can be changed with:
 
+    cmake -B build -DCMAKE_CXX_FLAGS_RELWITHDEBINFO="-O2 -g0"
+
+Finally, clang (often less resource hungry) can be used instead of gcc, which is used by default:
+
+    cmake -B build -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang
 
 ## Linux Distribution Specific Instructions
 
 ### Ubuntu & Debian
 
-Ubuntu/Debian specific instructions, see [build-ubuntu.md](build-ubuntu.md))
+#### Dependency Build Instructions
+
+Build requirements:
+
+    sudo apt-get install build-essential cmake pkgconf python3
+
+Now, you can either build from self-compiled [depends](#dependencies) or install the required dependencies:
+
+    sudo apt-get install libevent-dev libboost-dev
+
+SQLite is required for the wallet:
+
+    sudo apt install libsqlite3-dev
+
+To build Meowcoin Core without the wallet, see [*Disable-wallet mode*](#disable-wallet-mode)
+
+Cap'n Proto is needed for IPC functionality (see [multiprocess.md](multiprocess.md)):
+
+    sudo apt-get install libcapnp-dev capnproto
+
+Compile with `-DENABLE_IPC=OFF` if you do not need IPC functionality.
+
+ZMQ-enabled binaries are compiled with `-DWITH_ZMQ=ON` and require the following dependency:
+
+    sudo apt-get install libzmq3-dev
+
+User-Space, Statically Defined Tracing (USDT) dependencies:
+
+    sudo apt install systemtap-sdt-dev
+
+GUI dependencies:
+
+Meowcoin Core includes a GUI built with the cross-platform Qt Framework. To compile the GUI, we need to install
+the necessary parts of Qt, the libqrencode and pass `-DBUILD_GUI=ON`. Skip if you don't intend to use the GUI.
+
+    sudo apt-get install qt6-base-dev qt6-tools-dev qt6-l10n-tools qt6-tools-dev-tools libgl-dev
+
+Additionally, to support Wayland protocol for modern desktop environments:
+
+    sudo apt install qt6-wayland
+
+The GUI will be able to encode addresses in QR codes unless this feature is explicitly disabled. To install libqrencode, run:
+
+    sudo apt-get install libqrencode-dev
+
+Otherwise, if you don't need QR encoding support, use the `-DWITH_QRENCODE=OFF` option to disable this feature in order to compile the GUI.
 
 
 ### Fedora
@@ -77,172 +98,119 @@ Ubuntu/Debian specific instructions, see [build-ubuntu.md](build-ubuntu.md))
 
 Build requirements:
 
-    sudo dnf install gcc-c++ libtool make autoconf automake openssl-devel libevent-devel boost-devel libdb4-devel libdb4-cxx-devel python3
+    sudo dnf install gcc-c++ cmake make python3
 
-Optional:
+Now, you can either build from self-compiled [depends](#dependencies) or install the required dependencies:
 
-    sudo dnf install miniupnpc-devel
+    sudo dnf install libevent-devel boost-devel
 
-ZMQ dependencies (provides ZMQ API):
+SQLite is required for the wallet:
+
+    sudo dnf install sqlite-devel
+
+To build Meowcoin Core without the wallet, see [*Disable-wallet mode*](#disable-wallet-mode)
+
+ZMQ-enabled binaries are compiled with `-DWITH_ZMQ=ON` and require the following dependency:
 
     sudo dnf install zeromq-devel
 
-To build with Qt 5 you need the following:
+User-Space, Statically Defined Tracing (USDT) dependencies:
 
-    sudo dnf install qt5-qttools-devel qt5-qtbase-devel protobuf-devel
+    sudo dnf install systemtap-sdt-devel
 
-libqrencode (optional) can be installed with:
+Cap'n Proto is needed for IPC functionality (see [multiprocess.md](multiprocess.md)):
+
+    sudo dnf install capnproto capnproto-devel
+
+Compile with `-DENABLE_IPC=OFF` if you do not need IPC functionality.
+
+GUI dependencies:
+
+Meowcoin Core includes a GUI built with the cross-platform Qt Framework. To compile the GUI, we need to install
+the necessary parts of Qt, the libqrencode and pass `-DBUILD_GUI=ON`. Skip if you don't intend to use the GUI.
+
+    sudo dnf install qt6-qtbase-devel qt6-qttools-devel
+
+Additionally, to support Wayland protocol for modern desktop environments:
+
+    sudo dnf install qt6-qtwayland
+
+The GUI will be able to encode addresses in QR codes unless this feature is explicitly disabled. To install libqrencode, run:
 
     sudo dnf install qrencode-devel
 
-Notes
------
-The release is built with GCC and then "strip meowcoind" to strip the debug
-symbols, which reduces the executable size by about 90%.
+Otherwise, if you don't need QR encoding support, use the `-DWITH_QRENCODE=OFF` option to disable this feature in order to compile the GUI.
 
+### Alpine
 
-miniupnpc
----------
+#### Dependency Build Instructions
 
-[miniupnpc](http://miniupnp.free.fr/) may be used for UPnP port mapping.  It can be downloaded from [here](
-http://miniupnp.tuxfamily.org/files/).  UPnP support is compiled in and
-turned off by default.  See the configure options for upnp behavior desired:
+Build requirements:
 
-	--without-miniupnpc      No UPnP support miniupnp not required
-	--disable-upnp-default   (the default) UPnP support turned off by default at runtime
-	--enable-upnp-default    UPnP support turned on by default at runtime
+    apk add build-base cmake linux-headers pkgconf python3
 
+Now, you can either build from self-compiled [depends](#dependencies) or install the required dependencies:
 
-Berkeley DB
------------
-It is recommended to use Berkeley DB 4.8. If you want to build it yourself, we recommend using the install_db4.sh script
+    apk add libevent-dev boost-dev
 
-	contrib/install_db4.sh
+SQLite is required for the wallet:
 
-**Note**: You only need Berkeley DB if the wallet is enabled (see the section *Disable-Wallet mode* below).
+    apk add sqlite-dev
 
-Boost
------
-If you need to build Boost yourself:
+To build Meowcoin Core without the wallet, see [*Disable-wallet mode*](#disable-wallet-mode)
 
-	sudo su
-	./bootstrap.sh
-	./bjam install
+Cap'n Proto is needed for IPC functionality (see [multiprocess.md](multiprocess.md)):
 
+    apk add capnproto capnproto-dev
 
-Security
---------
-To help make your meowcoin installation more secure by making certain attacks impossible to
-exploit even if a vulnerability is found, binaries are hardened by default.
-This can be disabled with:
+Compile with `-DENABLE_IPC=OFF` if you do not need IPC functionality.
 
-Hardening Flags:
+ZMQ dependencies (provides ZMQ API):
 
-	./configure --enable-hardening
-	./configure --disable-hardening
+    apk add zeromq-dev
 
+User-Space, Statically Defined Tracing (USDT) is not supported or tested on Alpine Linux at this time.
 
-Hardening enables the following features:
+GUI dependencies:
 
-* Position Independent Executable
-    Build position independent code to take advantage of Address Space Layout Randomization
-    offered by some kernels. Attackers who can cause execution of code at an arbitrary memory
-    location are thwarted if they don't know where anything useful is located.
-    The stack and heap are randomly located by default but this allows the code section to be
-    randomly located as well.
+Meowcoin Core includes a GUI built with the cross-platform Qt Framework. To compile the GUI, we need to install
+the necessary parts of Qt, the libqrencode and pass `-DBUILD_GUI=ON`. Skip if you don't intend to use the GUI.
 
-    On an AMD64 processor where a library was not compiled with -fPIC, this will cause an error
-    such as: "relocation R_X86_64_32 against `......' can not be used when making a shared object;"
+    apk add qt6-qtbase-dev  qt6-qttools-dev
 
-    To test that you have built PIE executable, install scanelf, part of paxutils, and use:
+The GUI will be able to encode addresses in QR codes unless this feature is explicitly disabled. To install libqrencode, run:
 
-    	scanelf -e ./meowcoin
+    apk add libqrencode-dev
 
-    The output should contain:
+Otherwise, if you don't need QR encoding support, use the `-DWITH_QRENCODE=OFF` option to disable this feature in order to compile the GUI.
 
-     TYPE
-    ET_DYN
+## Dependencies
 
-* Non-executable Stack
-    If the stack is executable then trivial stack based buffer overflow exploits are possible if
-    vulnerable buffers are found. By default, meowcoin should be built with a non-executable stack
-    but if one of the libraries it uses asks for an executable stack or someone makes a mistake
-    and uses a compiler extension which requires an executable stack, it will silently build an
-    executable without the non-executable stack protection.
-
-    To verify that the stack is non-executable after compiling use:
-    `scanelf -e ./meowcoin`
-
-    the output should contain:
-	STK/REL/PTL
-	RW- R-- RW-
-
-    The STK RW- means that the stack is readable and writeable but not executable.
+See [dependencies.md](dependencies.md) for a complete overview, and
+[depends](/depends/README.md) on how to compile them yourself, if you wish to
+not use the packages of your Linux distribution.
 
 Disable-wallet mode
 --------------------
-When the intention is to run only a P2P node without a wallet, meowcoin may be compiled in
-disable-wallet mode with:
+When the intention is to only run a P2P node, without a wallet, Meowcoin Core can
+be compiled in disable-wallet mode with:
 
-    ./configure --disable-wallet
+    cmake -B build -DENABLE_WALLET=OFF
 
-In this case there is no dependency on Berkeley DB 4.8.
+In this case there is no dependency on SQLite.
 
-Mining is also possible in disable-wallet mode, but only using the `getblocktemplate` RPC
-call not `getwork`.
-
-Additional Configure Flags
---------------------------
-A list of additional configure flags can be displayed with:
-
-    ./configure --help
-
+Mining is also possible in disable-wallet mode using the `getblocktemplate` RPC call.
 
 Setup and Build Example: Arch Linux
 -----------------------------------
-This example lists the steps necessary to setup and build a command line only, non-wallet distribution of the latest changes on Arch Linux:
+This example lists the steps necessary to setup and build a command line only distribution of the latest changes on Arch Linux:
 
-    pacman -S git base-devel boost libevent python
-    git clone https://github.com/JustAResearcher/Meowcoin.git
+    pacman --sync --needed capnproto cmake boost gcc git libevent make python sqlite
+    git clone https://github.com/meowcoin/meowcoin.git
     cd meowcoin/
-    ./autogen.sh
-    ./configure --disable-wallet --without-gui --without-miniupnpc
-    make check
+    cmake -B build
+    cmake --build build
+    ctest --test-dir build
+    ./build/bin/meowcoind
+    ./build/bin/meowcoin help
 
-Note:
-Enabling wallet support requires either compiling against a Berkeley DB newer than 4.8 (package `db`) using `--with-incompatible-bdb`,
-or building and depending on a local version of Berkeley DB 4.8. The readily available Arch Linux packages are currently built using
-`--with-incompatible-bdb` according to the [PKGBUILD](https://projects.archlinux.org/svntogit/community.git/tree/meowcoin/trunk/PKGBUILD).
-As mentioned above, when maintaining portability of the wallet between the standard Meowcoin Core distributions and independently built
-node software is desired, Berkeley DB 4.8 must be used.
-
-
-ARM Cross-compilation
--------------------
-These steps can be performed on, for example, an Ubuntu VM. The depends system
-will also work on other Linux distributions, however the commands for
-installing the toolchain will be different.
-
-Make sure you install the build requirements mentioned above.
-Then, install the toolchain and curl:
-
-    sudo apt-get install g++-arm-linux-gnueabihf curl
-
-To build executables for ARM:
-
-    cd depends
-    make HOST=arm-linux-gnueabihf NO_QT=1
-    cd ..
-    ./autogen.sh
-    ./configure --prefix=$PWD/depends/arm-linux-gnueabihf --enable-glibc-back-compat --enable-reduce-exports LDFLAGS=-static-libstdc++
-    make
-
-
-For further documentation on the depends system see [README.md](../depends/README.md) in the depends directory.
-
-Building on FreeBSD and OpenBSD
---------------------
-
-FreeBSD specific instructions, see [build-freebsd.md](build-freebsd.md))
-
-OpenBSD specific instructions, see [build-openbsd.md](build-openbsd.md))
