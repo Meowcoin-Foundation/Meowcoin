@@ -922,7 +922,7 @@
                  <enum>Qt::LeftToRight</enum>
                 </property>
                 <property name="text">
-                 <string>Change Avian Name System data</string>
+                 <string>Change Meowcoin Name System data</string>
                 </property>
                </widget>
               </item>
@@ -1372,7 +1372,7 @@
                    <item>
                     <widget class="QCheckBox" name="checkBoxMinimumFee">
                      <property name="toolTip">
-                      <string>Paying only the minimum fee is just fine as long as there is less transaction volume than space in the blocks. But be aware that this can end up in a never confirming transaction once there is more demand for avian transactions than the network can process.</string>
+                      <string>Paying only the minimum fee is just fine as long as there is less transaction volume than space in the blocks. But be aware that this can end up in a never confirming transaction once there is more demand for meowcoin transactions than the network can process.</string>
                      </property>
                      <property name="text">
                       <string/>
@@ -1385,7 +1385,7 @@
                       <bool>true</bool>
                      </property>
                      <property name="toolTip">
-                      <string>Paying only the minimum fee is just fine as long as there is less transaction volume than space in the blocks. But be aware that this can end up in a never confirming transaction once there is more demand for avian transactions than the network can process.</string>
+                      <string>Paying only the minimum fee is just fine as long as there is less transaction volume than space in the blocks. But be aware that this can end up in a never confirming transaction once there is more demand for meowcoin transactions than the network can process.</string>
                      </property>
                      <property name="text">
                       <string>(read the tooltip)</string>

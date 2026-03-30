@@ -1126,7 +1126,7 @@ bool VerifyNewUniqueAsset(const CTransaction& tx, std::string& strError)
 
 //! To be called on CTransactions where IsNewAsset returns true
 bool VerifyNewAsset(const CTransaction& tx, std::string& strError) {
-    // Issuing an Asset must contain at least 3 CTxOut( Avian Burn Tx, Any Number of other Outputs ..., Owner Asset Tx, New Asset Tx)
+    // Issuing an Asset must contain at least 3 CTxOut( Meowcoin Burn Tx, Any Number of other Outputs ..., Owner Asset Tx, New Asset Tx)
     if (tx.vout.size() < 3) {
         strError = "bad-txns-issue-vout-size-to-small";
         return false;
@@ -1231,7 +1231,7 @@ bool IsNewMsgChannelAsset(const CTransaction& tx)
 //! To be called on CTransactions where IsNewAsset returns true
 bool VerifyNewMsgChannelAsset(const CTransaction& tx, std::string &strError)
 {
-    // Issuing an Asset must contain at least 3 CTxOut( Avian Burn Tx, Any Number of other Outputs ..., Owner Asset Tx, New Asset Tx)
+    // Issuing an Asset must contain at least 3 CTxOut( Meowcoin Burn Tx, Any Number of other Outputs ..., Owner Asset Tx, New Asset Tx)
     if (tx.vout.size() < 3) {
         strError  = "bad-txns-issue-msgchannel-vout-size-to-small";
         return false;
@@ -1318,7 +1318,7 @@ bool IsNewQualifierAsset(const CTransaction& tx)
 //! To be called on CTransactions where IsNewQualifierAsset returns true
 bool VerifyNewQualfierAsset(const CTransaction& tx, std::string &strError)
 {
-    // Issuing an Asset must contain at least 2 CTxOut( Avian Burn Tx, New Asset Tx, Any Number of other Outputs...)
+    // Issuing an Asset must contain at least 2 CTxOut( Meowcoin Burn Tx, New Asset Tx, Any Number of other Outputs...)
     if (tx.vout.size() < 2) {
         strError  = "bad-txns-issue-qualifier-vout-size-to-small";
         return false;
@@ -1406,7 +1406,7 @@ bool IsNewRestrictedAsset(const CTransaction& tx)
 
 //! To be called on CTransactions where IsNewRestrictedAsset returns true
 bool VerifyNewRestrictedAsset(const CTransaction& tx, std::string& strError) {
-    // Issuing a restricted asset must cointain at least 4 CTxOut(Avian Burn Tx, Asset Creation, Root Owner Token Transfer, and CNullAssetTxVerifierString)
+    // Issuing a restricted asset must cointain at least 4 CTxOut(Meowcoin Burn Tx, Asset Creation, Root Owner Token Transfer, and CNullAssetTxVerifierString)
     if (tx.vout.size() < 4) {
         strError = "bad-txns-issue-restricted-vout-size-to-small";
         return false;
@@ -1535,7 +1535,7 @@ bool IsReissueAsset(const CTransaction& tx)
 //! To be called on CTransactions where IsReissueAsset returns true
 bool VerifyReissueAsset(const CTransaction& tx, std::string& strError)
 {
-    // Reissuing an Asset must contain at least 3 CTxOut ( Avian Burn Tx, Any Number of other Outputs ..., Reissue Asset Tx, Owner Asset Change Tx)
+    // Reissuing an Asset must contain at least 3 CTxOut ( Meowcoin Burn Tx, Any Number of other Outputs ..., Reissue Asset Tx, Owner Asset Change Tx)
     if (tx.vout.size() < 3) {
         strError  = "bad-txns-vout-size-to-small";
         return false;

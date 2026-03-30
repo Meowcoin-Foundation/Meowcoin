@@ -514,7 +514,7 @@ void CreateAssetDialog::CheckFormState()
 
     if (!(ui->addressText->text().isEmpty() || IsValidDestination(dest)) && assetNameValid) {
         ui->addressText->setStyleSheet(STYLE_INVALID);
-        showMessage(tr("Warning: Invalid Avian address"));
+        showMessage(tr("Warning: Invalid Meowcoin address"));
         return;
     }
 
@@ -536,7 +536,7 @@ void CreateAssetDialog::CheckFormState()
                 return;
             } else if (!IsValidDestination(dest)) {
                 ui->addressText->setStyleSheet(STYLE_INVALID);
-                showMessage(tr("Warning: Invalid Avian address"));
+                showMessage(tr("Warning: Invalid Meowcoin address"));
                 return;
             }
 
@@ -813,7 +813,7 @@ void CreateAssetDialog::onCreateAssetClicked()
         ansDecoded = ansID.to_string();
 
         // Warn user
-        QMessageBox::critical(this, "ANS Warning", tr("Storing data using the Avian Name System will forever stay in the blockchain. You can edit the ANS ID only if the asset is reissueable.") + QString("\n\nANS ID: ") + QString::fromStdString(ansDecoded), QMessageBox::Ok, QMessageBox::Ok);
+        QMessageBox::critical(this, "ANS Warning", tr("Storing data using the Meowcoin Name System will forever stay in the blockchain. You can edit the ANS ID only if the asset is reissueable.") + QString("\n\nANS ID: ") + QString::fromStdString(ansDecoded), QMessageBox::Ok, QMessageBox::Ok);
     }
 
     CNewAsset asset(name.toStdString(), quantity, units, reissuable ? 1 : 0, hasIPFS ? 1 : 0, ipfsDecoded, hasANS ? 1 : 0, ansDecoded);
@@ -1263,7 +1263,7 @@ void CreateAssetDialog::coinControlChangeEdited(const QString& text)
         }
         else if (!IsValidDestination(dest)) // Invalid address
         {
-            ui->labelCoinControlChangeLabel->setText(tr("Warning: Invalid Avian address"));
+            ui->labelCoinControlChangeLabel->setText(tr("Warning: Invalid Meowcoin address"));
         }
         else // Valid address
         {

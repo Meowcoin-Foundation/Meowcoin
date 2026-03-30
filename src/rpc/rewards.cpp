@@ -1,5 +1,5 @@
 // Copyright (c) 2019-2020 The Meowcoin Core developers
-// Copyright (c) 2020-2024 The Avian developers
+// Copyright (c) 2020-2024 The Meowcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 

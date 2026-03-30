@@ -293,7 +293,7 @@
   </layout>
  </widget>
  <resources>
-  <include location="../avian.qrc"/>
+  <include location="../meowcoin.qrc"/>
  </resources>
  <connections/>
 </ui>

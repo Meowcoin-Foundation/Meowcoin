@@ -102,7 +102,7 @@ bool CreateAssetTransaction(
     if (!change_address.empty()) {
         CTxDestination destination = DecodeDestination(change_address);
         if (!IsValidDestination(destination)) {
-            error = std::make_pair(RPC_INVALID_ADDRESS_OR_KEY, std::string("Invalid Avian address: ") + change_address);
+            error = std::make_pair(RPC_INVALID_ADDRESS_OR_KEY, std::string("Invalid Meowcoin address: ") + change_address);
             return false;
         }
     } else {
@@ -327,7 +327,7 @@ bool CreateTransferAssetTransaction(
         CAmount nAmount = transfer.first.nAmount;
 
         if (!IsValidDestinationString(address)) {
-            error = std::make_pair(RPC_INVALID_ADDRESS_OR_KEY, std::string("Invalid Avian address: ") + address);
+            error = std::make_pair(RPC_INVALID_ADDRESS_OR_KEY, std::string("Invalid Meowcoin address: ") + address);
             return false;
         }
 
@@ -520,7 +520,7 @@ bool CreateReissueAssetTransaction(
 
     // Validate destination address
     if (!IsValidDestinationString(address)) {
-        error = std::make_pair(RPC_INVALID_ADDRESS_OR_KEY, std::string("Invalid Avian address: ") + address);
+        error = std::make_pair(RPC_INVALID_ADDRESS_OR_KEY, std::string("Invalid Meowcoin address: ") + address);
         return false;
     }
 
@@ -533,7 +533,7 @@ bool CreateReissueAssetTransaction(
     if (!change_address.empty()) {
         CTxDestination destination = DecodeDestination(change_address);
         if (!IsValidDestination(destination)) {
-            error = std::make_pair(RPC_INVALID_ADDRESS_OR_KEY, std::string("Invalid Avian address: ") + change_address);
+            error = std::make_pair(RPC_INVALID_ADDRESS_OR_KEY, std::string("Invalid Meowcoin address: ") + change_address);
             return false;
         }
     } else {

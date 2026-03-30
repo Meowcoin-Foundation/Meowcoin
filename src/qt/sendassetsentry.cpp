@@ -47,9 +47,9 @@ SendAssetsEntry::SendAssetsEntry(const PlatformStyle *_platformStyle, const QStr
 
     ui->addAsLabel->setPlaceholderText(tr("Enter a label for this address to add it to your address book"));
 
-    // normal avian address field
+    // normal meowcoin address field
     GUIUtil::setupAddressWidget(ui->payTo, this);
-    // just a label for displaying avian address(es)
+    // just a label for displaying meowcoin address(es)
     ui->payTo_is->setFont(GUIUtil::fixedPitchFont());
 
     // Connect signals

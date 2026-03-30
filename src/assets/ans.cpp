@@ -96,8 +96,8 @@ std::string CAvianNameSystemID::FormatTypeData(Type type, std::string typeData, 
         CTxDestination destination = DecodeDestination(typeData);
         if (!IsValidDestination(destination)) {
             error = (typeData != "")
-            ? std::string("Invalid Avian address: ") + typeData
-            : std::string("Empty Avian address.");
+            ? std::string("Invalid Meowcoin address: ") + typeData
+            : std::string("Empty Meowcoin address.");
         }
     } else if (type == IP) {
         if (!CheckIP(typeData, false)) {
@@ -145,7 +145,7 @@ CAvianNameSystemID::CAvianNameSystemID(Type type, std::string rawData) :
     if (!CheckTypeData(this->m_type, rawData)) return;
 
     if (this->m_type == Type::ADDR) {
-        // Avian address
+        // Meowcoin address
         this->m_addr = rawData;
     }
     else if (this->m_type == Type::IP) {

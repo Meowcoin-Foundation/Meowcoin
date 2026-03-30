@@ -447,7 +447,7 @@ void ReissueAssetDialog::CheckFormState()
     const CTxDestination dest = DecodeDestination(ui->addressText->text().toStdString());
     if (!ui->addressText->text().isEmpty()) {
         if (!IsValidDestination(dest)) {
-            showMessage(tr("Invalid Avian Destination Address"));
+            showMessage(tr("Invalid Meowcoin Destination Address"));
             return;
         }
     }
@@ -517,7 +517,7 @@ void ReissueAssetDialog::CheckFormState()
 
             if (fHasQuantity && !IsValidDestination(dest)) {
                 ui->addressText->setStyleSheet(STYLE_INVALID);
-                showMessage(tr("Warning: Invalid Avian address"));
+                showMessage(tr("Warning: Invalid Meowcoin address"));
                 return;
             }
 
@@ -950,7 +950,7 @@ void ReissueAssetDialog::onReissueAssetClicked()
         ansDecoded = ansID.to_string();
 
         // Warn user
-        QMessageBox::critical(this, "ANS Warning", tr("Storing data using the Avian Name System will forever stay in the blockchain. You can edit the ANS ID only if the asset is reissueable.") + QString("\n\nANS ID: ") + QString::fromStdString(ansDecoded), QMessageBox::Ok, QMessageBox::Ok);
+        QMessageBox::critical(this, "ANS Warning", tr("Storing data using the Meowcoin Name System will forever stay in the blockchain. You can edit the ANS ID only if the asset is reissueable.") + QString("\n\nANS ID: ") + QString::fromStdString(ansDecoded), QMessageBox::Ok, QMessageBox::Ok);
     }
 
     CReissueAsset reissueAsset(name.toStdString(), quantity, unit, reissuable ? 1 : 0, ipfsDecoded, ansDecoded);
@@ -1236,7 +1236,7 @@ void ReissueAssetDialog::coinControlChangeEdited(const QString& text)
             ui->labelCoinControlChangeLabel->setText("");
         } else if (!IsValidDestination(dest)) // Invalid address
         {
-            ui->labelCoinControlChangeLabel->setText(tr("Warning: Invalid Avian address"));
+            ui->labelCoinControlChangeLabel->setText(tr("Warning: Invalid Meowcoin address"));
         } else // Valid address
         {
             if (!model->wallet().isSpendable(dest)) {

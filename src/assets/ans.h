@@ -39,7 +39,7 @@ public:
     static std::pair<std::string, std::string> enum_to_string(Type type) {
         switch(type) {
             case ADDR:
-                return std::make_pair("Avian address", "Enter an Avian address");
+                return std::make_pair("Meowcoin address", "Enter an Meowcoin address");
             case IP:
                 return std::make_pair("IP [DNS A record]", "Enter IP address");
             default:

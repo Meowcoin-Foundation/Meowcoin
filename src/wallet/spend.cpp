@@ -401,7 +401,7 @@ CoinsResult AvailableCoins(const CWallet& wallet,
                 safeTx = false;
             }
 
-            if (nDepth == 0 && params.check_version_trucness) {
+            if (nDepth == 0 && params.check_version_trucness && coinControl) {
                 if (coinControl->m_version == TRUC_VERSION) {
                     if (wtx.tx->version != TRUC_VERSION) continue;
                     // this unconfirmed v3 transaction already has a child
@@ -453,7 +453,7 @@ CoinsResult AvailableCoins(const CWallet& wallet,
 
         std::unique_ptr<SigningProvider> provider = wallet.GetSolvingProvider(output.scriptPubKey);
 
-        int input_bytes = CalculateMaximumSignedInputSize(output, COutPoint(), provider.get(), can_grind_r, coinControl);
+        int input_bytes = provider ? CalculateMaximumSignedInputSize(output, COutPoint(), provider.get(), can_grind_r, coinControl) : -1;
         // Because CalculateMaximumSignedInputSize infers a solvable descriptor to get the satisfaction size,
         // it is safe to assume that this input is solvable if input_bytes is greater than -1.
         bool solvable = input_bytes > -1;

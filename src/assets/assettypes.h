@@ -163,7 +163,7 @@ public:
     void ConstructOwnerTransaction(CScript& script) const;
 
     // Explicit Serialize/Unserialize for custom IPFS hash handling.
-    // Binary format must match Avian exactly for consensus compatibility.
+    // Binary format must match Meowcoin exactly for consensus compatibility.
     template <typename Stream>
     void Serialize(Stream& s) const
     {
