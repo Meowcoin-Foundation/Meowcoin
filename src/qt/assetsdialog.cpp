@@ -20,6 +20,7 @@
 #include <qt/assettablemodel.h>
 
 #include <assets/assets.h>
+#include <addresstype.h>
 #include <core_io.h>
 #include <util/moneystr.h>
 #include <key_io.h>
@@ -890,6 +891,10 @@ void AssetsDialog::assetControlChangeEdited(const QString& text)
         else if (!IsValidDestination(dest)) // Invalid address
         {
             ui->labelAssetControlChangeLabel->setText(tr("Warning: Invalid Meowcoin address"));
+        }
+        else if (std::get_if<PKHash>(&dest) == nullptr)
+        {
+            ui->labelAssetControlChangeLabel->setText(tr("Change address must use legacy (P2PKH) format for asset transactions."));
         }
         else // Valid address
         {

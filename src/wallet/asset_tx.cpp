@@ -20,6 +20,24 @@
 
 namespace wallet {
 
+static constexpr const char* ASSET_LEGACY_ADDRESS_MSG =
+    "Asset addresses must use legacy (P2PKH) format. SegWit and bech32 addresses are not supported.";
+
+//! Require a valid legacy (P2PKH) destination — asset scripts embed the pubkey hash at a fixed P2PKH offset.
+static bool RequireAssetLegacyDestination(const std::string& address, std::pair<int, std::string>& error)
+{
+    CTxDestination dest = DecodeDestination(address);
+    if (!IsValidDestination(dest)) {
+        error = std::make_pair(RPC_INVALID_ADDRESS_OR_KEY, std::string("Invalid Meowcoin address: ") + address);
+        return false;
+    }
+    if (!std::get_if<PKHash>(&dest)) {
+        error = std::make_pair(RPC_INVALID_ADDRESS_OR_KEY, std::string(ASSET_LEGACY_ADDRESS_MSG));
+        return false;
+    }
+    return true;
+}
+
 //! Generate an OP_MEWC_ASSET <hash> script for null asset data (qualifier tags, restrictions)
 static CScript GetScriptForNullAssetDataDestination(const CTxDestination& dest)
 {
@@ -100,11 +118,8 @@ bool CreateAssetTransaction(
     }
 
     if (!change_address.empty()) {
-        CTxDestination destination = DecodeDestination(change_address);
-        if (!IsValidDestination(destination)) {
-            error = std::make_pair(RPC_INVALID_ADDRESS_OR_KEY, std::string("Invalid Meowcoin address: ") + change_address);
+        if (!RequireAssetLegacyDestination(change_address, error))
             return false;
-        }
     } else {
         CTxDestination changeDest;
         std::string strFailReason;
@@ -146,6 +161,9 @@ bool CreateAssetTransaction(
         error = std::make_pair(RPC_WALLET_INSUFFICIENT_FUNDS, "Insufficient funds");
         return false;
     }
+
+    if (!RequireAssetLegacyDestination(address, error))
+        return false;
 
     LOCK2(cs_main, wallet.cs_wallet);
 
@@ -326,10 +344,8 @@ bool CreateTransferAssetTransaction(
         const std::string& asset_name = transfer.first.strName;
         CAmount nAmount = transfer.first.nAmount;
 
-        if (!IsValidDestinationString(address)) {
-            error = std::make_pair(RPC_INVALID_ADDRESS_OR_KEY, std::string("Invalid Meowcoin address: ") + address);
+        if (!RequireAssetLegacyDestination(address, error))
             return false;
-        }
 
         if (!VerifyWalletHasAsset(wallet, asset_name, error))
             return false;
@@ -390,6 +406,9 @@ bool CreateTransferAssetTransaction(
                     return false;
                 }
             }
+
+            if (!RequireAssetLegacyDestination(pair.second, error))
+                return false;
 
             CScript dataScript = GetScriptForNullAssetDataDestination(DecodeDestination(pair.second));
             pair.first.ConstructTransaction(dataScript);
@@ -467,6 +486,9 @@ bool CreateTransferAssetTransaction(
         assetChangeAddr = EncodeDestination(changeDest);
     }
 
+    if (!RequireAssetLegacyDestination(assetChangeAddr, error))
+        return false;
+
     for (const auto& coin : setAssetCoins) {
         coinControlCopy.Select(coin.outpoint);
     }
@@ -518,11 +540,9 @@ bool CreateReissueAssetTransaction(
     AssetType asset_type = AssetType::INVALID;
     IsAssetNameValid(asset_name, asset_type);
 
-    // Validate destination address
-    if (!IsValidDestinationString(address)) {
-        error = std::make_pair(RPC_INVALID_ADDRESS_OR_KEY, std::string("Invalid Meowcoin address: ") + address);
+    // Validate destination address (must be legacy P2PKH)
+    if (!RequireAssetLegacyDestination(address, error))
         return false;
-    }
 
     // Build change address
     std::string change_address;
@@ -531,11 +551,8 @@ bool CreateReissueAssetTransaction(
     }
 
     if (!change_address.empty()) {
-        CTxDestination destination = DecodeDestination(change_address);
-        if (!IsValidDestination(destination)) {
-            error = std::make_pair(RPC_INVALID_ADDRESS_OR_KEY, std::string("Invalid Meowcoin address: ") + change_address);
+        if (!RequireAssetLegacyDestination(change_address, error))
             return false;
-        }
     } else {
         CTxDestination changeDest;
         std::string strFailReason;

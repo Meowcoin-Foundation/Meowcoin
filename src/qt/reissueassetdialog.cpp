@@ -443,11 +443,15 @@ void ReissueAssetDialog::CheckFormState()
         return;
     }
 
-    // Check the destination address
+    // Check the destination address (must be legacy P2PKH)
     const CTxDestination dest = DecodeDestination(ui->addressText->text().toStdString());
     if (!ui->addressText->text().isEmpty()) {
         if (!IsValidDestination(dest)) {
             showMessage(tr("Invalid Meowcoin Destination Address"));
+            return;
+        }
+        if (std::get_if<PKHash>(&dest) == nullptr) {
+            showMessage(tr("Address must use legacy (P2PKH) format. SegWit and bech32 addresses are not supported."));
             return;
         }
     }
@@ -890,7 +894,11 @@ void ReissueAssetDialog::onAddressNameChanged(QString address)
     {
         ui->addressText->setStyleSheet("border: 1px solid red");
         CheckFormState();
-    } else // Valid address
+    } else if (std::get_if<PKHash>(&dest) == nullptr) // Valid but not legacy P2PKH
+    {
+        ui->addressText->setStyleSheet("border: 1px solid red");
+        CheckFormState();
+    } else // Valid P2PKH address
     {
         hideMessage();
         ui->addressText->setStyleSheet("");
@@ -1237,6 +1245,9 @@ void ReissueAssetDialog::coinControlChangeEdited(const QString& text)
         } else if (!IsValidDestination(dest)) // Invalid address
         {
             ui->labelCoinControlChangeLabel->setText(tr("Warning: Invalid Meowcoin address"));
+        } else if (std::get_if<PKHash>(&dest) == nullptr)
+        {
+            ui->labelCoinControlChangeLabel->setText(tr("Change address must use legacy (P2PKH) format for asset transactions."));
         } else // Valid address
         {
             if (!model->wallet().isSpendable(dest)) {

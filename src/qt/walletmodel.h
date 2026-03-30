@@ -86,6 +86,8 @@ public:
 
     // Check address for validity
     bool validateAddress(const QString& address) const;
+    //! True if address decodes to legacy P2PKH (required for asset outputs).
+    bool validateLegacyAddress(const QString& address) const;
 
     // Return status record for SendCoins, contains error id + information
     struct SendCoinsReturn

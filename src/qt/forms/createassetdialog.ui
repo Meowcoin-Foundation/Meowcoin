@@ -686,7 +686,7 @@
              <string/>
             </property>
             <property name="placeholderText">
-             <string>The AVN address that will hold this asset (You must own this address). Leave blank to create a new address.</string>
+             <string>Legacy (P2PKH) Meowcoin address that will hold this asset (you must own it). SegWit/bech32 are not valid for assets. Leave blank to create a new address.</string>
             </property>
            </widget>
           </item>

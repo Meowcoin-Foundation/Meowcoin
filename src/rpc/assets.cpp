@@ -16,6 +16,7 @@
 #include <assets/ans.h>
 #include <assets/assetsnapshotdb.h>
 #include <assets/snapshotrequestdb.h>
+#include <addresstype.h>
 #include <key_io.h>
 
 #include <univalue.h>
@@ -531,6 +532,8 @@ static RPCHelpMan checkaddresstag()
             CTxDestination destination = DecodeDestination(address);
             if (!IsValidDestination(destination))
                 throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid Meowcoin address: " + address);
+            if (!std::get_if<PKHash>(&destination))
+                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Asset addresses must use legacy (P2PKH) format. SegWit and bech32 addresses are not supported.");
 
             if (!IsAssetNameAQualifier(tag_name))
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid qualifier name: " + tag_name + " (must start with '#')");
@@ -570,6 +573,8 @@ static RPCHelpMan listtagsforaddress()
             CTxDestination destination = DecodeDestination(address);
             if (!IsValidDestination(destination))
                 throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid Meowcoin address: " + address);
+            if (!std::get_if<PKHash>(&destination))
+                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Asset addresses must use legacy (P2PKH) format. SegWit and bech32 addresses are not supported.");
 
             if (!prestricteddb)
                 throw JSONRPCError(RPC_INTERNAL_ERROR, "restricted asset db unavailable.");
@@ -653,6 +658,8 @@ static RPCHelpMan listaddressrestrictions()
             CTxDestination destination = DecodeDestination(address);
             if (!IsValidDestination(destination))
                 throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid Meowcoin address: " + address);
+            if (!std::get_if<PKHash>(&destination))
+                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Asset addresses must use legacy (P2PKH) format. SegWit and bech32 addresses are not supported.");
 
             if (!prestricteddb)
                 throw JSONRPCError(RPC_INTERNAL_ERROR, "restricted asset db unavailable.");

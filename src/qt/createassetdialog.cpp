@@ -512,10 +512,17 @@ void CreateAssetDialog::CheckFormState()
         return;
     }
 
-    if (!(ui->addressText->text().isEmpty() || IsValidDestination(dest)) && assetNameValid) {
-        ui->addressText->setStyleSheet(STYLE_INVALID);
-        showMessage(tr("Warning: Invalid Meowcoin address"));
-        return;
+    if (!ui->addressText->text().isEmpty()) {
+        if (!IsValidDestination(dest)) {
+            ui->addressText->setStyleSheet(STYLE_INVALID);
+            showMessage(tr("Warning: Invalid Meowcoin address"));
+            return;
+        }
+        if (std::get_if<PKHash>(&dest) == nullptr) {
+            ui->addressText->setStyleSheet(STYLE_INVALID);
+            showMessage(tr("Address must use legacy (P2PKH) format. SegWit and bech32 addresses are not supported."));
+            return;
+        }
     }
 
     if (type == IntFromAssetType(AssetType::RESTRICTED)) {
@@ -537,6 +544,10 @@ void CreateAssetDialog::CheckFormState()
             } else if (!IsValidDestination(dest)) {
                 ui->addressText->setStyleSheet(STYLE_INVALID);
                 showMessage(tr("Warning: Invalid Meowcoin address"));
+                return;
+            } else if (std::get_if<PKHash>(&dest) == nullptr) {
+                ui->addressText->setStyleSheet(STYLE_INVALID);
+                showMessage(tr("Address must use legacy (P2PKH) format. SegWit and bech32 addresses are not supported."));
                 return;
             }
 
@@ -1264,6 +1275,10 @@ void CreateAssetDialog::coinControlChangeEdited(const QString& text)
         else if (!IsValidDestination(dest)) // Invalid address
         {
             ui->labelCoinControlChangeLabel->setText(tr("Warning: Invalid Meowcoin address"));
+        }
+        else if (std::get_if<PKHash>(&dest) == nullptr)
+        {
+            ui->labelCoinControlChangeLabel->setText(tr("Change address must use legacy (P2PKH) format for asset transactions."));
         }
         else // Valid address
         {

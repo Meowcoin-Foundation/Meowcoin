@@ -17,6 +17,7 @@
 
 #include <assets/assets.h>
 #include <assets/assettypes.h>
+#include <addresstype.h>
 #include <key_io.h>
 #include <validation.h>
 #include <qt/guiconstants.h>
@@ -196,6 +197,10 @@ void RestrictedAssetsDialog::freezeAddressClicked()
             QMessageBox::warning(this, tr("Error"), tr("Invalid change address."));
             return;
         }
+        if (std::get_if<PKHash>(&dest) == nullptr) {
+            QMessageBox::warning(this, tr("Error"), tr("Change address must use legacy (P2PKH) format."));
+            return;
+        }
     }
 
     // Build the transaction
@@ -242,6 +247,10 @@ void RestrictedAssetsDialog::freezeAddressClicked()
         CTxDestination addr_dest = DecodeDestination(address);
         if (!IsValidDestination(addr_dest)) {
             QMessageBox::warning(this, tr("Error"), tr("Invalid address."));
+            return;
+        }
+        if (std::get_if<PKHash>(&addr_dest) == nullptr) {
+            QMessageBox::warning(this, tr("Error"), tr("Address must use legacy (P2PKH) format. SegWit and bech32 addresses are not supported."));
             return;
         }
 
@@ -309,6 +318,10 @@ void RestrictedAssetsDialog::assignQualifierClicked()
         QMessageBox::warning(this, tr("Error"), tr("Invalid address."));
         return;
     }
+    if (std::get_if<PKHash>(&to_dest) == nullptr) {
+        QMessageBox::warning(this, tr("Error"), tr("Address must use legacy (P2PKH) format. SegWit and bech32 addresses are not supported."));
+        return;
+    }
 
     // Get optional asset data
     std::string asset_data = qui->lineEditAssetData->text().trimmed().toStdString();
@@ -320,6 +333,10 @@ void RestrictedAssetsDialog::assignQualifierClicked()
         CTxDestination dest = DecodeDestination(change_address);
         if (!IsValidDestination(dest)) {
             QMessageBox::warning(this, tr("Error"), tr("Invalid change address."));
+            return;
+        }
+        if (std::get_if<PKHash>(&dest) == nullptr) {
+            QMessageBox::warning(this, tr("Error"), tr("Change address must use legacy (P2PKH) format."));
             return;
         }
     }
