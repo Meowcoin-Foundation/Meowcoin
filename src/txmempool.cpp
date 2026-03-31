@@ -5,6 +5,7 @@
 
 #include <txmempool.h>
 
+#include <mempool_asset.h>
 #include <chain.h>
 #include <coins.h>
 #include <common/system.h>
@@ -515,10 +516,14 @@ void CTxMemPool::addNewTransaction(CTxMemPool::txiter newit, CTxMemPool::setEntr
         entry.GetTxSize(),
         entry.GetFee()
     );
+
+    RegisterAssetMempoolTxOutputs(*this, tx);
 }
 
 void CTxMemPool::removeUnchecked(txiter it, MemPoolRemovalReason reason)
 {
+    UnregisterAssetMempoolTx(*this, it->GetTx());
+
     // We increment mempool sequence value no matter removal reason
     // even if not directly reported below.
     uint64_t mempool_sequence = GetAndIncrementSequence();

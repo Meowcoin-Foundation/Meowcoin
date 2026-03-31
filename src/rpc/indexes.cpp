@@ -20,6 +20,7 @@
 #include <univalue.h>
 
 #include <cstring>
+#include <string>
 
 static bool getAddressFromIndex(const int& type, const uint160& hash, std::string& address)
 {
@@ -118,7 +119,7 @@ static RPCHelpMan getaddressmempool()
                 {RPCResult::Type::OBJ, "", "",
                     {
                         {RPCResult::Type::STR, "address", "The base58check encoded address"},
-                        {RPCResult::Type::STR, "assetName", "The asset name (AVN for Aviancoin)"},
+                        {RPCResult::Type::STR, "assetName", std::string("The asset name (") + NATIVE_ASSET_TICKER + " for native coin)"},
                         {RPCResult::Type::STR_HEX, "txid", "The related txid"},
                         {RPCResult::Type::NUM, "index", "The related input or output index"},
                         {RPCResult::Type::NUM, "satoshis", "The difference of satoshis"},
@@ -158,7 +159,7 @@ static RPCHelpMan getaddressmempool()
                 if (includeAssets) {
                     mempool.getAddressIndex(addresses, indexes);
                 } else {
-                    mempool.getAddressIndex(addresses, AVN, indexes);
+                    mempool.getAddressIndex(addresses, NATIVE_ASSET_TICKER, indexes);
                 }
             }
 
@@ -233,7 +234,7 @@ static RPCHelpMan getaddressutxos()
                 throw JSONRPCError(RPC_MISC_ERROR, "Address index not enabled");
 
             bool includeChainInfo = false;
-            std::string assetName = AVN;
+            std::string assetName = NATIVE_ASSET_TICKER;
             int limit = 0;
             int offset = 0;
 
@@ -368,7 +369,7 @@ static RPCHelpMan getaddressdeltas()
             const UniValue& chainInfo = request.params[0]["chainInfo"];
             if (chainInfo.isBool()) includeChainInfo = chainInfo.get_bool();
 
-            std::string assetName = AVN;
+            std::string assetName = NATIVE_ASSET_TICKER;
             const UniValue& assetNameParam = request.params[0]["assetName"];
             if (assetNameParam.isStr()) {
                 if (!AreAssetsDeployed())
@@ -526,7 +527,7 @@ static RPCHelpMan getaddressbalance()
             } else {
                 std::vector<std::pair<CAddressIndexKey, CAmount>> addressIndex;
                 for (const auto& [addrHash, addrType] : addresses) {
-                    if (!GetAddressIndex(addrHash, addrType, AVN, addressIndex))
+                    if (!GetAddressIndex(addrHash, addrType, NATIVE_ASSET_TICKER, addressIndex))
                         throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "No information available for address");
                 }
 
@@ -616,10 +617,10 @@ static RPCHelpMan getaddresstxids()
                     }
                 } else {
                     if (start > 0 && end > 0) {
-                        if (!GetAddressIndex(addrHash, addrType, AVN, addressIndex, start, end))
+                        if (!GetAddressIndex(addrHash, addrType, NATIVE_ASSET_TICKER, addressIndex, start, end))
                             throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "No information available for address");
                     } else {
-                        if (!GetAddressIndex(addrHash, addrType, AVN, addressIndex))
+                        if (!GetAddressIndex(addrHash, addrType, NATIVE_ASSET_TICKER, addressIndex))
                             throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "No information available for address");
                     }
                 }

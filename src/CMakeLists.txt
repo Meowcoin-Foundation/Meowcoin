@@ -279,6 +279,7 @@ add_library(meowcoin_node STATIC EXCLUDE_FROM_ALL
   txdb.cpp
   txgraph.cpp
   txmempool.cpp
+  mempool_asset.cpp
   txrequest.cpp
   validation.cpp
   validationinterface.cpp

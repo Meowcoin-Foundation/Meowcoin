@@ -40,7 +40,6 @@
 #include <QCompleter>
 #include <QDebug>
 #include <QDesktopServices>
-#include <QGraphicsDropShadowEffect>
 #include <QMessageBox>
 #include <QModelIndex>
 #include <QSettings>
@@ -326,7 +325,7 @@ void ReissueAssetDialog::setUpValues()
     // Setup ANS types
     QStringList listTypes;
     for (const auto type : ANSTypes)
-        listTypes.append(QString::fromStdString(CAvianNameSystemID::enum_to_string(type).first));
+        listTypes.append(QString::fromStdString(CMeowcoinNameSystemID::enum_to_string(type).first));
 
     ui->ansType->addItems(listTypes);
 
@@ -335,23 +334,18 @@ void ReissueAssetDialog::setUpValues()
 
 void ReissueAssetDialog::setupCoinControlFrame(const PlatformStyle* platformStyle)
 {
-    /** Create the shadow effects on the frames */
-    ui->frameCoinControl->setGraphicsEffect(GUIUtil::getShadowEffect());
+    Q_UNUSED(platformStyle);
 }
 
 void ReissueAssetDialog::setupAssetDataView(const PlatformStyle* platformStyle)
 {
-    /** Update the scrollview*/
-    ui->frame->setGraphicsEffect(GUIUtil::getShadowEffect());
-    ui->frame_3->setGraphicsEffect(GUIUtil::getShadowEffect());
-    ui->frame_2->setGraphicsEffect(GUIUtil::getShadowEffect());
+    Q_UNUSED(platformStyle);
 }
 
 void ReissueAssetDialog::setupFeeControl(const PlatformStyle* platformStyle)
 {
-    /** Create the shadow effects on the frames */
+    Q_UNUSED(platformStyle);
     ui->frameFee->setStyleSheet(QString(".QFrame#frameFee { border-top: 2px solid %1;padding-top: 20px}").arg(QColor("#bd840a").name()));
-    // ui->frameFee->setGraphicsEffect(GUIUtil::getShadowEffect());
 }
 
 void ReissueAssetDialog::setBalance(const interfaces::WalletBalances& balances)
@@ -465,13 +459,13 @@ void ReissueAssetDialog::CheckFormState()
     }
 
     if (ui->ansBox->isChecked() && !ui->ansText->text().isEmpty()) {
-        CAvianNameSystemID::Type type = static_cast<CAvianNameSystemID::Type>(ui->ansType->currentIndex());
+        CMeowcoinNameSystemID::Type type = static_cast<CMeowcoinNameSystemID::Type>(ui->ansType->currentIndex());
 
         std::string error;
         std::string formattedTypeData;
         std::string typeData = ui->ansText->text().toStdString();
 
-        formattedTypeData = CAvianNameSystemID::FormatTypeData(type, typeData, error);
+        formattedTypeData = CMeowcoinNameSystemID::FormatTypeData(type, typeData, error);
 
         if (error != "") {
             ui->ansText->setStyleSheet("border: 2px solid red");
@@ -480,7 +474,7 @@ void ReissueAssetDialog::CheckFormState()
             return;
         }
 
-        CAvianNameSystemID ans(type, formattedTypeData);
+        CMeowcoinNameSystemID ans(type, formattedTypeData);
 
         if (!IsMeowcoinNameSystemDeployed()) {
             ui->ansText->setStyleSheet("border: 2px solid red");
@@ -489,7 +483,7 @@ void ReissueAssetDialog::CheckFormState()
             return;
         }
 
-        if (!CAvianNameSystemID::IsValidID(ans.to_string())) {
+        if (!CMeowcoinNameSystemID::IsValidID(ans.to_string())) {
             ui->ansText->setStyleSheet("border: 2px solid red");
             showMessage(tr("Invalid ANS data."));
             disableReissueButton();
@@ -634,10 +628,10 @@ void ReissueAssetDialog::buildUpdatedData()
     } else if (ui->ansBox->isChecked() && !ui->ansBox->text().isEmpty()) {
         std::string error;
         std::string formattedTypeData;
-        CAvianNameSystemID::Type type = static_cast<CAvianNameSystemID::Type>(ui->ansType->currentIndex());
-        formattedTypeData = CAvianNameSystemID::FormatTypeData(type, ui->ansText->text().toStdString(), error);
+        CMeowcoinNameSystemID::Type type = static_cast<CMeowcoinNameSystemID::Type>(ui->ansType->currentIndex());
+        formattedTypeData = CMeowcoinNameSystemID::FormatTypeData(type, ui->ansText->text().toStdString(), error);
 
-        CAvianNameSystemID ansData(type, formattedTypeData);
+        CMeowcoinNameSystemID ansData(type, formattedTypeData);
         QString qstr = QString::fromStdString(ansData.to_string());
         ansID = formatGreen.arg(tr("ANS ID"), ":", qstr) + "\n";
     }
@@ -857,8 +851,8 @@ void ReissueAssetDialog::onANSDataChanged(QString data)
 
 void ReissueAssetDialog::onANSTypeChanged(int index)
 {
-    CAvianNameSystemID::Type type = static_cast<CAvianNameSystemID::Type>(index);
-    ui->ansText->setPlaceholderText(QString::fromStdString(CAvianNameSystemID::enum_to_string(type).second));
+    CMeowcoinNameSystemID::Type type = static_cast<CMeowcoinNameSystemID::Type>(index);
+    ui->ansText->setPlaceholderText(QString::fromStdString(CMeowcoinNameSystemID::enum_to_string(type).second));
     ui->ansText->clear();
 
     buildUpdatedData();
@@ -951,10 +945,10 @@ void ReissueAssetDialog::onReissueAssetClicked()
     if (hasANS) {
         std::string error;
         std::string formattedTypeData;
-        CAvianNameSystemID::Type type = static_cast<CAvianNameSystemID::Type>(ui->ansType->currentIndex());
-        formattedTypeData = CAvianNameSystemID::FormatTypeData(type, ui->ansText->text().toStdString(), error);
+        CMeowcoinNameSystemID::Type type = static_cast<CMeowcoinNameSystemID::Type>(ui->ansType->currentIndex());
+        formattedTypeData = CMeowcoinNameSystemID::FormatTypeData(type, ui->ansText->text().toStdString(), error);
 
-        CAvianNameSystemID ansID(type, formattedTypeData);
+        CMeowcoinNameSystemID ansID(type, formattedTypeData);
         ansDecoded = ansID.to_string();
 
         // Warn user

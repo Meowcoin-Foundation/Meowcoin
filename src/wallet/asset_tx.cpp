@@ -11,6 +11,7 @@
 #include <key_io.h>
 #include <rpc/protocol.h>
 #include <script/script.h>
+#include <script/solver.h>
 #include <util/moneystr.h>
 #include <validation.h>
 #include <wallet/coincontrol.h>
@@ -33,6 +34,27 @@ static bool RequireAssetLegacyDestination(const std::string& address, std::pair<
     }
     if (!std::get_if<PKHash>(&dest)) {
         error = std::make_pair(RPC_INVALID_ADDRESS_OR_KEY, std::string(ASSET_LEGACY_ADDRESS_MSG));
+        return false;
+    }
+    return true;
+}
+
+//! Legacy nodes require standard P2PKH (25 bytes) with OP_MEWC_ASSET at index 25 (see CScript::IsAssetScript).
+static bool RequireLegacyAssetScriptLayout(const CScript& script, std::pair<int, std::string>& error)
+{
+    if (script.size() < 26) {
+        error = std::make_pair(RPC_WALLET_ERROR, "Asset output script too short (internal error)");
+        return false;
+    }
+    if (script[25] != OP_MEWC_ASSET) {
+        error = std::make_pair(RPC_WALLET_ERROR, "Asset opcode not at legacy-expected position (internal error)");
+        return false;
+    }
+    const CScript prefix(script.begin(), script.begin() + 25);
+    std::vector<std::vector<unsigned char>> sol;
+    if (Solver(prefix, sol) != TxoutType::PUBKEYHASH) {
+        error = std::make_pair(RPC_WALLET_ERROR,
+            "Asset output must use a standard P2PKH prefix; legacy consensus expects this layout.");
         return false;
     }
     return true;
@@ -186,6 +208,8 @@ bool CreateAssetTransaction(
         CScript scriptTransferOwner = GetScriptForDestination(DecodeDestination(change_address));
         CAssetTransfer ownerTransfer(parentName + OWNER_TAG, OWNER_ASSET_AMOUNT);
         ownerTransfer.ConstructTransaction(scriptTransferOwner);
+        if (!RequireLegacyAssetScriptLayout(scriptTransferOwner, error))
+            return false;
 
         CRecipient rec;
         rec.dest = CNoDestination();
@@ -203,6 +227,8 @@ bool CreateAssetTransaction(
         CScript scriptTransferQualifier = GetScriptForDestination(DecodeDestination(change_address));
         CAssetTransfer qualifierTransfer(parentName, OWNER_ASSET_AMOUNT);
         qualifierTransfer.ConstructTransaction(scriptTransferQualifier);
+        if (!RequireLegacyAssetScriptLayout(scriptTransferQualifier, error))
+            return false;
 
         CRecipient rec;
         rec.dest = CNoDestination();
@@ -221,6 +247,8 @@ bool CreateAssetTransaction(
         CScript scriptTransferOwner = GetScriptForDestination(DecodeDestination(change_address));
         CAssetTransfer ownerTransfer(strStripped + OWNER_TAG, OWNER_ASSET_AMOUNT);
         ownerTransfer.ConstructTransaction(scriptTransferOwner);
+        if (!RequireLegacyAssetScriptLayout(scriptTransferOwner, error))
+            return false;
 
         CRecipient ownerRec;
         ownerRec.dest = CNoDestination();
@@ -246,22 +274,15 @@ bool CreateAssetTransaction(
         vecSend.push_back(verifierRec);
     }
 
-    // 5) New asset output(s) — the actual asset scripts sent to the destination address
+    // 5) Owner token then new asset output(s) — must be the last two vouts (in that order). Legacy
+    // consensus (VerifyNewAsset / IsNewAsset) requires vout[size-1] = issue data and vout[size-2] = owner.
+    // Change is inserted at a fixed index (below) so random wallet placement cannot sit between them.
     CTxDestination assetDest = DecodeDestination(address);
     for (const auto& asset : assets) {
-        CScript scriptAssetNew = GetScriptForDestination(assetDest);
-        asset.ConstructTransaction(scriptAssetNew);
-
-        CRecipient assetRec;
-        assetRec.dest = CNoDestination();
-        assetRec.nAmount = 0;
-        assetRec.fSubtractFeeFromAmount = false;
-        assetRec.scriptOverride = scriptAssetNew;
-        vecSend.push_back(assetRec);
-
-        // Owner token output
         CScript scriptOwnerNew = GetScriptForDestination(assetDest);
         asset.ConstructOwnerTransaction(scriptOwnerNew);
+        if (!RequireLegacyAssetScriptLayout(scriptOwnerNew, error))
+            return false;
 
         CRecipient ownerRec;
         ownerRec.dest = CNoDestination();
@@ -269,6 +290,18 @@ bool CreateAssetTransaction(
         ownerRec.fSubtractFeeFromAmount = false;
         ownerRec.scriptOverride = scriptOwnerNew;
         vecSend.push_back(ownerRec);
+
+        CScript scriptAssetNew = GetScriptForDestination(assetDest);
+        asset.ConstructTransaction(scriptAssetNew);
+        if (!RequireLegacyAssetScriptLayout(scriptAssetNew, error))
+            return false;
+
+        CRecipient assetRec;
+        assetRec.dest = CNoDestination();
+        assetRec.nAmount = 0;
+        assetRec.fSubtractFeeFromAmount = false;
+        assetRec.scriptOverride = scriptAssetNew;
+        vecSend.push_back(assetRec);
     }
 
     // Pre-select owner token UTXOs if needed for subassets/unique/msgchannel/restricted
@@ -299,11 +332,15 @@ bool CreateAssetTransaction(
         }
     }
 
-    // Allow the wallet to select additional AVN inputs for fees
+    // Allow the wallet to select additional native (MEWC) inputs for fees
     coinControl.m_allow_other_inputs = true;
 
+    // Force change immediately after the burn output (index 1) so the owner+issue pair stays last;
+    // CreateTransaction otherwise picks a random change index and breaks legacy trailing-vout checks.
+    constexpr unsigned int ASSET_ISSUE_CHANGE_POS = 1;
+
     // Create the transaction
-    auto res = CreateTransaction(wallet, vecSend, std::nullopt, coinControl, true);
+    auto res = CreateTransaction(wallet, vecSend, ASSET_ISSUE_CHANGE_POS, coinControl, true);
     if (!res) {
         error = std::make_pair(RPC_WALLET_ERROR, util::ErrorString(res).original);
         return false;
@@ -330,7 +367,7 @@ bool CreateTransferAssetTransaction(
     // Check for a balance before processing
     Balance bal = GetBalance(wallet);
     if (bal.m_mine_trusted == 0) {
-        error = std::make_pair(RPC_WALLET_INSUFFICIENT_FUNDS, std::string("This wallet doesn't contain any AVN, transferring an asset requires a network fee"));
+        error = std::make_pair(RPC_WALLET_INSUFFICIENT_FUNDS, std::string("This wallet doesn't contain any MEWC; transferring an asset requires a network fee"));
         return false;
     }
 
@@ -376,6 +413,8 @@ bool CreateTransferAssetTransaction(
         CScript scriptPubKey = GetScriptForDestination(DecodeDestination(address));
         CAssetTransfer assetTransfer(asset_name, nAmount, transfer.first.message, transfer.first.nExpireTime);
         assetTransfer.ConstructTransaction(scriptPubKey);
+        if (!RequireLegacyAssetScriptLayout(scriptPubKey, error))
+            return false;
 
         CRecipient recipient;
         recipient.dest = CNoDestination();
@@ -454,10 +493,10 @@ bool CreateTransferAssetTransaction(
         }
     }
 
-    // Select asset UTXOs and create asset change outputs
+    // Select asset UTXOs and create asset change outputs (honour asset coin control when set).
     CoinFilterParams coin_params;
     coin_params.min_amount = 0;
-    CoinsResult available = AvailableCoinsWithAssets(wallet, nullptr, std::nullopt, coin_params);
+    CoinsResult available = AvailableCoinsWithAssets(wallet, &coinControl, std::nullopt, coin_params);
 
     std::set<COutput> setAssetCoins;
     std::map<std::string, CAmount> mapSelectedValues;
@@ -493,22 +532,60 @@ bool CreateTransferAssetTransaction(
         coinControlCopy.Select(coin.outpoint);
     }
 
-    // Create asset change outputs for any excess
+    // Asset change outputs (restricted assets: match legacy behavior — change must satisfy verifier, else reuse an input address).
     for (const auto& [assetName, selectedAmount] : mapSelectedValues) {
-        CAmount targetAmount = mapAssetTargets[assetName];
-        if (selectedAmount > targetAmount) {
-            CAmount changeAmount = selectedAmount - targetAmount;
-            CScript scriptChange = GetScriptForDestination(DecodeDestination(assetChangeAddr));
-            CAssetTransfer changeTransfer(assetName, changeAmount);
-            changeTransfer.ConstructTransaction(scriptChange);
+        const CAmount targetAmount = mapAssetTargets[assetName];
+        if (selectedAmount <= targetAmount) continue;
 
-            CRecipient changeRec;
-            changeRec.dest = CNoDestination();
-            changeRec.nAmount = 0;
-            changeRec.fSubtractFeeFromAmount = false;
-            changeRec.scriptOverride = scriptChange;
-            vecSend.push_back(changeRec);
+        const CAmount changeAmount = selectedAmount - targetAmount;
+        CScript scriptChange;
+
+        if (AreRestrictedAssetsDeployed() && passets && IsAssetNameAnRestricted(assetName)) {
+            CNullAssetTxVerifierString verifier;
+            if (!passets->GetAssetVerifierStringIfExists(assetName, verifier)) {
+                error = std::make_pair(RPC_WALLET_ERROR,
+                    "Verifier string for restricted asset transfer not found; cannot build change output");
+                return false;
+            }
+
+            std::string strErr;
+            if (ContextualCheckVerifierString(passets, verifier.verifier_string, assetChangeAddr, strErr)) {
+                scriptChange = GetScriptForDestination(DecodeDestination(assetChangeAddr));
+            } else {
+                bool found_change_dest = false;
+                for (const auto& coin : setAssetCoins) {
+                    ::CAssetOutputEntry outputData;
+                    if (!GetAssetData(coin.txout.scriptPubKey, outputData)) continue;
+                    if (outputData.assetName != assetName) continue;
+
+                    const std::string input_addr = EncodeDestination(outputData.destination);
+                    if (!ContextualCheckVerifierString(passets, verifier.verifier_string, input_addr, strErr)) continue;
+
+                    scriptChange = GetScriptForDestination(outputData.destination);
+                    found_change_dest = true;
+                    break;
+                }
+                if (!found_change_dest) {
+                    error = std::make_pair(RPC_WALLET_ERROR,
+                        "Failed to find restricted asset change address from inputs (verifier rejects proposed change address)");
+                    return false;
+                }
+            }
+        } else {
+            scriptChange = GetScriptForDestination(DecodeDestination(assetChangeAddr));
         }
+
+        CAssetTransfer changeTransfer(assetName, changeAmount);
+        changeTransfer.ConstructTransaction(scriptChange);
+        if (!RequireLegacyAssetScriptLayout(scriptChange, error))
+            return false;
+
+        CRecipient changeRec;
+        changeRec.dest = CNoDestination();
+        changeRec.nAmount = 0;
+        changeRec.fSubtractFeeFromAmount = false;
+        changeRec.scriptOverride = scriptChange;
+        vecSend.push_back(changeRec);
     }
 
     // Create the transaction
@@ -606,6 +683,8 @@ bool CreateReissueAssetTransaction(
         CAssetTransfer ownerTransfer(asset_name + OWNER_TAG, OWNER_ASSET_AMOUNT);
         ownerTransfer.ConstructTransaction(scriptTransferOwner);
     }
+    if (!RequireLegacyAssetScriptLayout(scriptTransferOwner, error))
+        return false;
 
     // Handle restricted asset verifier string
     if (asset_type == AssetType::RESTRICTED) {
@@ -669,6 +748,8 @@ bool CreateReissueAssetTransaction(
     // Reissue asset output
     CScript scriptReissue = GetScriptForDestination(DecodeDestination(address));
     reissueAsset.ConstructTransaction(scriptReissue);
+    if (!RequireLegacyAssetScriptLayout(scriptReissue, error))
+        return false;
 
     CRecipient reissueRec;
     reissueRec.dest = CNoDestination();
@@ -680,7 +761,7 @@ bool CreateReissueAssetTransaction(
     // Pre-select owner token UTXO
     CoinFilterParams coin_params;
     coin_params.min_amount = 0;
-    CoinsResult available = AvailableCoinsWithAssets(wallet, nullptr, std::nullopt, coin_params);
+    CoinsResult available = AvailableCoinsWithAssets(wallet, &coinControl, std::nullopt, coin_params);
 
     std::string ownerTokenName;
     if (asset_type == AssetType::RESTRICTED) {
@@ -696,8 +777,12 @@ bool CreateReissueAssetTransaction(
 
     coinControl.m_allow_other_inputs = true;
 
+    // Reissue consensus requires the reissue script in the final vout; pin change after the first
+    // recipient so random insertion cannot append change past the reissue output.
+    constexpr unsigned int ASSET_REISSUE_CHANGE_POS = 1;
+
     // Create the transaction
-    auto res = CreateTransaction(wallet, vecSend, std::nullopt, coinControl, true);
+    auto res = CreateTransaction(wallet, vecSend, ASSET_REISSUE_CHANGE_POS, coinControl, true);
     if (!res) {
         error = std::make_pair(RPC_WALLET_ERROR, util::ErrorString(res).original);
         return false;

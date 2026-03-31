@@ -38,7 +38,6 @@
 #include <qt/guiconstants.h>
 #include <util/strencodings.h>
 
-#include <QGraphicsDropShadowEffect>
 #include <QFontMetrics>
 #include <QMessageBox>
 #include <QScrollBar>
@@ -139,11 +138,11 @@ AssetsDialog::AssetsDialog(const PlatformStyle *_platformStyle, QWidget *parent)
     ui->checkBoxMinimumFee->setChecked(settings.value("fPayOnlyMinFee").toBool());
     minimizeFeeSection(settings.value("fFeeSectionMinimized").toBool());
 
-    /** MEWC START */
+    /** Asset UI START */
     setupAssetControlFrame(platformStyle);
     setupScrollView(platformStyle);
     setupFeeControl(platformStyle);
-    /** MEWC END */
+    /** Asset UI END */
 }
 
 void AssetsDialog::setClientModel(ClientModel *_clientModel)
@@ -167,6 +166,7 @@ void AssetsDialog::setModel(WalletModel *_model)
             if(entry)
             {
                 entry->setModel(_model);
+                entry->refreshAssetList();
             }
         }
 
@@ -242,23 +242,14 @@ AssetsDialog::~AssetsDialog()
 
 void AssetsDialog::setupAssetControlFrame(const PlatformStyle *platformStyle)
 {
-    /** Create the shadow effects on the frames */
-    ui->frameAssetControl->setGraphicsEffect(GUIUtil::getShadowEffect());
 }
 
 void AssetsDialog::setupScrollView(const PlatformStyle *platformStyle)
 {
-    /** Update the scrollview*/
-    ui->scrollArea->setGraphicsEffect(GUIUtil::getShadowEffect());
-
-    // Add some spacing so we can see the whole card
-    ui->entries->setContentsMargins(10,10,20,0);
 }
 
 void AssetsDialog::setupFeeControl(const PlatformStyle *platformStyle)
 {
-    /** Create the shadow effects on the frames */
-    ui->frameFee->setStyleSheet(QString(".QFrame#frameFee { border-top: 2px solid %1;padding-top: 20px;}").arg(QColor("#bd840a").name()));
 }
 
 void AssetsDialog::on_sendButton_clicked()
@@ -972,7 +963,7 @@ void AssetsDialog::assetControlUpdateLabels()
     }
 }
 
-/** MEWC START */
+/** Asset UI START */
 void AssetsDialog::assetControlUpdateSendCoinsDialog()
 {
     for(int i = 0; i < ui->entries->count(); ++i)
@@ -1037,4 +1028,4 @@ void AssetsDialog::handleFirstSelection()
         entry->refreshAssetList();
     }
 }
-/** MEWC END */
+/** Asset UI END */

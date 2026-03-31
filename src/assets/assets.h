@@ -26,6 +26,9 @@ class UniValue;
 #define MEWC_T 116
 #define MEWC_O 111
 
+/** Native coin ticker for RPC, indexes, and rewards (not an issued asset name). */
+inline const std::string NATIVE_ASSET_TICKER{"MEWC"};
+
 #define DEFAULT_UNITS 0
 #define DEFAULT_REISSUABLE 1
 #define DEFAULT_HAS_IPFS 0
@@ -481,10 +484,10 @@ bool CheckIssueBurnTx(const CTxOut& txOut, const AssetType& type);
 bool CheckReissueBurnTx(const CTxOut& txOut);
 
 //! issue asset scripts to make sure script meets the standards
-bool CheckIssueDataTx(const CTxOut& txOut); // OP_AVIAN_ASSET AVNQ (That is a Q as in Que not an O)
-bool CheckOwnerDataTx(const CTxOut& txOut);// OP_AVIAN_ASSET AVNO
-bool CheckReissueDataTx(const CTxOut& txOut);// OP_AVIAN_ASSET AVNR
-bool CheckTransferOwnerTx(const CTxOut& txOut);// OP_AVIAN_ASSET AVNT
+bool CheckIssueDataTx(const CTxOut& txOut); // OP_MEWC_ASSET + rvnq (new asset payload)
+bool CheckOwnerDataTx(const CTxOut& txOut); // OP_MEWC_ASSET + rvno (owner payload)
+bool CheckReissueDataTx(const CTxOut& txOut); // OP_MEWC_ASSET + rvnr (reissue payload)
+bool CheckTransferOwnerTx(const CTxOut& txOut); // OP_MEWC_ASSET + rvnt (transfer payload)
 
 //! Check the Encoded hash and make sure it is either an IPFS hash or a OIP hash
 bool CheckEncoded(const std::string& hash, std::string& strError);

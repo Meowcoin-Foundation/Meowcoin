@@ -657,6 +657,7 @@ public:
     bool ShouldResend() const;
     void ResubmitWalletTransactions(bool relay, bool force);
 
+    /** Change type for CreateTransaction; asset txs (scriptOverride vouts) always use LEGACY. */
     OutputType TransactionChangeType(const std::optional<OutputType>& change_type, const std::vector<CRecipient>& vecSend) const;
 
     /** Fetch the inputs and sign with SIGHASH_ALL. */

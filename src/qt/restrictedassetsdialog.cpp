@@ -30,7 +30,6 @@
 #include <wallet/asset_tx.h>
 #include <wallet/wallet.h>
 
-#include <QGraphicsDropShadowEffect>
 #include <QFontMetrics>
 #include <QMessageBox>
 #include <QScrollBar>
@@ -121,10 +120,8 @@ RestrictedAssetsDialog::~RestrictedAssetsDialog()
 
 void RestrictedAssetsDialog::setupStyling(const PlatformStyle *platformStyle)
 {
-    /** Create the shadow effects on the frames */
-    ui->frameAssetBalance->setGraphicsEffect(GUIUtil::getShadowEffect());
-    ui->frameAddressList->setGraphicsEffect(GUIUtil::getShadowEffect());
-    ui->tabFrame->setGraphicsEffect(GUIUtil::getShadowEffect());
+    Q_UNUSED(platformStyle);
+    // Avoid QGraphicsDropShadowEffect on large frames (expensive blur on every repaint).
 }
 
 QWidget *RestrictedAssetsDialog::setupTabChain(QWidget *prev)

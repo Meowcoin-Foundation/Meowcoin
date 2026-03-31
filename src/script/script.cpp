@@ -286,7 +286,7 @@ bool CScript::IsAssetScript(int& nType, bool& fIsOwner, int& nStartingIndex) con
                     nType = 8; // TX_NEW_ASSET
                     fIsOwner = true;
                     return true;
-                } else if ((*this)[index] == MEWC_R2_BYTE) {
+                } else if ((*this)[index] == MEWC_R2_BYTE && this->size() > 45) {
                     nType = 9; // TX_REISSUE_ASSET
                     return true;
                 }

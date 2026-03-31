@@ -34,7 +34,6 @@
 #include <assets/ans.h>
 #include <qt/assettablemodel.h>
 
-#include <QGraphicsDropShadowEffect>
 #include <QModelIndex>
 #include <QDebug>
 #include <QMessageBox>
@@ -332,28 +331,26 @@ void CreateAssetDialog::setUpValues()
     // Setup ANS types
     QStringList listTypes;
     for (const auto type : ANSTypes)
-        listTypes.append(QString::fromStdString(CAvianNameSystemID::enum_to_string(type).first));
+        listTypes.append(QString::fromStdString(CMeowcoinNameSystemID::enum_to_string(type).first));
 
     ui->ansType->addItems(listTypes);
 }
 
 void CreateAssetDialog::setupCoinControlFrame(const PlatformStyle *platformStyle)
 {
-    /** Create the shadow effects on the frames */
-    ui->frameCoinControl->setGraphicsEffect(GUIUtil::getShadowEffect());
+    Q_UNUSED(platformStyle);
+    // No QGraphicsDropShadowEffect: it forces repaints through a heavy blur path (bad for UI perf).
 }
 
 void CreateAssetDialog::setupAssetDataView(const PlatformStyle *platformStyle)
 {
-    /** Update the scrollview*/
-    ui->frameAssetData->setGraphicsEffect(GUIUtil::getShadowEffect());
+    Q_UNUSED(platformStyle);
 }
 
 void CreateAssetDialog::setupFeeControl(const PlatformStyle *platformStyle)
 {
-    /** Create the shadow effects on the frames */
+    Q_UNUSED(platformStyle);
     ui->frameFee->setStyleSheet(QString(".QFrame#frameFee { border-top: 2px solid %1;padding-top: 20px}").arg(QColor("#bd840a").name()));
-    //ui->frameFee->setGraphicsEffect(GUIUtil::getShadowEffect());
 }
 
 void CreateAssetDialog::setBalance(const interfaces::WalletBalances& balances)
@@ -455,7 +452,7 @@ bool CreateAssetDialog::checkIPFSHash(QString hash)
     if (!hash.isEmpty()) {
         std::string error;
         // Do not allow ANS in IPFS
-        bool isANS = (hash.toStdString().substr(0, CAvianNameSystemID::prefix.length()) == CAvianNameSystemID::prefix);
+        bool isANS = (hash.toStdString().substr(0, CMeowcoinNameSystemID::prefix.length()) == CMeowcoinNameSystemID::prefix);
         if (!CheckEncoded(DecodeAssetData(hash.toStdString()), error) && !isANS) {
             ui->ipfsText->setStyleSheet("border: 2px solid red");
             showMessage(tr("IPFS must start with 'Qm' and be 46 characters or Txid must be 64 hex characters"));
@@ -570,13 +567,13 @@ void CreateAssetDialog::CheckFormState()
             return;
 
     if (ui->ansBox->isChecked() && !ui->ansText->text().isEmpty()) {
-        CAvianNameSystemID::Type type = static_cast<CAvianNameSystemID::Type>(ui->ansType->currentIndex());
+        CMeowcoinNameSystemID::Type type = static_cast<CMeowcoinNameSystemID::Type>(ui->ansType->currentIndex());
 
         std::string error;
         std::string formattedTypeData;
         std::string typeData = ui->ansText->text().toStdString();
         
-        formattedTypeData = CAvianNameSystemID::FormatTypeData(type, typeData, error);
+        formattedTypeData = CMeowcoinNameSystemID::FormatTypeData(type, typeData, error);
 
         if (error != "") {
             ui->ansText->setStyleSheet("border: 2px solid red");
@@ -585,7 +582,7 @@ void CreateAssetDialog::CheckFormState()
             return;
         }
 
-        CAvianNameSystemID ans(type, formattedTypeData);
+        CMeowcoinNameSystemID ans(type, formattedTypeData);
 
         if (!IsMeowcoinNameSystemDeployed()) {
             ui->ansText->setStyleSheet("border: 2px solid red");
@@ -594,7 +591,7 @@ void CreateAssetDialog::CheckFormState()
             return;
         }
 
-        if (!CAvianNameSystemID::IsValidID(ans.to_string())) {
+        if (!CMeowcoinNameSystemID::IsValidID(ans.to_string())) {
             ui->ansText->setStyleSheet("border: 2px solid red");
             showMessage(tr("Invalid ANS data."));
             disableCreateButton();
@@ -782,8 +779,8 @@ void CreateAssetDialog::onIPFSHashChanged(QString hash)
 }
 
 void CreateAssetDialog::onANSTypeChanged(int index) {
-    CAvianNameSystemID::Type type = static_cast<CAvianNameSystemID::Type>(index);
-    ui->ansText->setPlaceholderText(QString::fromStdString(CAvianNameSystemID::enum_to_string(type).second));
+    CMeowcoinNameSystemID::Type type = static_cast<CMeowcoinNameSystemID::Type>(index);
+    ui->ansText->setPlaceholderText(QString::fromStdString(CMeowcoinNameSystemID::enum_to_string(type).second));
     ui->ansText->clear();
 }
 
@@ -817,10 +814,10 @@ void CreateAssetDialog::onCreateAssetClicked()
     if (hasANS) {
         std::string error;
         std::string formattedTypeData;
-        CAvianNameSystemID::Type type = static_cast<CAvianNameSystemID::Type>(ui->ansType->currentIndex());
-        formattedTypeData = CAvianNameSystemID::FormatTypeData(type, ui->ansText->text().toStdString(), error);
+        CMeowcoinNameSystemID::Type type = static_cast<CMeowcoinNameSystemID::Type>(ui->ansType->currentIndex());
+        formattedTypeData = CMeowcoinNameSystemID::FormatTypeData(type, ui->ansText->text().toStdString(), error);
 
-        CAvianNameSystemID ansID(type, formattedTypeData);
+        CMeowcoinNameSystemID ansID(type, formattedTypeData);
         ansDecoded = ansID.to_string();
 
         // Warn user

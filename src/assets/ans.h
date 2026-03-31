@@ -10,7 +10,7 @@
 #include <array>
 
 /* Class for ANS (Meowcoin Name System) ID */
-class CAvianNameSystemID {
+class CMeowcoinNameSystemID {
 public:  
     static const std::string prefix;
     static const std::string domain;
@@ -20,8 +20,8 @@ public:
         IP = 0x1
     };
 
-    CAvianNameSystemID(Type type, std::string rawData);
-    CAvianNameSystemID(std::string ansID);
+    CMeowcoinNameSystemID(Type type, std::string rawData);
+    CMeowcoinNameSystemID(std::string ansID);
 
     std::string to_string();
 
@@ -39,7 +39,7 @@ public:
     static std::pair<std::string, std::string> enum_to_string(Type type) {
         switch(type) {
             case ADDR:
-                return std::make_pair("Meowcoin address", "Enter an Meowcoin address");
+                return std::make_pair("Meowcoin address", "Enter a Meowcoin address");
             case IP:
                 return std::make_pair("IP [DNS A record]", "Enter IP address");
             default:
@@ -53,9 +53,9 @@ private:
     std::string m_ip;
 };
 
-constexpr std::array<CAvianNameSystemID::Type, 2> ANSTypes { 
-    CAvianNameSystemID::ADDR, 
-    CAvianNameSystemID::IP
+constexpr std::array<CMeowcoinNameSystemID::Type, 2> ANSTypes { 
+    CMeowcoinNameSystemID::ADDR, 
+    CMeowcoinNameSystemID::IP
 };
 
 #endif // BITCOIN_ASSETS_ANS_H

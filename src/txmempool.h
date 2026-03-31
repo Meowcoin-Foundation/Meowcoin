@@ -416,6 +416,32 @@ public:
     indirectmap<COutPoint, const CTransaction*> mapNextTx GUARDED_BY(cs);
     std::map<Txid, CAmount> mapDeltas GUARDED_BY(cs);
 
+    /**
+     * Names of assets being created by transactions currently in the mempool
+     * (maps to the creating tx id). Used by ContextualCheckNewAsset to reject
+     * duplicate issuances while a create is still unconfirmed. Only non-owner
+     * TX_NEW_ASSET outputs are registered (see addNewTransaction/removeUnchecked).
+     */
+    std::map<std::string, Txid> mapAssetToHash GUARDED_BY(cs);
+
+    /** Restricted / qualifier / global-freeze mempool indexes (see mempool_asset.cpp). */
+    std::map<std::pair<std::string, std::string>, std::set<Txid>> mapAddressesMarkedFrozen GUARDED_BY(cs);
+    std::map<Txid, std::set<std::pair<std::string, std::string>>> mapHashToAddressMarkedFrozen GUARDED_BY(cs);
+    std::map<std::string, std::set<Txid>> mapAssetMarkedGlobalFrozen GUARDED_BY(cs);
+    std::map<Txid, std::set<std::string>> mapHashMarkedGlobalFrozen GUARDED_BY(cs);
+    std::map<std::string, std::set<Txid>> mapAddressesQualifiersChanged GUARDED_BY(cs);
+    std::map<Txid, std::set<std::string>> mapHashQualifiersChanged GUARDED_BY(cs);
+    std::map<std::string, std::set<Txid>> mapAssetVerifierChanged GUARDED_BY(cs);
+    std::map<Txid, std::set<std::string>> mapHashVerifierChanged GUARDED_BY(cs);
+    std::map<std::string, std::set<Txid>> mapGlobalFreezingAssetTransactions GUARDED_BY(cs);
+    std::map<Txid, std::set<std::string>> mapHashGlobalFreezingAssetTransactions GUARDED_BY(cs);
+    std::map<std::string, std::set<Txid>> mapGlobalUnFreezingAssetTransactions GUARDED_BY(cs);
+    std::map<Txid, std::set<std::string>> mapHashGlobalUnFreezingAssetTransactions GUARDED_BY(cs);
+    std::map<std::pair<std::string, std::string>, std::set<Txid>> mapAddressAddedTag GUARDED_BY(cs);
+    std::map<Txid, std::set<std::pair<std::string, std::string>>> mapHashToAddressAddedTag GUARDED_BY(cs);
+    std::map<std::pair<std::string, std::string>, std::set<Txid>> mapAddressRemoveTag GUARDED_BY(cs);
+    std::map<Txid, std::set<std::pair<std::string, std::string>>> mapHashToAddressRemoveTag GUARDED_BY(cs);
+
     using Options = kernel::MemPoolOptions;
 
     const Options m_opts;

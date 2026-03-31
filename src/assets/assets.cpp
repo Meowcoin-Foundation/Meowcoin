@@ -919,7 +919,7 @@ bool ReissueAssetFromScript(const CScript& scriptPubKey, CReissueAsset& reissue,
     try {
         ssReissue >> reissue;
     } catch(std::exception& e) {
-        error("Failed to get the reissue asset from the stream: %s", e.what());
+        LogDebug(BCLog::NET, "Failed to get the reissue asset from the stream: %s\n", e.what());
         return false;
     }
 
@@ -997,7 +997,7 @@ bool IsNewAsset(const CTransaction& tx)
     // New Asset transaction will always have at least three outputs.
     // 1. Owner Token output
     // 2. Issue Asset output
-    // 3. AVN Burn Fee
+    // 3. Native (MEWC) burn fee
     if (tx.vout.size() < 3) {
         return false;
     }
@@ -1034,7 +1034,7 @@ bool IsNewUniqueAsset(const CTransaction& tx)
 //! Call this function after IsNewUniqueAsset
 bool VerifyNewUniqueAsset(const CTransaction& tx, std::string& strError)
 {
-    // Must contain at least 3 outpoints (AVN burn, owner change and one or more new unique assets that share a root (should be in trailing position))
+    // Must contain at least 3 outpoints (MEWC burn, owner change and one or more new unique assets that share a root (should be in trailing position))
     if (tx.vout.size() < 3) {
         strError  = "bad-txns-unique-vout-size-to-small";
         return false;
@@ -3206,7 +3206,7 @@ bool CheckIssueBurnTx(const CTxOut& txOut, const AssetType& type)
 
 bool CheckReissueBurnTx(const CTxOut& txOut)
 {
-    // Check the first transaction and verify that the correct AVN Amount
+    // Check the first transaction and verify that the correct native (MEWC) amount
     if (txOut.nValue != GetReissueAssetBurnAmount())
         return false;
 
@@ -3624,16 +3624,19 @@ bool GetAssetData(const CScript& script, CAssetOutputEntry& data)
             data.nAmount = asset.nAmount;
             data.destination = DecodeDestination(address);
             data.assetName = asset.strName;
+            return true;
         } else if (QualifierAssetFromScript(script, asset, address)) {
             data.type = TX_NEW_ASSET;
             data.nAmount = asset.nAmount;
             data.destination = DecodeDestination(address);
             data.assetName = asset.strName;
+            return true;
         } else if (RestrictedAssetFromScript(script, asset, address)) {
             data.type = TX_NEW_ASSET;
             data.nAmount = asset.nAmount;
             data.destination = DecodeDestination(address);
             data.assetName = asset.strName;
+            return true;
         }
     } else if (type == TX_TRANSFER_ASSET) {
         CAssetTransfer transfer;
@@ -3833,7 +3836,7 @@ bool GetBestAssetAddressAmount(CAssetsCache& cache, const std::string& assetName
 std::string DecodeAssetData(std::string encoded)
 {
     // ANS
-    if (CAvianNameSystemID::IsValidID(encoded)) {
+    if (CMeowcoinNameSystemID::IsValidID(encoded)) {
         return encoded;
     }
 
@@ -3857,7 +3860,7 @@ std::string DecodeAssetData(std::string encoded)
 std::string EncodeAssetData(std::string decoded)
 {
     // ANS
-    if (CAvianNameSystemID::IsValidID(decoded)) {
+    if (CMeowcoinNameSystemID::IsValidID(decoded)) {
         return decoded;
     }
 
@@ -3902,7 +3905,7 @@ bool CheckEncoded(const std::string& hash, std::string& strError) {
     std::string encodedStr = EncodeAssetData(hash);
 
     // ANS
-    if (IsMeowcoinNameSystemDeployed() && CAvianNameSystemID::IsValidID(encodedStr)) {
+    if (IsMeowcoinNameSystemDeployed() && CMeowcoinNameSystemID::IsValidID(encodedStr)) {
         return true;
     }
 
@@ -4886,8 +4889,13 @@ bool ContextualCheckNewAsset(CAssetsCache* assetCache, const CNewAsset& asset, s
         return false;
     }
 
-    // TODO: Add mempool duplicate asset check once mapAssetToHash is wired
-    (void)mempool;
+    if (mempool) {
+        LOCK(mempool->cs);
+        if (mempool->mapAssetToHash.count(asset.strName)) {
+            strError = _("Asset with this name is already in the mempool");
+            return false;
+        }
+    }
 
     // Check the ipfs hash as it changes when messaging goes active
     if (asset.nHasIPFS && asset.strIPFSHash.size() != 34) {
@@ -4910,9 +4918,9 @@ bool ContextualCheckNewAsset(CAssetsCache* assetCache, const CNewAsset& asset, s
 
     // Check asset name for ANS
     if (IsAssetNameARoot(asset.strName) && asset.nHasANS) {
-        bool shortLength = asset.strName.length() <= CAvianNameSystemID::domain.length();
-        if (shortLength || asset.strName.substr(asset.strName.length() - CAvianNameSystemID::domain.length()) != CAvianNameSystemID::domain) {
-            strError = std::string(_("Invalid parameter: asset name needs to end in '")) + CAvianNameSystemID::domain + std::string(_("' since ANS data is attached."));
+        bool shortLength = asset.strName.length() <= CMeowcoinNameSystemID::domain.length();
+        if (shortLength || asset.strName.substr(asset.strName.length() - CMeowcoinNameSystemID::domain.length()) != CMeowcoinNameSystemID::domain) {
+            strError = std::string(_("Invalid parameter: asset name needs to end in '")) + CMeowcoinNameSystemID::domain + std::string(_("' since ANS data is attached."));
             return false;
         }
     }
@@ -5033,9 +5041,9 @@ bool ContextualCheckReissueAsset(CAssetsCache* assetCache, const CReissueAsset& 
 
     // Check asset name for ANS
     if (IsAssetNameARoot(reissue_asset.strName) && reissue_asset.strANSID != "") {
-        bool shortLength = reissue_asset.strName.length() <= CAvianNameSystemID::domain.length();
-        if (shortLength || reissue_asset.strName.substr(reissue_asset.strName.length() - CAvianNameSystemID::domain.length()) != CAvianNameSystemID::domain) {
-            strError = std::string(_("Invalid parameter: asset name needs to end in '")) + CAvianNameSystemID::domain + std::string(_("' since ANS data is attached."));
+        bool shortLength = reissue_asset.strName.length() <= CMeowcoinNameSystemID::domain.length();
+        if (shortLength || reissue_asset.strName.substr(reissue_asset.strName.length() - CMeowcoinNameSystemID::domain.length()) != CMeowcoinNameSystemID::domain) {
+            strError = std::string(_("Invalid parameter: asset name needs to end in '")) + CMeowcoinNameSystemID::domain + std::string(_("' since ANS data is attached."));
             return false;
         }
     }
@@ -5139,9 +5147,9 @@ bool ContextualCheckReissueAsset(CAssetsCache* assetCache, const CReissueAsset& 
 
     // Check asset name for ANS
     if (IsAssetNameARoot(reissue_asset.strName) && reissue_asset.strANSID != "") {
-        bool shortLength = reissue_asset.strName.length() <= CAvianNameSystemID::domain.length();
-        if (shortLength || reissue_asset.strName.substr(reissue_asset.strName.length() - CAvianNameSystemID::domain.length()) != CAvianNameSystemID::domain) {
-            strError = std::string(_("Invalid parameter: asset name needs to end in '")) + CAvianNameSystemID::domain + std::string(_("' since ANS data is attached."));
+        bool shortLength = reissue_asset.strName.length() <= CMeowcoinNameSystemID::domain.length();
+        if (shortLength || reissue_asset.strName.substr(reissue_asset.strName.length() - CMeowcoinNameSystemID::domain.length()) != CMeowcoinNameSystemID::domain) {
+            strError = std::string(_("Invalid parameter: asset name needs to end in '")) + CMeowcoinNameSystemID::domain + std::string(_("' since ANS data is attached."));
             return false;
         }
     }
@@ -5205,21 +5213,27 @@ std::string GetUserErrorString(const ErrorReport& report)
 
 UniValue UnitValueFromAmount(const CAmount& amount, int8_t units)
 {
-    bool sign = amount < 0;
-    int64_t n_abs = (sign ? -amount : amount);
-    int64_t quotient = n_abs;
-    int64_t remainder = 0;
+    // Asset amounts are stored as CAmount in 1e-8 base units (like MEWC).
+    // The asset's `units` field restricts the displayed/allowed decimal places.
+    // For example, an asset issued with amount 10 and units=0 is stored as
+    // 10 * COIN internally, but should be displayed as "10".
+    const bool sign{amount < 0};
+    const int64_t n_abs{sign ? -amount : amount};
 
-    if (units > 0) {
-        int64_t divisor = 1;
-        for (int i = 0; i < units; i++) divisor *= 10;
-        quotient = n_abs / divisor;
-        remainder = n_abs % divisor;
-    }
+    // Clamp units to the supported range.
+    if (units < 0) units = 0;
+    if (units > MAX_UNIT) units = MAX_UNIT;
+
+    const int64_t quotient{n_abs / COIN};
+    const int64_t remainder_full{n_abs % COIN};
 
     if (units == 0) {
         return UniValue(UniValue::VNUM, strprintf("%s%d", sign ? "-" : "", quotient));
     }
+
+    int64_t remainder_divisor{1};
+    for (int i = 0; i < (MAX_UNIT - units); ++i) remainder_divisor *= 10;
+    const int64_t remainder{remainder_full / remainder_divisor};
 
     return UniValue(UniValue::VNUM, strprintf("%s%d.%0*d", sign ? "-" : "", quotient, units, remainder));
 }

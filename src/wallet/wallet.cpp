@@ -2235,6 +2235,15 @@ SigningResult CWallet::SignMessage(const std::string& message, const PKHash& pkh
 
 OutputType CWallet::TransactionChangeType(const std::optional<OutputType>& change_type, const std::vector<CRecipient>& vecSend) const
 {
+    // Asset issuance/transfer/reissue outputs use scriptOverride with CNoDestination, so the
+    // inference loop below never sees PKHash/Taproot recipients and would default to BECH32M
+    // change. Legacy P2PKH change keeps the whole tx acceptable to pre-Taproot peers.
+    for (const auto& recipient : vecSend) {
+        if (!recipient.scriptOverride.empty()) {
+            return OutputType::LEGACY;
+        }
+    }
+
     // If -changetype is specified, always use that change type.
     if (change_type) {
         return *change_type;

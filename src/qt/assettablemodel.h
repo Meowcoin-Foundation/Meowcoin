@@ -39,13 +39,13 @@ public:
     enum RoleIndex {
         /** Net amount of transaction */
             AmountRole = 100,
-        /** AVN or name of an asset */
+        /** MEWC (native) or name of an issued asset */
             AssetNameRole = 101,
         /** Formatted amount, without brackets when unconfirmed */
             FormattedAmountRole = 102,
         /** AdministratorRole */
             AdministratorRole = 103,
-        /** AVN or name of an asset */
+        /** MEWC (native) or name of an issued asset */
             AssetIPFSHashRole = 104,
         /** IPFS Decoration Role */
             AssetIPFSHashDecorationRole = 105,

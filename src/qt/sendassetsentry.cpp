@@ -20,7 +20,6 @@
 #include <wallet/spend.h>
 #include <assets/assets.h>
 
-#include <QGraphicsDropShadowEffect>
 #include <QApplication>
 #include <QClipboard>
 #include <validation.h>
@@ -92,8 +91,6 @@ SendAssetsEntry::SendAssetsEntry(const PlatformStyle *_platformStyle, const QStr
     ui->ownershipWarningMessage->hide();
 
     fShowAdministratorList = false;
-
-    this->setGraphicsEffect(GUIUtil::getShadowEffect());
 
     ui->payAssetAmount->setUnit(MAX_UNIT);
     ui->payAssetAmount->setDisabled(false);
@@ -175,6 +172,8 @@ bool SendAssetsEntry::validate()
     if (!model->validateLegacyAddress(ui->payTo->text()))
     {
         ui->payTo->setValid(false);
+        ui->messageTextLabel->show();
+        ui->messageTextLabel->setText(tr("Address must use legacy (P2PKH) format. SegWit and bech32 addresses are not supported for asset transfers."));
         retval = false;
     }
 
@@ -464,7 +463,7 @@ void SendAssetsEntry::switchAdministratorList(bool fSwitchStatus)
         }
 
         ui->payAssetAmount->setUnit(MIN_UNIT);
-        ui->payAssetAmount->setValue(1);
+        ui->payAssetAmount->setValue(OWNER_ASSET_AMOUNT);
         ui->payAssetAmount->setDisabled(true);
 
         ui->assetAmountLabel->clear();

@@ -61,7 +61,7 @@ bool GenerateDistributionList(const CRewardSnapshot& p_rewardSnapshot, std::vect
     //  Get details on the specified source asset
     CNewAsset distributionAsset;
     [[maybe_unused]] bool srcIsIndivisible = false;
-    CAmount srcUnitDivisor = COIN;  //  Default to divisor for AVN
+    CAmount srcUnitDivisor = COIN;  // Default to divisor for native MEWC
     const int8_t COIN_DIGITS_PAST_DECIMAL = 8;
 
     //  This value is in indivisible units of the source asset
@@ -87,7 +87,7 @@ bool GenerateDistributionList(const CRewardSnapshot& p_rewardSnapshot, std::vect
                  p_rewardSnapshot.strDistributionAsset.c_str(), distributionAsset.units, srcUnitDivisor);
     }
     else {
-        LogPrintf("%s: Distribution is AVN with divisor %d\n", __func__, srcUnitDivisor);
+        LogPrintf("%s: Distribution is MEWC with divisor %d\n", __func__, srcUnitDivisor);
     }
 
     LogPrintf("%s: Scaled payment amount in %s is %d\n", __func__,

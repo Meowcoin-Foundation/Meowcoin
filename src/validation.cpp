@@ -34,6 +34,7 @@
 #include <kernel/notifications_interface.h>
 #include <kernel/warning.h>
 #include <logging.h>
+#include <mempool_asset.h>
 #include <logging/timer.h>
 #include <node/blockstorage.h>
 #include <node/utxo_snapshot.h>
@@ -1368,6 +1369,9 @@ bool MemPoolAccept::SubmitPackage(const ATMPArgs& args, std::vector<Workspace>& 
 
     bool all_submitted = true;
     FinalizeSubpackage(args);
+    for (Workspace& ws : workspaces) {
+        RegisterAssetMempoolTxInputs(m_pool, *ws.m_ptx, m_view);
+    }
     // ConsensusScriptChecks adds to the script cache and is therefore consensus-critical;
     // CheckInputsFromMempoolAndCache asserts that transactions only spend coins available from the
     // mempool or UTXO set. Submit each transaction to the mempool immediately after calling
@@ -1477,6 +1481,10 @@ MempoolAcceptResult MemPoolAccept::AcceptSingleTransaction(const CTransactionRef
 
     if (!ConsensusScriptChecks(args, ws)) return MempoolAcceptResult::Failure(ws.m_state);
 
+    if (!CheckAssetMempoolPolicy(m_pool, *ws.m_ptx, ws.m_state)) {
+        return MempoolAcceptResult::Failure(ws.m_state);
+    }
+
     const CFeeRate effective_feerate{ws.m_modified_fees, static_cast<int32_t>(ws.m_vsize)};
     // Tx was accepted, but not added
     if (args.m_test_accept) {
@@ -1485,6 +1493,7 @@ MempoolAcceptResult MemPoolAccept::AcceptSingleTransaction(const CTransactionRef
     }
 
     FinalizeSubpackage(args);
+    RegisterAssetMempoolTxInputs(m_pool, *ws.m_ptx, m_view);
 
     // Limit the mempool, if appropriate.
     if (!args.m_package_submission && !args.m_bypass_limits) {
@@ -1631,6 +1640,20 @@ PackageMempoolAcceptResult MemPoolAccept::AcceptMultipleTransactions(const std::
             results.emplace(ws.m_ptx->GetWitnessHash(), MempoolAcceptResult::Failure(ws.m_state));
             return PackageMempoolAcceptResult(package_state, std::move(results));
         }
+    }
+
+    {
+        TxValidationState asset_state;
+        std::size_t fail_index{0};
+        if (!CheckAssetMempoolPolicyPackage(m_pool, txns, asset_state, fail_index)) {
+            package_state.Invalid(PackageValidationResult::PCKG_TX, "transaction failed");
+            results.emplace(workspaces.at(fail_index).m_ptx->GetWitnessHash(),
+                            MempoolAcceptResult::Failure(asset_state));
+            return PackageMempoolAcceptResult(package_state, std::move(results));
+        }
+    }
+
+    for (Workspace& ws : workspaces) {
         if (args.m_test_accept) {
             const auto effective_feerate = args.m_package_feerates ? ws.m_package_feerate :
                 CFeeRate{ws.m_modified_fees, static_cast<int32_t>(ws.m_vsize)};

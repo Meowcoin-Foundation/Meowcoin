@@ -242,7 +242,7 @@ static RPCHelpMan getdistributestatus()
         {
             {"asset_name", RPCArg::Type::STR, RPCArg::Optional::NO, "the reward will be distributed to all owners of this asset"},
             {"snapshot_height", RPCArg::Type::NUM, RPCArg::Optional::NO, "the block height of the ownership snapshot"},
-            {"distribution_asset_name", RPCArg::Type::STR, RPCArg::Optional::NO, "the name of the asset that will be distributed, or AVN"},
+            {"distribution_asset_name", RPCArg::Type::STR, RPCArg::Optional::NO, "the name of the asset that will be distributed, or MEWC for native coin"},
             {"gross_distribution_amount", RPCArg::Type::NUM, RPCArg::Optional::NO, "the amount of the distribution asset that will be split amongst all owners"},
             {"exception_addresses", RPCArg::Type::STR, RPCArg::Default{""}, "comma-separated list of ownership addresses that should be excluded"},
         },
@@ -257,7 +257,7 @@ static RPCHelpMan getdistributestatus()
             }
         },
         RPCExamples{
-            HelpExampleCli("getdistributestatus", "\"ASSET_NAME\" 12345 \"AVN\" 1000")
+            HelpExampleCli("getdistributestatus", "\"ASSET_NAME\" 12345 \"MEWC\" 1000")
           + HelpExampleCli("getdistributestatus", "\"ASSET_NAME\" 12345 \"DIVIDENDS\" 1000 \"addr1,addr2\"")
           + HelpExampleRpc("getdistributestatus", "\"ASSET_NAME\", 34987, \"DIVIDENDS\", 100000")
         },

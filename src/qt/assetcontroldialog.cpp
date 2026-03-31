@@ -477,7 +477,6 @@ void AssetControlDialog::updateLabels(WalletModel *model, QDialog* dialog)
     if (!strAssetName.empty() && model) {
         wallet::CWallet* pwallet = model->wallet().wallet();
         if (pwallet) {
-            std::vector<COutPoint> vSelected = assetControl()->ListSelected();
             LOCK(pwallet->cs_wallet);
             wallet::CoinFilterParams params;
             params.min_amount = 0;
@@ -486,7 +485,7 @@ void AssetControlDialog::updateLabels(WalletModel *model, QDialog* dialog)
             auto it = available.mapAssetCoins.find(strAssetName);
             if (it != available.mapAssetCoins.end()) {
                 for (const auto& output : it->second) {
-                    if (assetControl()->IsSelected(output.outpoint)) {
+                    if (assetControl()->IsAssetSelected(output.outpoint)) {
                         CAssetOutputEntry data;
                         if (GetAssetData(output.txout.scriptPubKey, data)) {
                             nAssetAmount += data.nAmount;
@@ -546,7 +545,7 @@ void AssetControlDialog::updateLabels(WalletModel *model, QDialog* dialog)
     // tool tips
     QString toolTipDust = tr("This label turns red if any recipient receives an amount smaller than the current dust threshold.");
     double dFeeVary = (nBytes != 0) ? (double)nPayFee / nBytes : 0;
-    QString toolTip4 = tr("Can vary +/- %1 avianshi(s) per input.").arg(dFeeVary);
+    QString toolTip4 = tr("Can vary +/- %1 satoshi(s) per input.").arg(dFeeVary);
 
     l3->setToolTip(toolTip4);
     l4->setToolTip(toolTip4);
@@ -682,8 +681,8 @@ void AssetControlDialog::updateView()
             // Vout index
             itemOutput->setText(COLUMN_VOUT_INDEX, QString::number(out->outpoint.n));
 
-            // Set checkbox state if selected in coin control
-            if (assetControl()->IsSelected(out->outpoint))
+            // Set checkbox state if selected in asset coin control
+            if (assetControl()->IsAssetSelected(out->outpoint))
                 itemOutput->setCheckState(COLUMN_CHECKBOX, Qt::Checked);
         }
     }
@@ -696,6 +695,7 @@ void AssetControlDialog::updateView()
 void AssetControlDialog::viewAdministratorClicked()
 {
     assetControl()->UnSelectAll();
+    assetControl()->UnSelectAllAssetInputs();
     AssetControlDialog::updateLabels(model, this);
     updateAssetList();
 }
@@ -734,6 +734,7 @@ void AssetControlDialog::onAssetSelected(QString name)
         fOnStartUp = false;
     } else {
         assetControl()->UnSelectAll();
+        assetControl()->UnSelectAllAssetInputs();
     }
 
     AssetControlDialog::updateLabels(model, this);

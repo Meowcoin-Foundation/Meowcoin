@@ -185,8 +185,10 @@ public:
     std::set<COutPoint> setAssetsSelected;
 
     bool HasAssetSelected() const { return !setAssetsSelected.empty(); }
+    bool IsAssetSelected(const COutPoint& output) const { return setAssetsSelected.count(output) > 0; }
     void SelectAsset(const COutPoint& output) { setAssetsSelected.insert(output); }
     void UnSelectAsset(const COutPoint& output) { setAssetsSelected.erase(output); }
+    void UnSelectAllAssetInputs() { setAssetsSelected.clear(); }
 
 private:
     //! Selected inputs (inputs that will be used, regardless of whether they're optimal or not)

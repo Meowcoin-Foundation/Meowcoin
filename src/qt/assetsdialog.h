@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2011-2016 The Bitcoin Core developers
+// Copyright (c) 2011-2016 The Bitcoin Core developers
 // Copyright (c) 2017-2019 The Meowcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
@@ -28,7 +28,7 @@ QT_BEGIN_NAMESPACE
 class QUrl;
 QT_END_NAMESPACE
 
-/** Dialog for sending avians */
+/** Dialog for transferring assets */
 class AssetsDialog : public QDialog
 {
     Q_OBJECT
@@ -110,9 +110,9 @@ private Q_SLOTS:
 
     void customFeeFeatureChanged(bool);
 
-    /** AVN START */
+    /** Asset UI START */
     void assetControlUpdateSendCoinsDialog();
-    /** AVN END */
+    /** Asset UI END */
 
 public Q_SLOTS:
     void focusAsset(const QModelIndex& index);

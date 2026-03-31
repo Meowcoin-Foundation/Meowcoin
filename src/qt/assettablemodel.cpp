@@ -18,9 +18,41 @@
 #include <qt/platformstyle.h>
 
 #include <QDebug>
+#include <QImage>
 #include <QStringList>
+#include <QPixmap>
 
-/** AVN: Get all asset balances for a wallet.
+#include <optional>
+
+namespace {
+
+/**
+ * Decoration pixmaps are requested often while painting; load once after QGuiApplication exists.
+ * Do not use plain QPixmap members here: static storage would construct them before main().
+ */
+struct AssetTableDecorationCache {
+    std::optional<QPixmap> extLinkLight;
+    std::optional<QPixmap> extLinkDark;
+    std::optional<QPixmap> exportIcon;
+    std::optional<QPixmap> adminLight;
+    std::optional<QPixmap> adminDark;
+
+    void ensure()
+    {
+        if (extLinkLight) return;
+        extLinkLight.emplace(QPixmap::fromImage(QImage(QStringLiteral(":/icons/external_link"))));
+        extLinkDark.emplace(QPixmap::fromImage(QImage(QStringLiteral(":/icons/external_link_dark"))));
+        exportIcon.emplace(QPixmap::fromImage(QImage(QStringLiteral(":/icons/export"))));
+        adminLight.emplace(QPixmap::fromImage(QImage(QStringLiteral(":/icons/asset_administrator"))));
+        adminDark.emplace(QPixmap::fromImage(QImage(QStringLiteral(":/icons/asset_administrator_dark"))));
+    }
+};
+
+AssetTableDecorationCache g_assetTableDecos;
+
+} // namespace
+
+/** Get all asset balances for a wallet (native MEWC + issued assets).
  *
  * Light-weight scan that only iterates asset UTXOs (via GetTXOs()),
  * skipping the expensive AvailableCoins() regular-coin scan and the
@@ -115,12 +147,19 @@ public:
                         // Asset is not an administrator asset
                         CNewAsset assetData;
                         if (!currentActiveAssetCache->GetAssetMetaDataIfExists(bal->first, assetData)) {
-                            qWarning("AssetTablePriv::refreshWallet: Error retrieving asset data");
-                            return;
+                            // Do not abort the whole table: e.g. brand-new issuance still in mempool, or
+                            // asset DB not updated yet — other balances would all show "(unknown)" in Send.
+                            qWarning() << "AssetTableModel: missing metadata for"
+                                       << QString::fromStdString(bal->first)
+                                       << "- showing quantity with default units until cache/index catches up";
+                            units = DEFAULT_UNITS;
+                            ipfsHash = "";
+                            ansID = "";
+                        } else {
+                            units = assetData.units;
+                            ipfsHash = assetData.strIPFSHash;
+                            ansID = assetData.strANSID;
                         }
-                        units = assetData.units;
-                        ipfsHash = assetData.strIPFSHash;
-                        ansID = assetData.strANSID;
                         // If we have the administrator asset, add it to the skip list
                         if (balances.count(bal->first + OWNER_TAG)) {
                             setAssetsToSkip.insert(bal->first + OWNER_TAG);
@@ -197,10 +236,9 @@ void AssetTableModel::checkBalanceChanged() {
     }
     priv->cachedAmounts = newAmounts;
 
-    Q_EMIT layoutAboutToBeChanged();
+    beginResetModel();
     priv->refreshWallet(&newAmounts);
-    Q_EMIT dataChanged(index(0, 0, QModelIndex()), index(priv->size(), columns.length()-1, QModelIndex()));
-    Q_EMIT layoutChanged();
+    endResetModel();
 #endif
 }
 
@@ -242,14 +280,8 @@ QVariant AssetTableModel::data(const QModelIndex &index, int role) const
             if (rec->ipfshash.size() == 0)
                 return QVariant();
 
-            QPixmap pixmap;
-
-            if (darkModeEnabled)
-                pixmap = QPixmap::fromImage(QImage(":/icons/external_link_dark"));
-            else
-                pixmap = QPixmap::fromImage(QImage(":/icons/external_link"));
-
-            return pixmap;
+            g_assetTableDecos.ensure();
+            return darkModeEnabled ? *g_assetTableDecos.extLinkDark : *g_assetTableDecos.extLinkLight;
         }
         case AssetANSRole:
             return QString::fromStdString(rec->ansID);
@@ -261,14 +293,8 @@ QVariant AssetTableModel::data(const QModelIndex &index, int role) const
             if (rec->ansID.size() == 0)
                 return QVariant();
 
-            QPixmap pixmap;
-
-            if (darkModeEnabled)
-                pixmap = QPixmap::fromImage(QImage(":/icons/export"));
-            else
-                pixmap = QPixmap::fromImage(QImage(":/icons/export"));
-
-            return pixmap;
+            g_assetTableDecos.ensure();
+            return *g_assetTableDecos.exportIcon;
         }
         case Qt::DecorationRole:
         {
@@ -278,13 +304,8 @@ QVariant AssetTableModel::data(const QModelIndex &index, int role) const
             if (!rec->fIsAdministrator)
                 return QVariant();
 
-            QPixmap pixmap;
-            if (darkModeEnabled)
-                pixmap = QPixmap::fromImage(QImage(":/icons/asset_administrator_dark"));
-            else
-                pixmap = QPixmap::fromImage(QImage(":/icons/asset_administrator"));
-
-            return pixmap;
+            g_assetTableDecos.ensure();
+            return darkModeEnabled ? *g_assetTableDecos.adminDark : *g_assetTableDecos.adminLight;
         }
         case Qt::DisplayRole: {
             if (index.column() == Name)

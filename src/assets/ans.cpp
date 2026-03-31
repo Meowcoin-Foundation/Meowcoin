@@ -28,10 +28,10 @@ static bool IsHexNumber(const std::string& str) {
 }
 
 /* Static prefix */
-const std::string CAvianNameSystemID::prefix = "ANS";
+const std::string CMeowcoinNameSystemID::prefix = "ANS";
 
 /* Static domain */
-const std::string CAvianNameSystemID::domain = ".AVN";
+const std::string CMeowcoinNameSystemID::domain = ".MEWC";
 
 static std::string IPToHex(std::string strIP)
 {
@@ -60,7 +60,7 @@ static std::string HexToIP(std::string hexIP)
     return std::to_string(a) + "." + std::to_string(b) + "." + std::to_string(c) + "." + std::to_string(d);
 }
 
-bool CAvianNameSystemID::CheckIP(std::string rawip, bool isHex) {
+bool CMeowcoinNameSystemID::CheckIP(std::string rawip, bool isHex) {
     std::string ip = rawip;
     if (isHex) ip = HexToIP(rawip.c_str());
 
@@ -74,7 +74,7 @@ bool CAvianNameSystemID::CheckIP(std::string rawip, bool isHex) {
 }
 
 // TODO: Add error result?
-bool CAvianNameSystemID::CheckTypeData(Type type, std::string typeData) {
+bool CMeowcoinNameSystemID::CheckTypeData(Type type, std::string typeData) {
     if (type == Type::ADDR) {
         CTxDestination destination = DecodeDestination(typeData);
         if (!IsValidDestination(destination)) return false;
@@ -87,7 +87,7 @@ bool CAvianNameSystemID::CheckTypeData(Type type, std::string typeData) {
     return true;
 }
 
-std::string CAvianNameSystemID::FormatTypeData(Type type, std::string typeData, std::string& error)
+std::string CMeowcoinNameSystemID::FormatTypeData(Type type, std::string typeData, std::string& error)
 {
     std::string returnStr = typeData;
 
@@ -111,12 +111,12 @@ std::string CAvianNameSystemID::FormatTypeData(Type type, std::string typeData, 
     return returnStr;
 }
 
-bool CAvianNameSystemID::IsValidID(std::string ansID) {
+bool CMeowcoinNameSystemID::IsValidID(std::string ansID) {
     // Check for min length
     if(ansID.length() <= prefix.size() + 1) return false;
 
     // Check for prefix
-    bool hasPrefix = (ansID.substr(0, CAvianNameSystemID::prefix.length()) == CAvianNameSystemID::prefix) && (ansID.size() <= 64);
+    bool hasPrefix = (ansID.substr(0, CMeowcoinNameSystemID::prefix.length()) == CMeowcoinNameSystemID::prefix) && (ansID.size() <= 64);
     if (!hasPrefix) return false;
 
     // Must be valid hex char
@@ -136,7 +136,7 @@ bool CAvianNameSystemID::IsValidID(std::string ansID) {
     return true;
 }
 
-CAvianNameSystemID::CAvianNameSystemID(Type type, std::string rawData) :
+CMeowcoinNameSystemID::CMeowcoinNameSystemID(Type type, std::string rawData) :
     m_addr(""),
     m_ip("")
 {
@@ -154,7 +154,7 @@ CAvianNameSystemID::CAvianNameSystemID(Type type, std::string rawData) :
     }
 }
 
-CAvianNameSystemID::CAvianNameSystemID(std::string ansID) :
+CMeowcoinNameSystemID::CMeowcoinNameSystemID(std::string ansID) :
     m_addr(""),
     m_ip("")
 {
@@ -175,7 +175,7 @@ CAvianNameSystemID::CAvianNameSystemID(std::string ansID) :
     }
 }
 
-std::string CAvianNameSystemID::to_string() {
+std::string CMeowcoinNameSystemID::to_string() {
     std::string id = "";
 
     // 1. Add prefix

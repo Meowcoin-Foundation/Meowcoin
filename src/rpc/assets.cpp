@@ -451,16 +451,16 @@ static RPCHelpMan checkglobalrestriction()
     };
 }
 
-static UniValue ANSIDToObject(CAvianNameSystemID& ansID)
+static UniValue ANSIDToObject(CMeowcoinNameSystemID& ansID)
 {
     UniValue obj(UniValue::VOBJ);
     obj.pushKV("id", ansID.to_string());
     obj.pushKV("type", (int)ansID.type());
-    auto typePair = CAvianNameSystemID::enum_to_string(ansID.type());
+    auto typePair = CMeowcoinNameSystemID::enum_to_string(ansID.type());
     obj.pushKV("type_name", typePair.first);
-    if (ansID.type() == CAvianNameSystemID::ADDR)
+    if (ansID.type() == CMeowcoinNameSystemID::ADDR)
         obj.pushKV("address", ansID.addr());
-    else if (ansID.type() == CAvianNameSystemID::IP)
+    else if (ansID.type() == CMeowcoinNameSystemID::IP)
         obj.pushKV("ip", ansID.ip());
     return obj;
 }
@@ -503,7 +503,7 @@ static RPCHelpMan getansdata()
             if (!asset.nHasANS)
                 return UniValue::VNULL;
 
-            CAvianNameSystemID ansID(asset.strANSID);
+            CMeowcoinNameSystemID ansID(asset.strANSID);
             return ANSIDToObject(ansID);
         },
     };
@@ -890,20 +890,20 @@ static RPCHelpMan ansencode()
             std::string type_str = request.params[0].get_str();
             std::string data = request.params[1].get_str();
 
-            CAvianNameSystemID::Type type;
+            CMeowcoinNameSystemID::Type type;
             if (type_str == "ADDR" || type_str == "addr" || type_str == "0")
-                type = CAvianNameSystemID::ADDR;
+                type = CMeowcoinNameSystemID::ADDR;
             else if (type_str == "IP" || type_str == "ip" || type_str == "1")
-                type = CAvianNameSystemID::IP;
+                type = CMeowcoinNameSystemID::IP;
             else
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid ANS type. Must be \"ADDR\" or \"IP\".");
 
             std::string error;
-            std::string formatted = CAvianNameSystemID::FormatTypeData(type, data, error);
+            std::string formatted = CMeowcoinNameSystemID::FormatTypeData(type, data, error);
             if (!error.empty())
                 throw JSONRPCError(RPC_INVALID_PARAMETER, error);
 
-            CAvianNameSystemID ansID(type, formatted);
+            CMeowcoinNameSystemID ansID(type, formatted);
             return ansID.to_string();
         },
     };
@@ -935,10 +935,10 @@ static RPCHelpMan ansdecode()
         {
             std::string ans_id = request.params[0].get_str();
 
-            if (!CAvianNameSystemID::IsValidID(ans_id))
+            if (!CMeowcoinNameSystemID::IsValidID(ans_id))
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid ANS ID: " + ans_id);
 
-            CAvianNameSystemID ansID(ans_id);
+            CMeowcoinNameSystemID ansID(ans_id);
             return ANSIDToObject(ansID);
         },
     };

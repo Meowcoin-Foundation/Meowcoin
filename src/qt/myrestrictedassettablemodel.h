@@ -56,7 +56,7 @@ public:
         TxPlainTextRole,
         /** Unprocessed icon */
         RawDecorationRole,
-        /** AVN or name of an asset */
+        /** MEWC (native) or name of an issued asset */
         AssetNameRole,
     };
 
