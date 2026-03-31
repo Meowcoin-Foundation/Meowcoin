@@ -8,12 +8,9 @@
 #include <cstddef>
 #include <vector>
 
-#include <primitives/transaction.h>
-#include <sync.h>
+#include <txmempool.h>
 
 class CCoinsViewCache;
-class CTransaction;
-class CTxMemPool;
 class TxValidationState;
 
 /** Policy-only checks (no map mutation). Caller must hold pool.cs. */

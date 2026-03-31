@@ -2735,8 +2735,6 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
 
         // Asset state mutations (after UTXO update)
         if (assetsCache && AreAssetsDeployed()) {
-            const uint256 hash = tx.GetHash().ToUint256();
-
             // Spend asset inputs
             if (!tx.IsCoinBase()) {
                 const CTxUndo& txundo = (i == 0) ? undoDummy : blockundo.vtxundo.back();
