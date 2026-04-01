@@ -63,4 +63,7 @@ static constexpr uint64_t GB_BYTES{1000000000};
 // Default prune target displayed in GUI.
 static constexpr int DEFAULT_PRUNE_TARGET_GB{2};
 
+/** When true, the Receive dialog does not offer SegWit/Taproot address types (wallet still supports them via RPC and -addresstype). Set to false to expose full address types for testing. */
+static constexpr bool GUI_RESTRICT_ADDRESS_TYPES_TO_LEGACY{true};
+
 #endif // BITCOIN_QT_GUICONSTANTS_H
