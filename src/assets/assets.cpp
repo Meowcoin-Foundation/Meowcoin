@@ -40,6 +40,33 @@
 // Removed in BTC 30.2. Define as macro wrapping LogError.
 #define error(...) ([&]() -> bool { LogError(__VA_ARGS__); return false; }())
 
+/** Serialized asset data lives in the push immediately after OP_MEWC_ASSET: four marker
+ *  bytes (e.g. rvnq) then the payload. Using scriptPubKey.begin()+nStartingIndex through
+ *  scriptPubKey.end() incorrectly included trailing opcodes (notably OP_DROP 0x75),
+ *  which was read as nHasANS and failed validation. */
+static bool ExtractMewcAssetSerializedPayload(const CScript& scriptPubKey, std::vector<unsigned char>& out)
+{
+    CScript::const_iterator pc = scriptPubKey.begin();
+    opcodetype opcode;
+    std::vector<unsigned char> vch;
+    while (pc < scriptPubKey.end()) {
+        if (!scriptPubKey.GetOp(pc, opcode, vch)) {
+            return false;
+        }
+        if (opcode == OP_MEWC_ASSET) {
+            if (!scriptPubKey.GetOp(pc, opcode, vch)) {
+                return false;
+            }
+            if (vch.size() < 4) {
+                return false;
+            }
+            out.assign(vch.begin() + 4, vch.end());
+            return true;
+        }
+    }
+    return false;
+}
+
 // Helper: split string by delimiter characters (replaces boost::split + boost::is_any_of)
 static std::vector<std::string> SplitString(const std::string& str, const std::string& delimiters) {
     std::vector<std::string> parts;
@@ -750,8 +777,7 @@ bool OwnerFromTransaction(const CTransaction& tx, std::string& ownerName, std::s
 
 bool TransferAssetFromScript(const CScript& scriptPubKey, CAssetTransfer& assetTransfer, std::string& strAddress)
 {
-    int nStartingIndex = 0;
-    if (!IsScriptTransferAsset(scriptPubKey, nStartingIndex)) {
+    if (!IsScriptTransferAsset(scriptPubKey)) {
         return false;
     }
 
@@ -761,8 +787,9 @@ bool TransferAssetFromScript(const CScript& scriptPubKey, CAssetTransfer& assetT
     strAddress = EncodeDestination(destination);
 
     std::vector<unsigned char> vchTransferAsset;
-
-    vchTransferAsset.insert(vchTransferAsset.end(), scriptPubKey.begin() + nStartingIndex, scriptPubKey.end());
+    if (!ExtractMewcAssetSerializedPayload(scriptPubKey, vchTransferAsset)) {
+        return false;
+    }
 
     DataStream ssAsset{vchTransferAsset};
 
@@ -778,8 +805,7 @@ bool TransferAssetFromScript(const CScript& scriptPubKey, CAssetTransfer& assetT
 
 bool AssetFromScript(const CScript& scriptPubKey, CNewAsset& assetNew, std::string& strAddress)
 {
-    int nStartingIndex = 0;
-    if (!IsScriptNewAsset(scriptPubKey, nStartingIndex))
+    if (!IsScriptNewAsset(scriptPubKey))
         return false;
 
     CTxDestination destination;
@@ -788,7 +814,9 @@ bool AssetFromScript(const CScript& scriptPubKey, CNewAsset& assetNew, std::stri
     strAddress = EncodeDestination(destination);
 
     std::vector<unsigned char> vchNewAsset;
-    vchNewAsset.insert(vchNewAsset.end(), scriptPubKey.begin() + nStartingIndex, scriptPubKey.end());
+    if (!ExtractMewcAssetSerializedPayload(scriptPubKey, vchNewAsset)) {
+        return false;
+    }
     DataStream ssAsset{vchNewAsset};
 
     try {
@@ -803,8 +831,7 @@ bool AssetFromScript(const CScript& scriptPubKey, CNewAsset& assetNew, std::stri
 
 bool MsgChannelAssetFromScript(const CScript& scriptPubKey, CNewAsset& assetNew, std::string& strAddress)
 {
-    int nStartingIndex = 0;
-    if (!IsScriptNewMsgChannelAsset(scriptPubKey, nStartingIndex))
+    if (!IsScriptNewMsgChannelAsset(scriptPubKey))
         return false;
 
     CTxDestination destination;
@@ -813,7 +840,9 @@ bool MsgChannelAssetFromScript(const CScript& scriptPubKey, CNewAsset& assetNew,
     strAddress = EncodeDestination(destination);
 
     std::vector<unsigned char> vchNewAsset;
-    vchNewAsset.insert(vchNewAsset.end(), scriptPubKey.begin() + nStartingIndex, scriptPubKey.end());
+    if (!ExtractMewcAssetSerializedPayload(scriptPubKey, vchNewAsset)) {
+        return false;
+    }
     DataStream ssAsset{vchNewAsset};
 
     try {
@@ -828,8 +857,7 @@ bool MsgChannelAssetFromScript(const CScript& scriptPubKey, CNewAsset& assetNew,
 
 bool QualifierAssetFromScript(const CScript& scriptPubKey, CNewAsset& assetNew, std::string& strAddress)
 {
-    int nStartingIndex = 0;
-    if (!IsScriptNewQualifierAsset(scriptPubKey, nStartingIndex))
+    if (!IsScriptNewQualifierAsset(scriptPubKey))
         return false;
 
     CTxDestination destination;
@@ -838,7 +866,9 @@ bool QualifierAssetFromScript(const CScript& scriptPubKey, CNewAsset& assetNew, 
     strAddress = EncodeDestination(destination);
 
     std::vector<unsigned char> vchNewAsset;
-    vchNewAsset.insert(vchNewAsset.end(), scriptPubKey.begin() + nStartingIndex, scriptPubKey.end());
+    if (!ExtractMewcAssetSerializedPayload(scriptPubKey, vchNewAsset)) {
+        return false;
+    }
     DataStream ssAsset{vchNewAsset};
 
     try {
@@ -853,8 +883,7 @@ bool QualifierAssetFromScript(const CScript& scriptPubKey, CNewAsset& assetNew, 
 
 bool RestrictedAssetFromScript(const CScript& scriptPubKey, CNewAsset& assetNew, std::string& strAddress)
 {
-    int nStartingIndex = 0;
-    if (!IsScriptNewRestrictedAsset(scriptPubKey, nStartingIndex))
+    if (!IsScriptNewRestrictedAsset(scriptPubKey))
         return false;
 
     CTxDestination destination;
@@ -863,7 +892,9 @@ bool RestrictedAssetFromScript(const CScript& scriptPubKey, CNewAsset& assetNew,
     strAddress = EncodeDestination(destination);
 
     std::vector<unsigned char> vchNewAsset;
-    vchNewAsset.insert(vchNewAsset.end(), scriptPubKey.begin() + nStartingIndex, scriptPubKey.end());
+    if (!ExtractMewcAssetSerializedPayload(scriptPubKey, vchNewAsset)) {
+        return false;
+    }
     DataStream ssAsset{vchNewAsset};
 
     try {
@@ -878,8 +909,7 @@ bool RestrictedAssetFromScript(const CScript& scriptPubKey, CNewAsset& assetNew,
 
 bool OwnerAssetFromScript(const CScript& scriptPubKey, std::string& assetName, std::string& strAddress)
 {
-    int nStartingIndex = 0;
-    if (!IsScriptOwnerAsset(scriptPubKey, nStartingIndex))
+    if (!IsScriptOwnerAsset(scriptPubKey))
         return false;
 
     CTxDestination destination;
@@ -888,7 +918,9 @@ bool OwnerAssetFromScript(const CScript& scriptPubKey, std::string& assetName, s
     strAddress = EncodeDestination(destination);
 
     std::vector<unsigned char> vchOwnerAsset;
-    vchOwnerAsset.insert(vchOwnerAsset.end(), scriptPubKey.begin() + nStartingIndex, scriptPubKey.end());
+    if (!ExtractMewcAssetSerializedPayload(scriptPubKey, vchOwnerAsset)) {
+        return false;
+    }
     DataStream ssOwner{vchOwnerAsset};
 
     try {
@@ -903,8 +935,7 @@ bool OwnerAssetFromScript(const CScript& scriptPubKey, std::string& assetName, s
 
 bool ReissueAssetFromScript(const CScript& scriptPubKey, CReissueAsset& reissue, std::string& strAddress)
 {
-    int nStartingIndex = 0;
-    if (!IsScriptReissueAsset(scriptPubKey, nStartingIndex))
+    if (!IsScriptReissueAsset(scriptPubKey))
         return false;
 
     CTxDestination destination;
@@ -913,7 +944,9 @@ bool ReissueAssetFromScript(const CScript& scriptPubKey, CReissueAsset& reissue,
     strAddress = EncodeDestination(destination);
 
     std::vector<unsigned char> vchReissueAsset;
-    vchReissueAsset.insert(vchReissueAsset.end(), scriptPubKey.begin() + nStartingIndex, scriptPubKey.end());
+    if (!ExtractMewcAssetSerializedPayload(scriptPubKey, vchReissueAsset)) {
+        return false;
+    }
     DataStream ssReissue{vchReissueAsset};
 
     try {

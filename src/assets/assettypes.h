@@ -192,9 +192,15 @@ public:
         if (nHasIPFS == 1) {
             UnserializeIPFSHash(s, strIPFSHash);
         }
-        ::Unserialize(s, nHasANS);
-        if (nHasANS == 1) {
-            ::Unserialize(s, strANSID);
+        // nHasANS/strANSID were not present in legacy on-chain transactions.
+        // Only read them if more data remains in the stream.
+        nHasANS = 0;
+        strANSID.clear();
+        if (!s.empty()) {
+            ::Unserialize(s, nHasANS);
+            if (nHasANS == 1) {
+                ::Unserialize(s, strANSID);
+            }
         }
     }
 };
@@ -328,7 +334,11 @@ public:
         ::Unserialize(s, nUnits);
         ::Unserialize(s, nReissuable);
         UnserializeIPFSHash(s, strIPFSHash);
-        ::Unserialize(s, strANSID);
+        // strANSID was not present in legacy on-chain transactions.
+        strANSID.clear();
+        if (!s.empty()) {
+            ::Unserialize(s, strANSID);
+        }
     }
 
     CReissueAsset(const std::string& strAssetName, const CAmount& nAmount, const int& nUnits, const int& nReissuable, const std::string& strIPFSHash, const std::string& strANSID);
