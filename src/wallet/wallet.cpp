@@ -1529,8 +1529,8 @@ void CWallet::blockConnected(ChainstateRole role, const interfaces::BlockInfo& b
         transactionRemovedFromMempool(block.data->vtx[index], MemPoolRemovalReason::BLOCK);
     }
 
-    // Update on disk if this block resulted in us updating a tx, or periodically every 144 blocks (~1 day)
-    if (wallet_updated || block.height % 144 == 0) {
+    // Update on disk if this block resulted in us updating a tx, or periodically every 1440 blocks (~1 day at 1-min Meowcoin block time)
+    if (wallet_updated || block.height % 1440 == 0) {
         WriteBestBlock();
     }
 }

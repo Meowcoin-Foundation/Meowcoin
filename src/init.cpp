@@ -32,8 +32,11 @@
 #include <hash.h>
 #include <httprpc.h>
 #include <httpserver.h>
+#include <index/addressindex.h>
 #include <index/blockfilterindex.h>
 #include <index/coinstatsindex.h>
+#include <index/spentindex.h>
+#include <index/timestampindex.h>
 #include <index/txindex.h>
 #include <init/common.h>
 #include <interfaces/chain.h>
@@ -380,6 +383,9 @@ void Shutdown(NodeContext& node)
     for (auto* index : node.indexes) index->Stop();
     if (g_txindex) g_txindex.reset();
     if (g_coin_stats_index) g_coin_stats_index.reset();
+    if (g_addressindex) g_addressindex.reset();
+    if (g_spentindex) g_spentindex.reset();
+    if (g_timestampindex) g_timestampindex.reset();
     DestroyAllBlockFilterIndexes();
     node.indexes.clear(); // all instances are nullptr now
 
@@ -550,6 +556,10 @@ void SetupServerArgs(ArgsManager& argsman, bool can_listen_ipc)
     argsman.AddArg("-reindex", "If enabled, wipe chain state and block index, and rebuild them from blk*.dat files on disk. Also wipe and rebuild other optional indexes that are active. If an assumeutxo snapshot was loaded, its chainstate will be wiped as well. The snapshot can then be reloaded via RPC.", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-reindex-chainstate", "If enabled, wipe chain state, and rebuild it from blk*.dat files on disk. If an assumeutxo snapshot was loaded, its chainstate will be wiped as well. The snapshot can then be reloaded via RPC.", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-reindexassets", "If enabled, wipe and rebuild the asset database by scanning existing blocks. Much faster than a full -reindex.", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
+    argsman.AddArg("-assetindex", "Maintain a full asset index, used to query asset balances by address (default: 0)", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
+    argsman.AddArg("-addressindex", "Maintain a full address index, used to query for the balance, txids and unspent outputs for addresses (default: 0)", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
+    argsman.AddArg("-spentindex", "Maintain a full spent index, used to query the spending txid and input index for an outpoint (default: 0)", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
+    argsman.AddArg("-timestampindex", "Maintain a timestamp index for block hashes, used to query blocks within a time range (default: 0)", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     argsman.AddArg("-settings=<file>", strprintf("Specify path to dynamic settings data file. Can be disabled with -nosettings. File is written at runtime and not meant to be edited by users (use %s instead for custom settings). Relative paths will be prefixed by datadir location. (default: %s)", BITCOIN_CONF_FILENAME, BITCOIN_SETTINGS_FILENAME), ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
 #if HAVE_SYSTEM
     argsman.AddArg("-startupnotify=<cmd>", "Execute command on startup.", ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
@@ -1785,6 +1795,7 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
     bool do_reindex{args.GetBoolArg("-reindex", false)};
     const bool do_reindex_chainstate{args.GetBoolArg("-reindex-chainstate", false)};
     bool do_reindex_assets{args.GetBoolArg("-reindexassets", false)};
+    fAssetIndex = args.GetBoolArg("-assetindex", false);
 
     // Chainstate initialization and loading may be retried once with reindexing by GUI users
     auto [status, error] = InitAndLoadChainstate(
@@ -1852,6 +1863,21 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
         node.indexes.emplace_back(g_coin_stats_index.get());
     }
 
+    if (args.GetBoolArg("-addressindex", false)) {
+        g_addressindex = std::make_unique<AddressIndex>(interfaces::MakeChain(node), /*cache_size=*/0, false, do_reindex);
+        node.indexes.emplace_back(g_addressindex.get());
+    }
+
+    if (args.GetBoolArg("-spentindex", false)) {
+        g_spentindex = std::make_unique<SpentIndex>(interfaces::MakeChain(node), /*cache_size=*/0, false, do_reindex);
+        node.indexes.emplace_back(g_spentindex.get());
+    }
+
+    if (args.GetBoolArg("-timestampindex", false)) {
+        g_timestampindex = std::make_unique<TimestampIndex>(interfaces::MakeChain(node), /*cache_size=*/0, false, do_reindex);
+        node.indexes.emplace_back(g_timestampindex.get());
+    }
+
     // Init indexes
     for (auto index : node.indexes) if (!index->Init()) return false;
 
@@ -1868,10 +1894,12 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
         delete passetsRestrictionCache;
         delete passetsGlobalRestrictionCache;
 
-        passetsdb = new CAssetsDB(args.GetDataDirNet(), nAssetDBCache, false, do_reindex || do_reindex_assets);
+        // Note: -reindexassets does NOT wipe the DB here; ReindexAssets() selectively
+        // erases only the address-balance keys ('B'/'C') while preserving asset metadata ('A' keys).
+        passetsdb = new CAssetsDB(args.GetDataDirNet(), nAssetDBCache, false, do_reindex /* wipe only on full -reindex */);
         passets = new CAssetsCache();
         passetsCache = new CLRUCache<std::string, CDatabasedAssetData>(MAX_CACHE_ASSETS_SIZE);
-        prestricteddb = new CRestrictedDB(args.GetDataDirNet(), nAssetDBCache, false, do_reindex || do_reindex_assets);
+        prestricteddb = new CRestrictedDB(args.GetDataDirNet(), nAssetDBCache, false, do_reindex /* wipe only on full -reindex */);
         passetsVerifierCache = new CLRUCache<std::string, CNullAssetTxVerifierString>(MAX_CACHE_ASSETS_SIZE);
         passetsQualifierCache = new CLRUCache<std::string, int8_t>(MAX_CACHE_ASSETS_SIZE);
         passetsRestrictionCache = new CLRUCache<std::string, int8_t>(MAX_CACHE_ASSETS_SIZE);

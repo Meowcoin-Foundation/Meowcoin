@@ -202,9 +202,12 @@ add_library(meowcoin_node STATIC EXCLUDE_FROM_ALL
   httprpc.cpp
   httpserver.cpp
   i2p.cpp
+  index/addressindex.cpp
   index/base.cpp
   index/blockfilterindex.cpp
   index/coinstatsindex.cpp
+  index/spentindex.cpp
+  index/timestampindex.cpp
   index/txindex.cpp
   init.cpp
   kernel/chain.cpp
@@ -259,6 +262,7 @@ add_library(meowcoin_node STATIC EXCLUDE_FROM_ALL
   rest.cpp
   rpc/assets.cpp
   rpc/blockchain.cpp
+  rpc/indexes.cpp
   rpc/external_signer.cpp
   rpc/fees.cpp
   rpc/mempool.cpp

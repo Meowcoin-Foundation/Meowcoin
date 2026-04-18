@@ -93,6 +93,53 @@ bool CAssetsDB::EraseAddressAssetQuantity(const std::string &address, const std:
     return Erase(std::make_pair(ADDRESS_ASSET_QUANTITY_FLAG, std::make_pair(address, assetName)));
 }
 
+bool CAssetsDB::EraseAllAssets()
+{
+    std::unique_ptr<CDBIterator> pcursor(NewIterator());
+    pcursor->Seek(std::make_pair(ASSET_FLAG, std::string()));
+    while (pcursor->Valid()) {
+        std::pair<uint8_t, std::string> key;
+        if (pcursor->GetKey(key) && key.first == ASSET_FLAG) {
+            Erase(std::make_pair(ASSET_FLAG, key.second));
+            pcursor->Next();
+        } else {
+            break;
+        }
+    }
+    return true;
+}
+
+bool CAssetsDB::EraseAllAddressQuantities()
+{
+    // Erase 'B' keys: <assetName, address> -> amount
+    std::unique_ptr<CDBIterator> pcursor(NewIterator());
+    pcursor->Seek(std::make_pair(ASSET_ADDRESS_QUANTITY_FLAG, std::make_pair(std::string(), std::string())));
+    while (pcursor->Valid()) {
+        std::pair<uint8_t, std::pair<std::string, std::string>> key;
+        if (pcursor->GetKey(key) && key.first == ASSET_ADDRESS_QUANTITY_FLAG) {
+            Erase(std::make_pair(ASSET_ADDRESS_QUANTITY_FLAG, key.second));
+            pcursor->Next();
+        } else {
+            break;
+        }
+    }
+
+    // Erase 'C' keys: <address, assetName> -> amount
+    std::unique_ptr<CDBIterator> pcursor2(NewIterator());
+    pcursor2->Seek(std::make_pair(ADDRESS_ASSET_QUANTITY_FLAG, std::make_pair(std::string(), std::string())));
+    while (pcursor2->Valid()) {
+        std::pair<uint8_t, std::pair<std::string, std::string>> key;
+        if (pcursor2->GetKey(key) && key.first == ADDRESS_ASSET_QUANTITY_FLAG) {
+            Erase(std::make_pair(ADDRESS_ASSET_QUANTITY_FLAG, key.second));
+            pcursor2->Next();
+        } else {
+            break;
+        }
+    }
+
+    return true;
+}
+
 bool CAssetsDB::WriteBlockUndoAssetData(const uint256& blockhash, const std::vector<std::pair<std::string, CBlockAssetUndo> >& assetUndoData)
 {
     return Write(std::make_pair(BLOCK_ASSET_UNDO_DATA, blockhash), assetUndoData);

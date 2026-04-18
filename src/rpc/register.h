@@ -23,6 +23,7 @@ void RegisterSignMessageRPCCommands(CRPCTable&);
 void RegisterSignerRPCCommands(CRPCTable &tableRPC);
 void RegisterTxoutProofRPCCommands(CRPCTable&);
 void RegisterAssetRPCCommands(CRPCTable&);
+void RegisterIndexRPCCommands(CRPCTable&);
 void RegisterMessageRPCCommands(CRPCTable&);
 
 static inline void RegisterAllCoreRPCCommands(CRPCTable &t)
@@ -41,6 +42,7 @@ static inline void RegisterAllCoreRPCCommands(CRPCTable &t)
 #endif // ENABLE_EXTERNAL_SIGNER
     RegisterTxoutProofRPCCommands(t);
     RegisterAssetRPCCommands(t);
+    RegisterIndexRPCCommands(t);
     RegisterMessageRPCCommands(t);
 }
 
