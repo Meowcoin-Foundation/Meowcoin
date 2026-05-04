@@ -903,6 +903,26 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
         return false; // state filled in by CheckTxInputs
     }
 
+    /** MEWC START - Reject asset scripts before activation & validate asset consensus rules */
+    if (!AreAssetsDeployed()) {
+        for (const auto& out : tx.vout) {
+            if (out.scriptPubKey.IsAssetScript()) {
+                return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-contained-asset-when-not-active");
+            }
+        }
+    }
+
+    if (AreAssetsDeployed() && !tx.IsCoinBase()) {
+        CAssetsCache* currentAssetCache = GetCurrentAssetCache();
+        if (currentAssetCache) {
+            std::vector<std::pair<std::string, uint256>> vReissueAssets;
+            if (!Consensus::CheckTxAssets(tx, state, m_view, currentAssetCache, &m_pool, vReissueAssets)) {
+                return false; // state filled in by CheckTxAssets
+            }
+        }
+    }
+    /** MEWC END */
+
     if (m_pool.m_opts.require_standard && !AreInputsStandard(tx, m_view)) {
         return state.Invalid(TxValidationResult::TX_INPUTS_NOT_STANDARD, "bad-txns-nonstandard-inputs");
     }
@@ -2395,6 +2415,11 @@ static unsigned int GetBlockScriptFlags(const CBlockIndex& block_index, const Ch
     // Enforce BIP147 NULLDUMMY (activated simultaneously with segwit)
     if (DeploymentActiveAt(block_index, chainman, Consensus::DEPLOYMENT_SEGWIT)) {
         flags |= SCRIPT_VERIFY_NULLDUMMY;
+    }
+
+    // Enforce ML-DSA-44 post-quantum signing rules after DEPLOYMENT_MLDSA44 activation
+    if (DeploymentActiveAt(block_index, chainman, Consensus::DEPLOYMENT_MLDSA44)) {
+        flags |= SCRIPT_VERIFY_PQ_HYBRID;
     }
 
     return flags;

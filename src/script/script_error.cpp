@@ -115,6 +115,14 @@ std::string ScriptErrorString(const ScriptError serror)
             return "Using OP_CODESEPARATOR in non-witness script";
         case SCRIPT_ERR_SIG_FINDANDDELETE:
             return "Signature is found in scriptCode";
+        case SCRIPT_ERR_PQ_WITNESS_PROGRAM_MISMATCH:
+            return "ML-DSA-44 witness program hash mismatch";
+        case SCRIPT_ERR_PQ_PUBKEY_SIZE:
+            return "Invalid ML-DSA-44 public key size in witness";
+        case SCRIPT_ERR_PQ_SIGNATURE_SIZE:
+            return "Invalid ML-DSA-44 signature size in witness";
+        case SCRIPT_ERR_PQ_SIGNATURE_VERIFY_FAILED:
+            return "ML-DSA-44 signature verification failed";
         case SCRIPT_ERR_UNKNOWN_ERROR:
         case SCRIPT_ERR_ERROR_COUNT:
         default: break;

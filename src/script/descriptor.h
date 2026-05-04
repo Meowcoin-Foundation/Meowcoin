@@ -10,6 +10,7 @@
 #include <script/sign.h>
 #include <script/signingprovider.h>
 
+#include <map>
 #include <optional>
 #include <vector>
 
@@ -24,6 +25,8 @@ private:
     ExtPubKeyMap m_parent_xpubs;
     /** Map key expression index -> last hardened xpub */
     ExtPubKeyMap m_last_hardened_xpubs;
+    /** Map derivation index -> ML-DSA-44 witness program (SHA256(pk)) */
+    std::map<uint32_t, uint256> m_mldsa_witness_programs;
 
 public:
     /** Cache a parent xpub
@@ -71,6 +74,13 @@ public:
     std::unordered_map<uint32_t, ExtPubKeyMap> GetCachedDerivedExtPubKeys() const;
     /** Retrieve all cached last hardened xpubs */
     ExtPubKeyMap GetCachedLastHardenedExtPubKeys() const;
+
+    /** Cache an ML-DSA-44 witness program derived at an index */
+    void CacheMlDsaWitnessProgram(uint32_t der_index, const uint256& wp);
+    /** Retrieve a cached ML-DSA-44 witness program derived at an index */
+    bool GetCachedMlDsaWitnessProgram(uint32_t der_index, uint256& wp) const;
+    /** Retrieve all cached ML-DSA-44 witness programs */
+    std::map<uint32_t, uint256> GetCachedMlDsaWitnessPrograms() const;
 
     /** Combine another DescriptorCache into this one.
      * Returns a cache containing the items from the other cache unknown to current cache

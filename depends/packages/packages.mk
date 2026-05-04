@@ -1,5 +1,7 @@
 packages:=
 
+liboqs_packages = liboqs
+
 boost_packages = boost
 
 libevent_packages = libevent

@@ -150,6 +150,16 @@ public:
         consensus.vDeployments[Consensus::DEPLOYMENT_COINBASE_ASSETS].nOverrideRuleChangeActivationThreshold = 1411;
         consensus.vDeployments[Consensus::DEPLOYMENT_COINBASE_ASSETS].nOverrideMinerConfirmationWindow = 2016;
 
+        // ML-DSA-44 post-quantum signatures - not deployed on Meowcoin mainnet yet.
+        // period=2016 is the standard signalling window (2 weeks at 60s blocks).
+        // threshold=1815 is 90% of 2016.
+        consensus.vDeployments[Consensus::DEPLOYMENT_MLDSA44].bit = 11;
+        consensus.vDeployments[Consensus::DEPLOYMENT_MLDSA44].nStartTime = Consensus::BIP9Deployment::NEVER_ACTIVE;
+        consensus.vDeployments[Consensus::DEPLOYMENT_MLDSA44].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
+        consensus.vDeployments[Consensus::DEPLOYMENT_MLDSA44].min_activation_height = 0;
+        consensus.vDeployments[Consensus::DEPLOYMENT_MLDSA44].threshold = 1815; // 90% of 2016
+        consensus.vDeployments[Consensus::DEPLOYMENT_MLDSA44].period = 2016;
+
         // AuxPoW parameters
         consensus.nAuxpowChainId = 9;
         consensus.nAuxpowStartHeight = 1614560;
@@ -328,6 +338,14 @@ public:
         consensus.vDeployments[Consensus::DEPLOYMENT_COINBASE_ASSETS].nOverrideRuleChangeActivationThreshold = 1411;
         consensus.vDeployments[Consensus::DEPLOYMENT_COINBASE_ASSETS].nOverrideMinerConfirmationWindow = 2016;
 
+        // ML-DSA-44 post-quantum signatures - always active on testnet for testing.
+        consensus.vDeployments[Consensus::DEPLOYMENT_MLDSA44].bit = 11;
+        consensus.vDeployments[Consensus::DEPLOYMENT_MLDSA44].nStartTime = Consensus::BIP9Deployment::ALWAYS_ACTIVE;
+        consensus.vDeployments[Consensus::DEPLOYMENT_MLDSA44].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
+        consensus.vDeployments[Consensus::DEPLOYMENT_MLDSA44].min_activation_height = 0;
+        consensus.vDeployments[Consensus::DEPLOYMENT_MLDSA44].threshold = 1512;
+        consensus.vDeployments[Consensus::DEPLOYMENT_MLDSA44].period = 2016;
+
         consensus.nAuxpowChainId = 9;
         consensus.nAuxpowStartHeight = 46;
         consensus.fStrictChainId = true;
@@ -450,6 +468,14 @@ public:
         consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].nStartTime = Consensus::BIP9Deployment::ALWAYS_ACTIVE;
         consensus.vDeployments[Consensus::DEPLOYMENT_TAPROOT].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
 
+        // ML-DSA-44 post-quantum signatures - always active on signet for testing.
+        consensus.vDeployments[Consensus::DEPLOYMENT_MLDSA44].bit = 11;
+        consensus.vDeployments[Consensus::DEPLOYMENT_MLDSA44].nStartTime = Consensus::BIP9Deployment::ALWAYS_ACTIVE;
+        consensus.vDeployments[Consensus::DEPLOYMENT_MLDSA44].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
+        consensus.vDeployments[Consensus::DEPLOYMENT_MLDSA44].min_activation_height = 0;
+        consensus.vDeployments[Consensus::DEPLOYMENT_MLDSA44].threshold = 1512;
+        consensus.vDeployments[Consensus::DEPLOYMENT_MLDSA44].period = 2016;
+
         consensus.nMinimumChainWork = uint256{};
         consensus.defaultAssumeValid = uint256{};
 
@@ -568,6 +594,14 @@ public:
         consensus.vDeployments[Consensus::DEPLOYMENT_COINBASE_ASSETS].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
         consensus.vDeployments[Consensus::DEPLOYMENT_COINBASE_ASSETS].nOverrideRuleChangeActivationThreshold = 400;
         consensus.vDeployments[Consensus::DEPLOYMENT_COINBASE_ASSETS].nOverrideMinerConfirmationWindow = 500;
+
+        // ML-DSA-44 post-quantum signatures - always active on regtest.
+        consensus.vDeployments[Consensus::DEPLOYMENT_MLDSA44].bit = 11;
+        consensus.vDeployments[Consensus::DEPLOYMENT_MLDSA44].nStartTime = Consensus::BIP9Deployment::ALWAYS_ACTIVE;
+        consensus.vDeployments[Consensus::DEPLOYMENT_MLDSA44].nTimeout = Consensus::BIP9Deployment::NO_TIMEOUT;
+        consensus.vDeployments[Consensus::DEPLOYMENT_MLDSA44].min_activation_height = 0;
+        consensus.vDeployments[Consensus::DEPLOYMENT_MLDSA44].threshold = 108; // 75% of 144
+        consensus.vDeployments[Consensus::DEPLOYMENT_MLDSA44].period = 144;
 
         consensus.nAuxpowChainId = 9;
         consensus.nAuxpowStartHeight = 19200;

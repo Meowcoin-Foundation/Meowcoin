@@ -92,6 +92,7 @@ public:
             break;
         case SigVersion::TAPROOT:
         case SigVersion::TAPSCRIPT:
+        case SigVersion::WITNESS_V2_MLDSA44:
             assert(false);
         }
     }

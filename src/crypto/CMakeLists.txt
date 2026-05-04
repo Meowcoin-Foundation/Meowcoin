@@ -28,6 +28,18 @@ target_link_libraries(meowcoin_crypto
     core_interface
 )
 
+# mldsa.cpp is always compiled — it provides real implementations when
+# HAVE_LIBOQS is defined, and stub implementations (returning false) otherwise.
+# This ensures the mldsa:: symbols are always present at link time even on
+# systems that do not have liboqs installed.
+target_sources(meowcoin_crypto PRIVATE mldsa.cpp)
+if(WITH_LIBOQS AND LIBOQS_FOUND)
+  target_link_libraries(meowcoin_crypto PUBLIC ${LIBOQS_TARGET})
+  if(LIBOQS_INCLUDE_DIRS)
+    target_include_directories(meowcoin_crypto PRIVATE ${LIBOQS_INCLUDE_DIRS})
+  endif()
+endif()
+
 if(HAVE_SSE41)
   target_compile_definitions(meowcoin_crypto PRIVATE ENABLE_SSE41)
   target_sources(meowcoin_crypto PRIVATE sha256_sse41.cpp)

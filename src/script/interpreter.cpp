@@ -8,6 +8,7 @@
 #include <crypto/ripemd160.h>
 #include <crypto/sha1.h>
 #include <crypto/sha256.h>
+#include <pqkey.h>
 #include <pubkey.h>
 #include <script/script.h>
 #include <uint256.h>
@@ -398,6 +399,10 @@ static bool EvalChecksig(const valtype& sig, const valtype& pubkey, CScript::con
         return EvalChecksigTapscript(sig, pubkey, execdata, flags, checker, sigversion, serror, success);
     case SigVersion::TAPROOT:
         // Key path spending in Taproot has no script, so this is unreachable.
+        break;
+    case SigVersion::WITNESS_V2_MLDSA44:
+        // ML-DSA-44 outputs are verified directly in VerifyWitnessProgram,
+        // not via script execution, so EvalChecksig is never reached for them.
         break;
     }
     assert(false);
@@ -1747,6 +1752,15 @@ bool GenericTransactionSignatureChecker<T>::CheckSchnorrSignature(std::span<cons
 }
 
 template <class T>
+uint256 GenericTransactionSignatureChecker<T>::GetMLDsa44SigHash(const CScript& scriptCode) const
+{
+    // Compute a BIP143-style sighash for ML-DSA-44 witness v2 inputs.
+    // Uses SIGHASH_ALL (0x01) — no fork-id in Meowcoin.
+    constexpr int32_t nHashType = SIGHASH_ALL;
+    return SignatureHash(scriptCode, *txTo, nIn, nHashType, amount, SigVersion::WITNESS_V0, txdata);
+}
+
+template <class T>
 bool GenericTransactionSignatureChecker<T>::CheckLockTime(const CScriptNum& nLockTime) const
 {
     // There are two kinds of nLockTime: lock-by-blockheight
@@ -1994,6 +2008,46 @@ static bool VerifyWitnessProgram(const CScriptWitness& witness, int witversion, 
         }
     } else if (!is_p2sh && CScript::IsPayToAnchor(witversion, program)) {
         return true;
+    } else if (witversion == 2 && program.size() == 32 && !is_p2sh) {
+        // ML-DSA-44 post-quantum witness v2 spending rule.
+        // Witness stack must be: [sig (2420 bytes), pubkey (1312 bytes)]
+        // Witness program is SHA256(pubkey).
+        if (!(flags & SCRIPT_VERIFY_PQ_HYBRID)) {
+            if (flags & SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_WITNESS_PROGRAM) {
+                return set_error(serror, SCRIPT_ERR_DISCOURAGE_UPGRADABLE_WITNESS_PROGRAM);
+            }
+            return true; // treat as unknown future upgrade
+        }
+        if (stack.size() != 2) {
+            return set_error(serror, SCRIPT_ERR_WITNESS_PROGRAM_MISMATCH);
+        }
+        const valtype& pk_bytes  = stack[1]; // pubkey (1312 bytes)
+        const valtype& sig_bytes = stack[0]; // signature (2420 bytes)
+
+        if (pk_bytes.size() != CPQPubKey::SIZE) {
+            return set_error(serror, SCRIPT_ERR_PQ_PUBKEY_SIZE);
+        }
+        if (sig_bytes.size() != mldsa::SIG_SIZE) {
+            return set_error(serror, SCRIPT_ERR_PQ_SIGNATURE_SIZE);
+        }
+
+        // Verify witness program: SHA256(pubkey) == program
+        uint256 pk_hash;
+        CSHA256().Write(pk_bytes.data(), pk_bytes.size()).Finalize(pk_hash.begin());
+        if (memcmp(pk_hash.begin(), program.data(), 32) != 0) {
+            return set_error(serror, SCRIPT_ERR_PQ_WITNESS_PROGRAM_MISMATCH);
+        }
+
+        // The sighash is computed over scriptCode = OP_2 <program>
+        const CScript scriptCode = CScript() << OP_2 << program;
+        const uint256 sighash = checker.GetMLDsa44SigHash(scriptCode);
+
+        CPQPubKey pq_pubkey(std::span<const uint8_t, CPQPubKey::SIZE>(pk_bytes.data(), CPQPubKey::SIZE));
+        if (!pq_pubkey.Verify(std::span<const uint8_t>(sig_bytes.data(), sig_bytes.size()),
+                              std::span<const uint8_t>(sighash.begin(), 32))) {
+            return set_error(serror, SCRIPT_ERR_PQ_SIGNATURE_VERIFY_FAILED);
+        }
+        return set_success(serror);
     } else {
         if (flags & SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_WITNESS_PROGRAM) {
             return set_error(serror, SCRIPT_ERR_DISCOURAGE_UPGRADABLE_WITNESS_PROGRAM);

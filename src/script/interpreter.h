@@ -143,6 +143,9 @@ enum : uint32_t {
     // Making unknown public key versions (in BIP 342 scripts) non-standard
     SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_PUBKEYTYPE = (1U << 20),
 
+    // Enforce ML-DSA-44 post-quantum signing rules for witness v2 outputs.
+    SCRIPT_VERIFY_PQ_HYBRID = (1U << 22),
+
     // Constants to point to the highest flag in use. Add new flags above this line.
     //
     SCRIPT_VERIFY_END_MARKER
@@ -193,6 +196,7 @@ enum class SigVersion
     WITNESS_V0 = 1,  //!< Witness v0 (P2WPKH and P2WSH); see BIP 141
     TAPROOT = 2,     //!< Witness v1 with 32-byte program, not BIP16 P2SH-wrapped, key path spending; see BIP 341
     TAPSCRIPT = 3,   //!< Witness v1 with 32-byte program, not BIP16 P2SH-wrapped, script path spending, leaf version 0xc0; see BIP 342
+    WITNESS_V2_MLDSA44 = 4, //!< Witness v2 ML-DSA-44 post-quantum signing
 };
 
 struct ScriptExecutionData
@@ -274,6 +278,14 @@ public:
         return false;
     }
 
+    /** Compute the BIP143-style sighash for ML-DSA-44 witness v2 signing.
+     *  The scriptCode encodes the witness program (OP_2 <32-byte-program>).
+     *  Returns a zero hash in the base (non-transaction) checker. */
+    virtual uint256 GetMLDsa44SigHash(const CScript& scriptCode) const
+    {
+        return uint256{};
+    }
+
     virtual bool CheckLockTime(const CScriptNum& nLockTime) const
     {
          return false;
@@ -319,6 +331,7 @@ public:
     GenericTransactionSignatureChecker(const T* txToIn, unsigned int nInIn, const CAmount& amountIn, const PrecomputedTransactionData& txdataIn, MissingDataBehavior mdb) : txTo(txToIn), m_mdb(mdb), nIn(nInIn), amount(amountIn), txdata(&txdataIn) {}
     bool CheckECDSASignature(const std::vector<unsigned char>& scriptSig, const std::vector<unsigned char>& vchPubKey, const CScript& scriptCode, SigVersion sigversion) const override;
     bool CheckSchnorrSignature(std::span<const unsigned char> sig, std::span<const unsigned char> pubkey, SigVersion sigversion, ScriptExecutionData& execdata, ScriptError* serror = nullptr) const override;
+    uint256 GetMLDsa44SigHash(const CScript& scriptCode) const override;
     bool CheckLockTime(const CScriptNum& nLockTime) const override;
     bool CheckSequence(const CScriptNum& nSequence) const override;
 };
@@ -342,6 +355,11 @@ public:
     bool CheckSchnorrSignature(std::span<const unsigned char> sig, std::span<const unsigned char> pubkey, SigVersion sigversion, ScriptExecutionData& execdata, ScriptError* serror = nullptr) const override
     {
         return m_checker.CheckSchnorrSignature(sig, pubkey, sigversion, execdata, serror);
+    }
+
+    uint256 GetMLDsa44SigHash(const CScript& scriptCode) const override
+    {
+        return m_checker.GetMLDsa44SigHash(scriptCode);
     }
 
     bool CheckLockTime(const CScriptNum& nLockTime) const override

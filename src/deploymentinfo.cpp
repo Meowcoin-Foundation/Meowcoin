@@ -37,6 +37,10 @@ const std::array<VBDeploymentInfo,Consensus::MAX_VERSION_BITS_DEPLOYMENTS> Versi
         .name = "coinbase_assets",
         .gbt_optional_rule = true,
     },
+    VBDeploymentInfo{
+        .name = "mldsa44",
+        .gbt_optional_rule = true,
+    },
 };
 
 std::string DeploymentName(Consensus::BuriedDeployment dep)

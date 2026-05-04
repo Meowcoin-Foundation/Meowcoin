@@ -1,4 +1,5 @@
 // Copyright (c) 2011-present The Meowcoin Core developers
+// Portions Copyright (c) 2026 ALENOC <https://github.com/ALENOC> (Ravencoin RIP-25)
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -11,6 +12,7 @@
 #include <script/solver.h>
 #include <util/bip32.h>
 #include <util/translation.h>
+#include <consensus/params.h>
 #include <wallet/receive.h>
 #include <wallet/rpc/util.h>
 #include <wallet/wallet.h>
@@ -57,6 +59,14 @@ RPCHelpMan getnewaddress()
             throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, strprintf("Unknown address type '%s'", request.params[1].get_str()));
         }
         output_type = parsed.value();
+    }
+
+    // Reject PQ addresses until DEPLOYMENT_MLDSA44 activates. Before activation
+    // witness v2 outputs are anyone-can-spend; no node enforces ML-DSA-44 rules yet.
+    if (output_type == OutputType::PQ && !pwallet->chain().isDeploymentActive(Consensus::DEPLOYMENT_MLDSA44)) {
+        throw JSONRPCError(RPC_INVALID_PARAMETER,
+            "ML-DSA-44 (pq) addresses are not yet active on this network. "
+            "Wait for DEPLOYMENT_MLDSA44 to activate via miner signalling before using PQ addresses.");
     }
 
     auto op_dest = pwallet->GetNewDestination(output_type, label);
@@ -350,6 +360,7 @@ public:
 
     UniValue operator()(const WitnessV1Taproot& id) const { return UniValue(UniValue::VOBJ); }
     UniValue operator()(const PayToAnchor& id) const { return UniValue(UniValue::VOBJ); }
+    UniValue operator()(const WitnessV2MLDsa44& id) const { return UniValue(UniValue::VOBJ); }
     UniValue operator()(const WitnessUnknown& id) const { return UniValue(UniValue::VOBJ); }
 };
 
@@ -387,6 +398,7 @@ RPCHelpMan getaddressinfo()
                         {RPCResult::Type::BOOL, "isscript", /*optional=*/true, "If the key is a script."},
                         {RPCResult::Type::BOOL, "ischange", "If the address was used for change output."},
                         {RPCResult::Type::BOOL, "iswitness", "If the address is a witness address."},
+                        {RPCResult::Type::BOOL, "ispostquantum", "If the address is a post-quantum ML-DSA-44 address."},
                         {RPCResult::Type::NUM, "witness_version", /*optional=*/true, "The version number of the witness program."},
                         {RPCResult::Type::STR_HEX, "witness_program", /*optional=*/true, "The hex value of the witness program."},
                         {RPCResult::Type::STR, "script", /*optional=*/true, "The output script type. Only if isscript is true and the redeemscript is known. Possible\n"
@@ -476,6 +488,7 @@ RPCHelpMan getaddressinfo()
     }
 
     ret.pushKV("iswatchonly", false);
+    ret.pushKV("ispostquantum", std::holds_alternative<WitnessV2MLDsa44>(dest));
 
     UniValue detail = DescribeWalletAddress(*pwallet, dest);
     ret.pushKVs(std::move(detail));

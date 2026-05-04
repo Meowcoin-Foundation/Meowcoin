@@ -20,9 +20,13 @@
 #include <deploymentstatus.h>
 #include <flatfile.h>
 #include <hash.h>
+#include <addresstype.h>
 #include <index/blockfilterindex.h>
 #include <index/coinstatsindex.h>
+#include <index/spentindex.h>
+#include <index/timestampindex.h>
 #include <interfaces/mining.h>
+#include <key_io.h>
 #include <kernel/coinstats.h>
 #include <logging/timer.h>
 #include <net.h>
@@ -1503,6 +1507,7 @@ UniValue DeploymentInfo(const CBlockIndex* blockindex, const ChainstateManager& 
     SoftForkDescPushBack(blockindex, softforks, chainman, Consensus::DEPLOYMENT_SEGWIT);
     SoftForkDescPushBack(blockindex, softforks, chainman, Consensus::DEPLOYMENT_TESTDUMMY);
     SoftForkDescPushBack(blockindex, softforks, chainman, Consensus::DEPLOYMENT_TAPROOT);
+    SoftForkDescPushBack(blockindex, softforks, chainman, Consensus::DEPLOYMENT_MLDSA44);
     return softforks;
 }
 } // anon namespace
@@ -3510,6 +3515,285 @@ return RPCHelpMan{
 }
 
 
+static bool GetAddressFromSpentIndex(const CSpentIndexValue& spent_info, std::string& address)
+{
+    if (spent_info.addressType == 1) {
+        address = EncodeDestination(PKHash(spent_info.addressHash));
+        return true;
+    }
+    if (spent_info.addressType == 2) {
+        address = EncodeDestination(ScriptHash(spent_info.addressHash));
+        return true;
+    }
+    if (spent_info.addressType == 3) {
+        address = EncodeDestination(WitnessV0KeyHash(spent_info.addressHash));
+        return true;
+    }
+    return false;
+}
+
+static UniValue blockToDeltasJSON(const CBlock& block, const CBlockIndex& tip, const CBlockIndex& blockindex)
+{
+    UniValue result(UniValue::VOBJ);
+    result.pushKV("hash", block.GetHash().GetHex());
+
+    const CBlockIndex* pnext;
+    const int confirmations = ComputeNextBlockAndDepth(tip, blockindex, pnext);
+    if (confirmations < 0) {
+        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Block is an orphan");
+    }
+
+    result.pushKV("confirmations", confirmations);
+    result.pushKV("size", (int)::GetSerializeSize(TX_WITH_WITNESS(block)));
+    result.pushKV("height", blockindex.nHeight);
+    result.pushKV("version", (int)block.nVersion);
+    result.pushKV("merkleroot", block.hashMerkleRoot.GetHex());
+
+    UniValue deltas(UniValue::VARR);
+    for (unsigned int i = 0; i < block.vtx.size(); ++i) {
+        const CTransaction& tx = *block.vtx[i];
+
+        UniValue entry(UniValue::VOBJ);
+        entry.pushKV("txid", tx.GetHash().GetHex());
+        entry.pushKV("index", (int)i);
+
+        UniValue inputs(UniValue::VARR);
+        if (!tx.IsCoinBase()) {
+            if (!g_spentindex) {
+                throw JSONRPCError(RPC_MISC_ERROR, "Spent index not enabled");
+            }
+
+            for (size_t j = 0; j < tx.vin.size(); ++j) {
+                const CTxIn& input = tx.vin[j];
+                CSpentIndexKey spent_key(input.prevout.hash.ToUint256(), input.prevout.n);
+                CSpentIndexValue spent_info;
+
+                if (!g_spentindex->ReadSpentIndex(spent_key, spent_info)) {
+                    throw JSONRPCError(RPC_INTERNAL_ERROR, "Spent information not available");
+                }
+
+                std::string address;
+                if (!GetAddressFromSpentIndex(spent_info, address)) {
+                    continue;
+                }
+
+                UniValue delta(UniValue::VOBJ);
+                delta.pushKV("address", address);
+                delta.pushKV("satoshis", -spent_info.satoshis);
+                delta.pushKV("index", (int)j);
+                delta.pushKV("prevtxid", input.prevout.hash.GetHex());
+                delta.pushKV("prevout", (int)input.prevout.n);
+                inputs.push_back(std::move(delta));
+            }
+        }
+        entry.pushKV("inputs", std::move(inputs));
+
+        UniValue outputs(UniValue::VARR);
+        for (unsigned int k = 0; k < tx.vout.size(); ++k) {
+            const CTxOut& out = tx.vout[k];
+            CTxDestination dest;
+            if (!ExtractDestination(out.scriptPubKey, dest)) {
+                continue;
+            }
+
+            UniValue delta(UniValue::VOBJ);
+            delta.pushKV("address", EncodeDestination(dest));
+            delta.pushKV("satoshis", out.nValue);
+            delta.pushKV("index", (int)k);
+            outputs.push_back(std::move(delta));
+        }
+        entry.pushKV("outputs", std::move(outputs));
+
+        deltas.push_back(std::move(entry));
+    }
+
+    result.pushKV("deltas", std::move(deltas));
+    result.pushKV("time", block.GetBlockTime());
+    result.pushKV("mediantime", blockindex.GetMedianTimePast());
+    result.pushKV("nonce", block.nNonce);
+    result.pushKV("bits", strprintf("%08x", block.nBits));
+    result.pushKV("difficulty", GetDifficulty(blockindex));
+    result.pushKV("chainwork", blockindex.nChainWork.GetHex());
+
+    if (blockindex.pprev) result.pushKV("previousblockhash", blockindex.pprev->GetBlockHash().GetHex());
+    if (pnext) result.pushKV("nextblockhash", pnext->GetBlockHash().GetHex());
+
+    return result;
+}
+
+static RPCHelpMan getblockdeltas()
+{
+    return RPCHelpMan{
+        "getblockdeltas",
+        "Returns information about the block and all its transactions.\n"
+        "Requires -spentindex to be enabled.\n",
+        {
+            {"blockhash", RPCArg::Type::STR_HEX, RPCArg::Optional::NO, "The block hash"},
+        },
+        RPCResult{
+            RPCResult::Type::OBJ, "", "",
+            {
+                {RPCResult::Type::STR_HEX, "hash", "The block hash"},
+                {RPCResult::Type::NUM, "confirmations", "Number of confirmations"},
+                {RPCResult::Type::NUM, "size", "Block size in bytes"},
+                {RPCResult::Type::NUM, "height", "Block height"},
+                {RPCResult::Type::NUM, "version", "Block version"},
+                {RPCResult::Type::STR_HEX, "merkleroot", "Merkle root"},
+                {RPCResult::Type::ARR, "deltas", "Transaction deltas",
+                {
+                    {RPCResult::Type::OBJ, "", "",
+                    {
+                        {RPCResult::Type::STR_HEX, "txid", "Transaction id"},
+                        {RPCResult::Type::NUM, "index", "Transaction index in block"},
+                        {RPCResult::Type::ARR, "inputs", "Input deltas",
+                        {
+                            {RPCResult::Type::OBJ, "", "",
+                            {
+                                {RPCResult::Type::STR, "address", "Input address"},
+                                {RPCResult::Type::NUM, "satoshis", "Negative value spent"},
+                                {RPCResult::Type::NUM, "index", "Input index"},
+                                {RPCResult::Type::STR_HEX, "prevtxid", "Previous txid"},
+                                {RPCResult::Type::NUM, "prevout", "Previous output index"},
+                            }},
+                        }},
+                        {RPCResult::Type::ARR, "outputs", "Output deltas",
+                        {
+                            {RPCResult::Type::OBJ, "", "",
+                            {
+                                {RPCResult::Type::STR, "address", "Output address"},
+                                {RPCResult::Type::NUM, "satoshis", "Value created"},
+                                {RPCResult::Type::NUM, "index", "Output index"},
+                            }},
+                        }},
+                    }},
+                }},
+                {RPCResult::Type::NUM_TIME, "time", "Block time"},
+                {RPCResult::Type::NUM_TIME, "mediantime", "Median past time"},
+                {RPCResult::Type::NUM, "nonce", "Nonce"},
+                {RPCResult::Type::STR_HEX, "bits", "Compact difficulty representation"},
+                {RPCResult::Type::NUM, "difficulty", "Difficulty"},
+                {RPCResult::Type::STR_HEX, "chainwork", "Chain work"},
+                {RPCResult::Type::STR_HEX, "previousblockhash", /*optional=*/true, "Previous block hash"},
+                {RPCResult::Type::STR_HEX, "nextblockhash", /*optional=*/true, "Next block hash"},
+            }},
+        RPCExamples{
+            HelpExampleCli("getblockdeltas", "\"00000000c937983704a73af28acdec37b049d214adbda81d7e2a3dd146f6ed09\"")
+            + HelpExampleRpc("getblockdeltas", "\"00000000c937983704a73af28acdec37b049d214adbda81d7e2a3dd146f6ed09\"")
+        },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            ChainstateManager& chainman = EnsureAnyChainman(request.context);
+            const uint256 hash{ParseHashV(request.params[0], "blockhash")};
+
+            const CBlockIndex* pblockindex;
+            const CBlockIndex* tip;
+            {
+                LOCK(cs_main);
+                pblockindex = chainman.m_blockman.LookupBlockIndex(hash);
+                tip = chainman.ActiveChain().Tip();
+            }
+
+            if (!pblockindex) {
+                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Block not found");
+            }
+            if (!tip) {
+                throw JSONRPCError(RPC_MISC_ERROR, "No active chain tip");
+            }
+
+            const CBlock block = GetBlockChecked(chainman.m_blockman, *pblockindex);
+            return blockToDeltasJSON(block, *tip, *pblockindex);
+        },
+    };
+}
+
+static RPCHelpMan getblockhashes()
+{
+    return RPCHelpMan{
+        "getblockhashes",
+        "Returns array of hashes of blocks within the timestamp range provided.\n"
+        "Requires -timestampindex to be enabled.\n",
+        {
+            {"high", RPCArg::Type::NUM, RPCArg::Optional::NO, "The newer block timestamp"},
+            {"low", RPCArg::Type::NUM, RPCArg::Optional::NO, "The older block timestamp"},
+            {"options", RPCArg::Type::OBJ, RPCArg::Default{UniValue(UniValue::VOBJ)}, "Options object",
+            {
+                {"noOrphans", RPCArg::Type::BOOL, RPCArg::Default{false}, "Only include blocks on the active chain"},
+                {"logicalTimes", RPCArg::Type::BOOL, RPCArg::Default{false}, "Include logical timestamps with hashes"},
+            }},
+        },
+        RPCResult{
+            RPCResult::Type::ARR, "", "",
+            {
+                {RPCResult::Type::STR_HEX, "hash", "The block hash"},
+            }},
+        RPCExamples{
+            HelpExampleCli("getblockhashes", "1231614698 1231024505")
+            + HelpExampleRpc("getblockhashes", "1231614698, 1231024505")
+            + HelpExampleCli("getblockhashes", "1231614698 1231024505 '{\"noOrphans\":false, \"logicalTimes\":true}'")
+        },
+        [&](const RPCHelpMan& self, const JSONRPCRequest& request) -> UniValue
+        {
+            if (!g_timestampindex) {
+                throw JSONRPCError(RPC_MISC_ERROR, "Timestamp index not enabled");
+            }
+
+            const unsigned int high = request.params[0].getInt<unsigned int>();
+            const unsigned int low = request.params[1].getInt<unsigned int>();
+
+            bool active_only = false;
+            bool include_logical_times = false;
+            if (!request.params[2].isNull()) {
+                const UniValue& options = request.params[2].get_obj();
+                const UniValue& no_orphans = options["noOrphans"];
+                const UniValue& logical_times = options["logicalTimes"];
+                if (no_orphans.isBool()) active_only = no_orphans.get_bool();
+                if (logical_times.isBool()) include_logical_times = logical_times.get_bool();
+            }
+
+            std::vector<std::pair<uint256, unsigned int>> block_hashes;
+            g_timestampindex->ReadTimestampIndex(high, low, block_hashes);
+            if (block_hashes.empty()) {
+                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "No information available for block hashes");
+            }
+
+            UniValue result(UniValue::VARR);
+            if (active_only) {
+                ChainstateManager& chainman = EnsureAnyChainman(request.context);
+                LOCK(cs_main);
+                const CChain& active_chain = chainman.ActiveChain();
+
+                for (const auto& [block_hash, logical_ts] : block_hashes) {
+                    const CBlockIndex* pindex = chainman.m_blockman.LookupBlockIndex(block_hash);
+                    if (!pindex || !active_chain.Contains(pindex)) {
+                        continue;
+                    }
+                    if (include_logical_times) {
+                        UniValue item(UniValue::VOBJ);
+                        item.pushKV("blockhash", block_hash.GetHex());
+                        item.pushKV("logicalts", logical_ts);
+                        result.push_back(std::move(item));
+                    } else {
+                        result.push_back(block_hash.GetHex());
+                    }
+                }
+            } else {
+                for (const auto& [block_hash, logical_ts] : block_hashes) {
+                    if (include_logical_times) {
+                        UniValue item(UniValue::VOBJ);
+                        item.pushKV("blockhash", block_hash.GetHex());
+                        item.pushKV("logicalts", logical_ts);
+                        result.push_back(std::move(item));
+                    } else {
+                        result.push_back(block_hash.GetHex());
+                    }
+                }
+            }
+
+            return result;
+        },
+    };
+}
+
 void RegisterBlockchainRPCCommands(CRPCTable& t)
 {
     static const CRPCCommand commands[]{
@@ -3543,6 +3827,8 @@ void RegisterBlockchainRPCCommands(CRPCTable& t)
         {"blockchain", &waitforblock},
         {"blockchain", &waitforblockheight},
         {"hidden", &syncwithvalidationinterfacequeue},
+        {"blockchain", &getblockdeltas},
+        {"blockchain", &getblockhashes},
     };
     for (const auto& c : commands) {
         t.appendCommand(c.name, &c);

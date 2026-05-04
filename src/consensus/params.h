@@ -39,6 +39,7 @@ enum DeploymentPos : uint16_t {
     DEPLOYMENT_TRANSFER_SCRIPT_SIZE,
     DEPLOYMENT_ENFORCE_VALUE,
     DEPLOYMENT_COINBASE_ASSETS,
+    DEPLOYMENT_MLDSA44, // Deployment of ML-DSA-44 post-quantum signatures (witness v2)
     // NOTE: Also add new deployments to VersionBitsDeploymentInfo in deploymentinfo.cpp
     MAX_VERSION_BITS_DEPLOYMENTS
 };

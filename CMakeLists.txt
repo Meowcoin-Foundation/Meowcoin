@@ -421,6 +421,8 @@ include(cmake/introspection.cmake)
 
 include(cmake/ccache.cmake)
 
+include(cmake/liboqs.cmake)
+
 add_library(warn_interface INTERFACE)
 target_link_libraries(core_interface INTERFACE warn_interface)
 if(MSVC)

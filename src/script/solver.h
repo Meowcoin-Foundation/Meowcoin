@@ -31,6 +31,7 @@ enum class TxoutType {
     WITNESS_V0_SCRIPTHASH,
     WITNESS_V0_KEYHASH,
     WITNESS_V1_TAPROOT,
+    WITNESS_V2_MLDSA44, //!< ML-DSA-44 post-quantum signature output (witness v2)
     WITNESS_UNKNOWN, //!< Only for Witness versions not already defined above
     NEW_ASSET,
     REISSUE_ASSET,
