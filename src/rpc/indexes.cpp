@@ -113,7 +113,7 @@ static bool timestampSort(const std::pair<CMempoolAddressDeltaKey, CMempoolAddre
 static RPCHelpMan getaddressmempool()
 {
     return RPCHelpMan{"getaddressmempool",
-        "\nReturns all mempool deltas for an address (requires addressindex to be enabled).\n",
+        "Returns all mempool deltas for an address (requires addressindex to be enabled).\n",
         {
             {"addresses", RPCArg::Type::OBJ, RPCArg::Optional::NO, "Address object",
                 {
@@ -150,8 +150,45 @@ static RPCHelpMan getaddressmempool()
             if (!g_addressindex)
                 throw JSONRPCError(RPC_MISC_ERROR, "Address index not enabled");
 
-            // Mempool address index not yet implemented; return empty result.
-            return UniValue(UniValue::VARR);
+            std::vector<std::pair<uint160, int>> addresses;
+            if (!getAddressesFromParams(request.params, addresses))
+                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid address");
+
+            const bool includeAssets{request.params[1].isNull() ? false : request.params[1].get_bool()};
+            if (includeAssets && !AreAssetsDeployed())
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Assets are not active; includeAssets cannot be true");
+
+            const node::NodeContext& node = EnsureAnyNodeContext(request.context);
+            const CTxMemPool& mempool = EnsureMemPool(node);
+
+            std::vector<std::pair<CMempoolAddressDeltaKey, CMempoolAddressDelta>> indexes;
+            if (includeAssets) {
+                mempool.getAddressIndex(addresses, indexes);
+            } else {
+                mempool.getAddressIndex(addresses, MEWC, indexes);
+            }
+            std::sort(indexes.begin(), indexes.end(), timestampSort);
+
+            UniValue result(UniValue::VARR);
+            for (const auto& [key, delta] : indexes) {
+                std::string address;
+                if (!getAddressFromIndex(key.type, key.addressBytes, address))
+                    throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Unknown address type");
+
+                UniValue entry(UniValue::VOBJ);
+                entry.pushKV("address", address);
+                entry.pushKV("assetName", key.asset);
+                entry.pushKV("txid", key.txhash.GetHex());
+                entry.pushKV("index", (int)key.index);
+                entry.pushKV("satoshis", delta.amount);
+                entry.pushKV("timestamp", delta.time);
+                if (delta.amount < 0) {
+                    entry.pushKV("prevtxid", delta.prevhash.GetHex());
+                    entry.pushKV("prevout", (int)delta.prevout);
+                }
+                result.push_back(entry);
+            }
+            return result;
         },
     };
 }

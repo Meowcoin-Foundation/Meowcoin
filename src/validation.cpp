@@ -52,6 +52,7 @@
 #include <signet.h>
 #include <tinyformat.h>
 #include <txdb.h>
+#include <index/addressindex.h>
 #include <txmempool.h>
 #include <uint256.h>
 #include <undo.h>
@@ -1373,6 +1374,14 @@ void MemPoolAccept::FinalizeSubpackage(const ATMPArgs& args)
         );
         m_subpackage.m_replaced_transactions.push_back(it->GetSharedTx());
     }
+    // Index address deltas for each transaction being committed. Must happen before Apply()
+    // clears the staged entries; m_view has all inputs cached from PreChecks.
+    if (g_addressindex) {
+        for (size_t i = 0; i < m_subpackage.m_changeset->GetTxCount(); i++) {
+            m_pool.addAddressIndex(m_subpackage.m_changeset->GetAddedEntry(i), m_view);
+        }
+    }
+
     m_subpackage.m_changeset->Apply();
     m_subpackage.m_changeset.reset();
 }

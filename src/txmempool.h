@@ -6,6 +6,7 @@
 #ifndef BITCOIN_TXMEMPOOL_H
 #define BITCOIN_TXMEMPOOL_H
 
+#include <addressindex.h>
 #include <coins.h>
 #include <consensus/amount.h>
 #include <indirectmap.h>
@@ -442,6 +443,12 @@ public:
     std::map<std::pair<std::string, std::string>, std::set<Txid>> mapAddressRemoveTag GUARDED_BY(cs);
     std::map<Txid, std::set<std::pair<std::string, std::string>>> mapHashToAddressRemoveTag GUARDED_BY(cs);
 
+    /** Mempool address delta index — tracks per-address activity for unconfirmed txs. */
+    typedef std::map<CMempoolAddressDeltaKey, CMempoolAddressDelta, CMempoolAddressDeltaKeyCompare> addressDeltaMap;
+    addressDeltaMap mapAddress GUARDED_BY(cs);
+    typedef std::map<uint256, std::vector<CMempoolAddressDeltaKey>> addressDeltaMapInserted;
+    addressDeltaMapInserted mapAddressInserted GUARDED_BY(cs);
+
     using Options = kernel::MemPoolOptions;
 
     const Options m_opts;
@@ -473,6 +480,14 @@ public:
     void removeForReorg(CChain& chain, std::function<bool(txiter)> filter_final_and_mature) EXCLUSIVE_LOCKS_REQUIRED(cs, cs_main);
     void removeConflicts(const CTransaction& tx) EXCLUSIVE_LOCKS_REQUIRED(cs);
     void removeForBlock(const std::vector<CTransactionRef>& vtx, unsigned int nBlockHeight) EXCLUSIVE_LOCKS_REQUIRED(cs);
+
+    /** Address delta index: add/query/remove mempool address deltas. */
+    void addAddressIndex(const CTxMemPoolEntry& entry, const CCoinsViewCache& view) EXCLUSIVE_LOCKS_REQUIRED(cs);
+    bool getAddressIndex(std::vector<std::pair<uint160, int>>& addresses, std::string assetName,
+                         std::vector<std::pair<CMempoolAddressDeltaKey, CMempoolAddressDelta>>& results) const;
+    bool getAddressIndex(std::vector<std::pair<uint160, int>>& addresses,
+                         std::vector<std::pair<CMempoolAddressDeltaKey, CMempoolAddressDelta>>& results) const;
+    bool removeAddressIndex(const uint256& txhash) EXCLUSIVE_LOCKS_REQUIRED(cs);
 
     bool CompareDepthAndScore(const Wtxid& hasha, const Wtxid& hashb) const;
     bool isSpent(const COutPoint& outpoint) const;
@@ -887,6 +902,7 @@ public:
 
         size_t GetTxCount() const { return m_entry_vec.size(); }
         const CTransaction& GetAddedTxn(size_t index) const { return m_entry_vec.at(index)->GetTx(); }
+        const CTxMemPoolEntry& GetAddedEntry(size_t index) const { return *m_entry_vec.at(index); }
 
         void Apply() EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 

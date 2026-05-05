@@ -6,8 +6,11 @@
 #include <txmempool.h>
 
 #include <mempool_asset.h>
+#include <addressindex.h>
+#include <assets/assets.h>
 #include <chain.h>
 #include <coins.h>
+#include <hash.h>
 #include <common/system.h>
 #include <consensus/consensus.h>
 #include <consensus/tx_verify.h>
@@ -520,6 +523,122 @@ void CTxMemPool::addNewTransaction(CTxMemPool::txiter newit, CTxMemPool::setEntr
     RegisterAssetMempoolTxOutputs(*this, tx);
 }
 
+// Decode a script to (addressType, hashBytes, assetName, value) for mempool indexing.
+// Returns addressType=0 for unrecognised scripts.
+static bool DecodeScriptForIndex(const CScript& script, CAmount value,
+                                  int& addrType, uint160& hashBytes, std::string& assetName, CAmount& indexValue)
+{
+    addrType = 0;
+    indexValue = value;
+    assetName = MEWC;
+
+    if (script.IsPayToScriptHash()) {
+        addrType = 2;
+        hashBytes = uint160(std::vector<unsigned char>(script.begin() + 2, script.begin() + 22));
+    } else if (script.size() == 25 && script[0] == OP_DUP && script[1] == OP_HASH160 &&
+               script[2] == 20 && script[23] == OP_EQUALVERIFY && script[24] == OP_CHECKSIG) {
+        addrType = 1;
+        hashBytes = uint160(std::vector<unsigned char>(script.begin() + 3, script.begin() + 23));
+    } else if ((script.size() == 35 || script.size() == 67) && script[script.size() - 1] == OP_CHECKSIG) {
+        addrType = 1;
+        hashBytes = Hash160(std::vector<unsigned char>(script.begin() + 1, script.end() - 1));
+    } else {
+        int witVersion;
+        std::vector<unsigned char> witProgram;
+        if (script.IsWitnessProgram(witVersion, witProgram) && witVersion == 0 && witProgram.size() == 20) {
+            addrType = 3;
+            hashBytes = uint160(witProgram);
+        } else if (AreAssetsDeployed()) {
+            uint160 assetHash;
+            CAmount assetAmount;
+            if (ParseAssetScript(script, assetHash, assetName, assetAmount)) {
+                addrType = 1;
+                hashBytes = assetHash;
+                indexValue = assetAmount;
+            }
+        }
+    }
+    return addrType != 0;
+}
+
+void CTxMemPool::addAddressIndex(const CTxMemPoolEntry& entry, const CCoinsViewCache& view)
+{
+    AssertLockHeld(cs);
+    const CTransaction& tx = entry.GetTx();
+    const uint256 txhash = tx.GetHash().ToUint256();
+    const int64_t entryTime = entry.GetTime().count();
+    std::vector<CMempoolAddressDeltaKey> inserted;
+
+    for (unsigned int j = 0; j < tx.vin.size(); j++) {
+        const CTxIn& input = tx.vin[j];
+        const CTxOut& prevout = view.AccessCoin(input.prevout).out;
+
+        int addrType; uint160 hashBytes; std::string assetName; CAmount indexValue;
+        if (!DecodeScriptForIndex(prevout.scriptPubKey, prevout.nValue, addrType, hashBytes, assetName, indexValue))
+            continue;
+
+        CMempoolAddressDeltaKey key(addrType, hashBytes, assetName, txhash, j, 1);
+        CMempoolAddressDelta delta(entryTime, indexValue * -1, input.prevout.hash.ToUint256(), input.prevout.n);
+        mapAddress.insert(std::make_pair(key, delta));
+        inserted.push_back(key);
+    }
+
+    for (unsigned int k = 0; k < tx.vout.size(); k++) {
+        const CTxOut& out = tx.vout[k];
+
+        int addrType; uint160 hashBytes; std::string assetName; CAmount indexValue;
+        if (!DecodeScriptForIndex(out.scriptPubKey, out.nValue, addrType, hashBytes, assetName, indexValue))
+            continue;
+
+        CMempoolAddressDeltaKey key(addrType, hashBytes, assetName, txhash, k, 0);
+        mapAddress.insert(std::make_pair(key, CMempoolAddressDelta(entryTime, indexValue)));
+        inserted.push_back(key);
+    }
+
+    mapAddressInserted.insert(std::make_pair(txhash, inserted));
+}
+
+bool CTxMemPool::getAddressIndex(std::vector<std::pair<uint160, int>>& addresses, std::string assetName,
+                                 std::vector<std::pair<CMempoolAddressDeltaKey, CMempoolAddressDelta>>& results) const
+{
+    LOCK(cs);
+    for (const auto& [hash, type] : addresses) {
+        auto ait = mapAddress.lower_bound(CMempoolAddressDeltaKey(type, hash, assetName));
+        while (ait != mapAddress.end() && ait->first.addressBytes == hash
+               && ait->first.type == type && ait->first.asset == assetName) {
+            results.push_back(*ait);
+            ++ait;
+        }
+    }
+    return true;
+}
+
+bool CTxMemPool::getAddressIndex(std::vector<std::pair<uint160, int>>& addresses,
+                                 std::vector<std::pair<CMempoolAddressDeltaKey, CMempoolAddressDelta>>& results) const
+{
+    LOCK(cs);
+    for (const auto& [hash, type] : addresses) {
+        auto ait = mapAddress.lower_bound(CMempoolAddressDeltaKey(type, hash));
+        while (ait != mapAddress.end() && ait->first.addressBytes == hash && ait->first.type == type) {
+            results.push_back(*ait);
+            ++ait;
+        }
+    }
+    return true;
+}
+
+bool CTxMemPool::removeAddressIndex(const uint256& txhash)
+{
+    AssertLockHeld(cs);
+    auto it = mapAddressInserted.find(txhash);
+    if (it != mapAddressInserted.end()) {
+        for (const auto& key : it->second)
+            mapAddress.erase(key);
+        mapAddressInserted.erase(it);
+    }
+    return true;
+}
+
 void CTxMemPool::removeUnchecked(txiter it, MemPoolRemovalReason reason)
 {
     UnregisterAssetMempoolTx(*this, it->GetTx());
@@ -564,6 +683,7 @@ void CTxMemPool::removeUnchecked(txiter it, MemPoolRemovalReason reason)
     m_total_fee -= it->GetFee();
     cachedInnerUsage -= it->DynamicMemoryUsage();
     cachedInnerUsage -= memusage::DynamicUsage(it->GetMemPoolParentsConst()) + memusage::DynamicUsage(it->GetMemPoolChildrenConst());
+    removeAddressIndex(it->GetTx().GetHash().ToUint256());
     mapTx.erase(it);
     nTransactionsUpdated++;
 }
