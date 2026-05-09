@@ -48,17 +48,17 @@ public:
     virtual ~AddressIndex() override;
 
     /// Read all deltas for an address (optionally filtered by asset and/or block range).
-    bool ReadAddressIndex(uint160 addressHash, int type, std::string assetName,
+    bool ReadAddressIndex(uint256 addressHash, int type, std::string assetName,
                           std::vector<std::pair<CAddressIndexKey, CAmount>>& addressIndex,
                           int start = 0, int end = 0);
-    bool ReadAddressIndex(uint160 addressHash, int type,
+    bool ReadAddressIndex(uint256 addressHash, int type,
                           std::vector<std::pair<CAddressIndexKey, CAmount>>& addressIndex,
                           int start = 0, int end = 0);
 
     /// Read unspent outputs for an address (optionally filtered by asset).
-    bool ReadAddressUnspentIndex(uint160 addressHash, int type, std::string assetName,
+    bool ReadAddressUnspentIndex(uint256 addressHash, int type, std::string assetName,
                                  std::vector<std::pair<CAddressUnspentKey, CAddressUnspentValue>>& unspentOutputs);
-    bool ReadAddressUnspentIndex(uint160 addressHash, int type,
+    bool ReadAddressUnspentIndex(uint256 addressHash, int type,
                                  std::vector<std::pair<CAddressUnspentKey, CAddressUnspentValue>>& unspentOutputs);
 };
 

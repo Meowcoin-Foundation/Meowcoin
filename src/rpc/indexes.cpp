@@ -3,6 +3,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <hash.h>
 #include <rpc/server.h>
 #include <rpc/server_util.h>
 #include <rpc/util.h>
@@ -24,44 +25,65 @@
 #include <univalue.h>
 
 #include <cstring>
+#include <pubkey.h>
 #include <string>
 
-static bool getAddressFromIndex(const int& type, const uint160& hash, std::string& address)
+static bool getAddressFromIndex(const int& type, const uint256& hash, std::string& address)
 {
+    // For types 1-3, the key is a zero-padded uint160; extract the first 20 bytes.
+    uint160 h160;
+    memcpy(h160.begin(), hash.begin(), 20);
+
     if (type == 2) {
-        address = EncodeDestination(ScriptHash(hash));
+        address = EncodeDestination(ScriptHash(h160));
     } else if (type == 1) {
-        address = EncodeDestination(PKHash(hash));
+        address = EncodeDestination(PKHash(h160));
     } else if (type == 3) {
-        address = EncodeDestination(WitnessV0KeyHash(hash));
+        address = EncodeDestination(WitnessV0KeyHash(h160));
+    } else if (type == 4) {
+        // P2TR: the full 32-byte x-only pubkey is stored in hash
+        XOnlyPubKey xpk(std::span<const unsigned char>{hash.begin(), 32});
+        address = EncodeDestination(WitnessV1Taproot{xpk});
     } else {
         return false;
     }
     return true;
 }
 
-static bool getAddressesFromParams(const UniValue& params, std::vector<std::pair<uint160, int>>& addresses)
+static uint256 destToHash(const CTxDestination& dest, int& type)
+{
+    uint256 h;
+    if (auto* keyID = std::get_if<PKHash>(&dest)) {
+        uint160 h160 = ToKeyID(*keyID);
+        memcpy(h.begin(), h160.begin(), 20);
+        type = 1;
+    } else if (auto* scriptID = std::get_if<ScriptHash>(&dest)) {
+        CScriptID sid = ToScriptID(*scriptID);
+        memcpy(h.begin(), sid.begin(), 20);
+        type = 2;
+    } else if (auto* witnessKeyHash = std::get_if<WitnessV0KeyHash>(&dest)) {
+        uint160 h160 = ToKeyID(*witnessKeyHash);
+        memcpy(h.begin(), h160.begin(), 20);
+        type = 3;
+    } else if (auto* taproot = std::get_if<WitnessV1Taproot>(&dest)) {
+        // P2TR: store the full 32-byte x-only pubkey
+        memcpy(h.begin(), taproot->begin(), 32);
+        type = 4;
+    } else {
+        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Unsupported address type");
+    }
+    return h;
+}
+
+static bool getAddressesFromParams(const UniValue& params, std::vector<std::pair<uint256, int>>& addresses)
 {
     if (params[0].isStr()) {
         CTxDestination dest = DecodeDestination(params[0].get_str());
         if (!IsValidDestination(dest)) {
             throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid address");
         }
-        uint160 hashBytes;
         int type = 0;
-        if (auto* keyID = std::get_if<PKHash>(&dest)) {
-            hashBytes = ToKeyID(*keyID);
-            type = 1;
-        } else if (auto* scriptID = std::get_if<ScriptHash>(&dest)) {
-            CScriptID sid = ToScriptID(*scriptID);
-            std::memcpy(hashBytes.data(), sid.data(), 20);
-            type = 2;
-        } else if (auto* witnessKeyHash = std::get_if<WitnessV0KeyHash>(&dest)) {
-            hashBytes = ToKeyID(*witnessKeyHash);
-            type = 3;
-        } else {
-            throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Unsupported address type");
-        }
+        uint256 hashBytes = destToHash(dest, type);
         addresses.push_back(std::make_pair(hashBytes, type));
     } else if (params[0].isObject()) {
         const UniValue& addressValues = params[0]["addresses"];
@@ -74,21 +96,8 @@ static bool getAddressesFromParams(const UniValue& params, std::vector<std::pair
             if (!IsValidDestination(dest)) {
                 throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid address");
             }
-            uint160 hashBytes;
             int type = 0;
-            if (auto* keyID = std::get_if<PKHash>(&dest)) {
-                hashBytes = ToKeyID(*keyID);
-                type = 1;
-            } else if (auto* scriptID = std::get_if<ScriptHash>(&dest)) {
-                CScriptID sid = ToScriptID(*scriptID);
-                std::memcpy(hashBytes.data(), sid.data(), 20);
-                type = 2;
-            } else if (auto* witnessKeyHash = std::get_if<WitnessV0KeyHash>(&dest)) {
-                hashBytes = ToKeyID(*witnessKeyHash);
-                type = 3;
-            } else {
-                throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Unsupported address type");
-            }
+            uint256 hashBytes = destToHash(dest, type);
             addresses.push_back(std::make_pair(hashBytes, type));
         }
     } else {
@@ -150,7 +159,7 @@ static RPCHelpMan getaddressmempool()
             if (!g_addressindex)
                 throw JSONRPCError(RPC_MISC_ERROR, "Address index not enabled");
 
-            std::vector<std::pair<uint160, int>> addresses;
+            std::vector<std::pair<uint256, int>> addresses;
             if (!getAddressesFromParams(request.params, addresses))
                 throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid address");
 
@@ -258,7 +267,7 @@ static RPCHelpMan getaddressutxos()
                 if (offsetParam.isNum()) { offset = offsetParam.getInt<int>(); if (offset < 0) offset = 0; }
             }
 
-            std::vector<std::pair<uint160, int>> addresses;
+            std::vector<std::pair<uint256, int>> addresses;
             if (!getAddressesFromParams(request.params, addresses)) {
                 throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid address");
             }
@@ -395,7 +404,7 @@ static RPCHelpMan getaddressdeltas()
                     throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "End must be greater than or equal to start");
             }
 
-            std::vector<std::pair<uint160, int>> addresses;
+            std::vector<std::pair<uint256, int>> addresses;
             if (!getAddressesFromParams(request.params, addresses))
                 throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid address");
 
@@ -502,7 +511,7 @@ static RPCHelpMan getaddressbalance()
             if (!g_addressindex)
                 throw JSONRPCError(RPC_MISC_ERROR, "Address index not enabled");
 
-            std::vector<std::pair<uint160, int>> addresses;
+            std::vector<std::pair<uint256, int>> addresses;
             if (!getAddressesFromParams(request.params, addresses))
                 throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid address");
 
@@ -592,7 +601,7 @@ static RPCHelpMan getaddresstxids()
             if (!g_addressindex)
                 throw JSONRPCError(RPC_MISC_ERROR, "Address index not enabled");
 
-            std::vector<std::pair<uint160, int>> addresses;
+            std::vector<std::pair<uint256, int>> addresses;
             if (!getAddressesFromParams(request.params, addresses))
                 throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Invalid address");
 

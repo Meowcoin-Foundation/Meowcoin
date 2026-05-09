@@ -5,6 +5,8 @@
 
 #include <index/addressindex.h>
 
+#include <cstring>
+
 #include <addressindex.h>
 #include <assets/assets.h>
 #include <common/args.h>
@@ -26,11 +28,18 @@ std::unique_ptr<AddressIndex> g_addressindex;
 // ---------------------------------------------------------------------------
 struct ScriptAddressInfo {
     unsigned int addressType{0};
-    uint160 hashBytes;
+    uint256 hashBytes;
     std::string assetName;
     CAmount value{0};
     bool isAsset{false};
 };
+
+// Pack a 20-byte hash160 into a uint256 (zero-padded in the upper 12 bytes).
+static uint256 h160to256(const uint160& h) {
+    uint256 out;
+    memcpy(out.begin(), h.begin(), 20);
+    return out;
+}
 
 static ScriptAddressInfo DecodeScript(const CScript& script, CAmount fallbackValue)
 {
@@ -39,23 +48,30 @@ static ScriptAddressInfo DecodeScript(const CScript& script, CAmount fallbackVal
 
     if (script.IsPayToScriptHash()) {
         info.addressType = 2;
-        info.hashBytes = uint160(std::vector<unsigned char>(script.begin() + 2, script.begin() + 22));
+        info.hashBytes = h160to256(uint160(std::vector<unsigned char>(script.begin() + 2, script.begin() + 22)));
     } else if (script.size() == 25 && script[0] == OP_DUP && script[1] == OP_HASH160 &&
                script[2] == 20 && script[23] == OP_EQUALVERIFY && script[24] == OP_CHECKSIG) {
         // Standard P2PKH — byte [23] is OP_EQUALVERIFY (correct offset)
         info.addressType = 1;
-        info.hashBytes = uint160(std::vector<unsigned char>(script.begin() + 3, script.begin() + 23));
+        info.hashBytes = h160to256(uint160(std::vector<unsigned char>(script.begin() + 3, script.begin() + 23)));
     } else if ((script.size() == 35 || script.size() == 67) && script[script.size() - 1] == OP_CHECKSIG) {
         info.addressType = 1;
-        info.hashBytes = Hash160(std::vector<unsigned char>(script.begin() + 1, script.end() - 1));
+        info.hashBytes = h160to256(Hash160(std::vector<unsigned char>(script.begin() + 1, script.end() - 1)));
     } else {
         int witVersion;
         std::vector<unsigned char> witProgram;
-        if (script.IsWitnessProgram(witVersion, witProgram) && witVersion == 0 && witProgram.size() == 20) {
-            // P2WPKH (bech32 native segwit v0)
-            info.addressType = 3;
-            info.hashBytes = uint160(witProgram);
-            return info;
+        if (script.IsWitnessProgram(witVersion, witProgram)) {
+            if (witVersion == 0 && witProgram.size() == 20) {
+                // P2WPKH (bech32 native segwit v0)
+                info.addressType = 3;
+                info.hashBytes = h160to256(uint160(witProgram));
+                return info;
+            } else if (witVersion == 1 && witProgram.size() == 32) {
+                // P2TR: store the full 32-byte x-only pubkey directly in uint256
+                info.addressType = 4;
+                memcpy(info.hashBytes.begin(), witProgram.data(), 32);
+                return info;
+            }
         }
         int nType = 0;
         bool fIsOwner = false;
@@ -64,7 +80,7 @@ static ScriptAddressInfo DecodeScript(const CScript& script, CAmount fallbackVal
             if (GetAssetData(script, assetData)) {
                 if (auto* keyID = std::get_if<PKHash>(&assetData.destination)) {
                     info.addressType = 1;
-                    info.hashBytes = ToKeyID(*keyID);
+                    info.hashBytes = h160to256(ToKeyID(*keyID));
                     info.assetName = assetData.assetName;
                     info.value = assetData.nAmount;
                     info.isAsset = true;
@@ -113,7 +129,7 @@ public:
         return WriteBatch(batch);
     }
 
-    bool ReadAddressIndex(uint160 addressHash, int type, std::string assetName,
+    bool ReadAddressIndex(uint256 addressHash, int type, std::string assetName,
                           std::vector<std::pair<CAddressIndexKey, CAmount>>& addressIndex,
                           int start, int end)
     {
@@ -148,7 +164,7 @@ public:
         return true;
     }
 
-    bool ReadAddressUnspentIndex(uint160 addressHash, int type, std::string assetName,
+    bool ReadAddressUnspentIndex(uint256 addressHash, int type, std::string assetName,
                                  std::vector<std::pair<CAddressUnspentKey, CAddressUnspentValue>>& vect)
     {
         std::unique_ptr<CDBIterator> pcursor(NewIterator());
@@ -363,27 +379,27 @@ bool AddressIndex::CustomRemove(const interfaces::BlockInfo& block)
 
 BaseIndex::DB& AddressIndex::GetDB() const { return *m_db; }
 
-bool AddressIndex::ReadAddressIndex(uint160 addressHash, int type, std::string assetName,
+bool AddressIndex::ReadAddressIndex(uint256 addressHash, int type, std::string assetName,
                                     std::vector<std::pair<CAddressIndexKey, CAmount>>& addressIndex,
                                     int start, int end)
 {
     return m_db->ReadAddressIndex(addressHash, type, assetName, addressIndex, start, end);
 }
 
-bool AddressIndex::ReadAddressIndex(uint160 addressHash, int type,
+bool AddressIndex::ReadAddressIndex(uint256 addressHash, int type,
                                     std::vector<std::pair<CAddressIndexKey, CAmount>>& addressIndex,
                                     int start, int end)
 {
     return m_db->ReadAddressIndex(addressHash, type, "", addressIndex, start, end);
 }
 
-bool AddressIndex::ReadAddressUnspentIndex(uint160 addressHash, int type, std::string assetName,
+bool AddressIndex::ReadAddressUnspentIndex(uint256 addressHash, int type, std::string assetName,
                                            std::vector<std::pair<CAddressUnspentKey, CAddressUnspentValue>>& unspentOutputs)
 {
     return m_db->ReadAddressUnspentIndex(addressHash, type, assetName, unspentOutputs);
 }
 
-bool AddressIndex::ReadAddressUnspentIndex(uint160 addressHash, int type,
+bool AddressIndex::ReadAddressUnspentIndex(uint256 addressHash, int type,
                                            std::vector<std::pair<CAddressUnspentKey, CAddressUnspentValue>>& unspentOutputs)
 {
     return m_db->ReadAddressUnspentIndex(addressHash, type, "", unspentOutputs);

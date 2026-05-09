@@ -483,9 +483,9 @@ public:
 
     /** Address delta index: add/query/remove mempool address deltas. */
     void addAddressIndex(const CTxMemPoolEntry& entry, const CCoinsViewCache& view) EXCLUSIVE_LOCKS_REQUIRED(cs);
-    bool getAddressIndex(std::vector<std::pair<uint160, int>>& addresses, std::string assetName,
+    bool getAddressIndex(std::vector<std::pair<uint256, int>>& addresses, std::string assetName,
                          std::vector<std::pair<CMempoolAddressDeltaKey, CMempoolAddressDelta>>& results) const;
-    bool getAddressIndex(std::vector<std::pair<uint160, int>>& addresses,
+    bool getAddressIndex(std::vector<std::pair<uint256, int>>& addresses,
                          std::vector<std::pair<CMempoolAddressDeltaKey, CMempoolAddressDelta>>& results) const;
     bool removeAddressIndex(const uint256& txhash) EXCLUSIVE_LOCKS_REQUIRED(cs);
 

@@ -5,6 +5,8 @@
 
 #include <txmempool.h>
 
+#include <cstring>
+
 #include <mempool_asset.h>
 #include <addressindex.h>
 #include <assets/assets.h>
@@ -525,8 +527,14 @@ void CTxMemPool::addNewTransaction(CTxMemPool::txiter newit, CTxMemPool::setEntr
 
 // Decode a script to (addressType, hashBytes, assetName, value) for mempool indexing.
 // Returns addressType=0 for unrecognised scripts.
+static uint256 h160to256(const uint160& h) {
+    uint256 out;
+    memcpy(out.begin(), h.begin(), 20);
+    return out;
+}
+
 static bool DecodeScriptForIndex(const CScript& script, CAmount value,
-                                  int& addrType, uint160& hashBytes, std::string& assetName, CAmount& indexValue)
+                                  int& addrType, uint256& hashBytes, std::string& assetName, CAmount& indexValue)
 {
     addrType = 0;
     indexValue = value;
@@ -534,26 +542,32 @@ static bool DecodeScriptForIndex(const CScript& script, CAmount value,
 
     if (script.IsPayToScriptHash()) {
         addrType = 2;
-        hashBytes = uint160(std::vector<unsigned char>(script.begin() + 2, script.begin() + 22));
+        hashBytes = h160to256(uint160(std::vector<unsigned char>(script.begin() + 2, script.begin() + 22)));
     } else if (script.size() == 25 && script[0] == OP_DUP && script[1] == OP_HASH160 &&
                script[2] == 20 && script[23] == OP_EQUALVERIFY && script[24] == OP_CHECKSIG) {
         addrType = 1;
-        hashBytes = uint160(std::vector<unsigned char>(script.begin() + 3, script.begin() + 23));
+        hashBytes = h160to256(uint160(std::vector<unsigned char>(script.begin() + 3, script.begin() + 23)));
     } else if ((script.size() == 35 || script.size() == 67) && script[script.size() - 1] == OP_CHECKSIG) {
         addrType = 1;
-        hashBytes = Hash160(std::vector<unsigned char>(script.begin() + 1, script.end() - 1));
+        hashBytes = h160to256(Hash160(std::vector<unsigned char>(script.begin() + 1, script.end() - 1)));
     } else {
         int witVersion;
         std::vector<unsigned char> witProgram;
-        if (script.IsWitnessProgram(witVersion, witProgram) && witVersion == 0 && witProgram.size() == 20) {
-            addrType = 3;
-            hashBytes = uint160(witProgram);
+        if (script.IsWitnessProgram(witVersion, witProgram)) {
+            if (witVersion == 0 && witProgram.size() == 20) {
+                addrType = 3;
+                hashBytes = h160to256(uint160(witProgram));
+            } else if (witVersion == 1 && witProgram.size() == 32) {
+                // P2TR: store the full 32-byte x-only pubkey directly
+                addrType = 4;
+                memcpy(hashBytes.begin(), witProgram.data(), 32);
+            }
         } else if (AreAssetsDeployed()) {
             uint160 assetHash;
             CAmount assetAmount;
             if (ParseAssetScript(script, assetHash, assetName, assetAmount)) {
                 addrType = 1;
-                hashBytes = assetHash;
+                hashBytes = h160to256(assetHash);
                 indexValue = assetAmount;
             }
         }
@@ -573,7 +587,7 @@ void CTxMemPool::addAddressIndex(const CTxMemPoolEntry& entry, const CCoinsViewC
         const CTxIn& input = tx.vin[j];
         const CTxOut& prevout = view.AccessCoin(input.prevout).out;
 
-        int addrType; uint160 hashBytes; std::string assetName; CAmount indexValue;
+        int addrType; uint256 hashBytes; std::string assetName; CAmount indexValue;
         if (!DecodeScriptForIndex(prevout.scriptPubKey, prevout.nValue, addrType, hashBytes, assetName, indexValue))
             continue;
 
@@ -586,7 +600,7 @@ void CTxMemPool::addAddressIndex(const CTxMemPoolEntry& entry, const CCoinsViewC
     for (unsigned int k = 0; k < tx.vout.size(); k++) {
         const CTxOut& out = tx.vout[k];
 
-        int addrType; uint160 hashBytes; std::string assetName; CAmount indexValue;
+        int addrType; uint256 hashBytes; std::string assetName; CAmount indexValue;
         if (!DecodeScriptForIndex(out.scriptPubKey, out.nValue, addrType, hashBytes, assetName, indexValue))
             continue;
 
@@ -598,7 +612,7 @@ void CTxMemPool::addAddressIndex(const CTxMemPoolEntry& entry, const CCoinsViewC
     mapAddressInserted.insert(std::make_pair(txhash, inserted));
 }
 
-bool CTxMemPool::getAddressIndex(std::vector<std::pair<uint160, int>>& addresses, std::string assetName,
+bool CTxMemPool::getAddressIndex(std::vector<std::pair<uint256, int>>& addresses, std::string assetName,
                                  std::vector<std::pair<CMempoolAddressDeltaKey, CMempoolAddressDelta>>& results) const
 {
     LOCK(cs);
@@ -613,7 +627,7 @@ bool CTxMemPool::getAddressIndex(std::vector<std::pair<uint160, int>>& addresses
     return true;
 }
 
-bool CTxMemPool::getAddressIndex(std::vector<std::pair<uint160, int>>& addresses,
+bool CTxMemPool::getAddressIndex(std::vector<std::pair<uint256, int>>& addresses,
                                  std::vector<std::pair<CMempoolAddressDeltaKey, CMempoolAddressDelta>>& results) const
 {
     LOCK(cs);
