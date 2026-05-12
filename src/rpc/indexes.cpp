@@ -205,7 +205,7 @@ static RPCHelpMan getaddressmempool()
 static RPCHelpMan getaddressutxos()
 {
     return RPCHelpMan{"getaddressutxos",
-        "\nReturns all unspent outputs for an address (requires addressindex to be enabled).\n",
+        "Returns all unspent outputs for an address (requires addressindex to be enabled).\n",
         {
             {"addresses", RPCArg::Type::OBJ, RPCArg::Optional::NO, "Address object",
                 {
@@ -329,7 +329,7 @@ static RPCHelpMan getaddressutxos()
 static RPCHelpMan getaddressdeltas()
 {
     return RPCHelpMan{"getaddressdeltas",
-        "\nReturns all changes for an address (requires addressindex to be enabled).\n",
+        "Returns all changes for an address (requires addressindex to be enabled).\n",
         {
             {"addresses", RPCArg::Type::OBJ, RPCArg::Optional::NO, "Address object",
                 {
@@ -484,7 +484,7 @@ static RPCHelpMan getaddressdeltas()
 static RPCHelpMan getaddressbalance()
 {
     return RPCHelpMan{"getaddressbalance",
-        "\nReturns the balance for an address(es) (requires addressindex to be enabled).\n",
+        "Returns the balance for an address(es) (requires addressindex to be enabled).\n",
         {
             {"addresses", RPCArg::Type::OBJ, RPCArg::Optional::NO, "Address object",
                 {
@@ -571,7 +571,7 @@ static RPCHelpMan getaddressbalance()
 static RPCHelpMan getaddresstxids()
 {
     return RPCHelpMan{"getaddresstxids",
-        "\nReturns the txids for an address(es) (requires addressindex to be enabled).\n",
+        "Returns the txids for an address(es) (requires addressindex to be enabled).\n",
         {
             {"addresses", RPCArg::Type::OBJ, RPCArg::Optional::NO, "Address object",
                 {
@@ -683,7 +683,7 @@ static RPCHelpMan getaddresstxids()
 static RPCHelpMan getspentinfo()
 {
     return RPCHelpMan{"getspentinfo",
-        "\nReturns the txid and index where an output is spent.\n",
+        "Returns the txid and index where an output is spent.\n",
         {
             {"txid_index", RPCArg::Type::OBJ, RPCArg::Optional::NO, "Transaction output identifier",
                 {
@@ -738,7 +738,7 @@ static RPCHelpMan getspentinfo()
 static RPCHelpMan getblockhashes()
 {
     return RPCHelpMan{"getblockhashes",
-        "\nReturns array of hashes of blocks within the timestamp range provided (requires timestampindex to be enabled).\n",
+        "Returns array of hashes of blocks within the timestamp range provided (requires timestampindex to be enabled).\n",
         {
             {"high", RPCArg::Type::NUM, RPCArg::Optional::NO, "The newer block timestamp"},
             {"low", RPCArg::Type::NUM, RPCArg::Optional::NO, "The older block timestamp"},
