@@ -263,6 +263,7 @@ add_library(meowcoin_node STATIC EXCLUDE_FROM_ALL
   rest.cpp
   rpc/assets.cpp
   rpc/blockchain.cpp
+  rpc/rewards.cpp
   rpc/indexes.cpp
   rpc/external_signer.cpp
   rpc/fees.cpp

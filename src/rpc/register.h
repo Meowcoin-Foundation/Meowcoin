@@ -25,6 +25,7 @@ void RegisterTxoutProofRPCCommands(CRPCTable&);
 void RegisterAssetRPCCommands(CRPCTable&);
 void RegisterIndexRPCCommands(CRPCTable&);
 void RegisterMessageRPCCommands(CRPCTable&);
+void RegisterRewardsRPCCommands(CRPCTable&);
 
 static inline void RegisterAllCoreRPCCommands(CRPCTable &t)
 {
@@ -44,6 +45,7 @@ static inline void RegisterAllCoreRPCCommands(CRPCTable &t)
     RegisterAssetRPCCommands(t);
     RegisterIndexRPCCommands(t);
     RegisterMessageRPCCommands(t);
+    RegisterRewardsRPCCommands(t);
 }
 
 #endif // BITCOIN_RPC_REGISTER_H
