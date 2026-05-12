@@ -896,6 +896,9 @@ RPCHelpMan signrawtransactionwithwallet();
 // signmessage
 RPCHelpMan signmessage();
 
+// rewards (wallet/rpc/rewards.cpp)
+RPCHelpMan distributereward();
+
 // transactions
 RPCHelpMan listreceivedbyaddress();
 RPCHelpMan listreceivedbylabel();
@@ -968,6 +971,7 @@ std::span<const CRPCCommand> GetWalletRPCCommands()
         {"wallet", &walletpassphrase},
         {"wallet", &walletpassphrasechange},
         {"wallet", &walletprocesspsmt},
+        {"rewards", &distributereward},
     };
     return commands;
 }

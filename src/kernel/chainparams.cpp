@@ -192,9 +192,9 @@ public:
 
         // Meowcoin genesis: nTime=1661730843, nNonce=351574, nBits=0x1e00ffff, nVersion=4, reward=5000
         genesis = CreateGenesisBlock(1661730843, 351574, 0x1e00ffff, 4, 5000 * COIN);
-        consensus.hashGenesisBlock = genesis.GetHash();
-        // TODO: Genesis hash assertion requires X16R hashing — will be enabled after Patch 4
-        // assert(consensus.hashGenesisBlock == uint256{"000000edd819220359469c54f2614b5602ebc775ea67a64602f354bdaa320f70"});
+        // Set hashGenesisBlock to the known PoW hash (X16R) directly.
+        consensus.hashGenesisBlock = uint256{"000000edd819220359469c54f2614b5602ebc775ea67a64602f354bdaa320f70"};
+        assert(consensus.hashGenesisBlock == uint256{"000000edd819220359469c54f2614b5602ebc775ea67a64602f354bdaa320f70"});
         assert(genesis.hashMerkleRoot == uint256{"e8916cf6592c8433d598c3a5fe60a9741fd2a997b39d93af2d789cdd9d9a7390"});
 
         vSeeds.emplace_back("seed-mainnet-mewc.meowcoin.cc");

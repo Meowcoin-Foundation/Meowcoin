@@ -420,6 +420,14 @@ void Shutdown(NodeContext& node)
     delete passetsQualifierCache; passetsQualifierCache = nullptr;
     delete passetsRestrictionCache; passetsRestrictionCache = nullptr;
     delete passetsGlobalRestrictionCache; passetsGlobalRestrictionCache = nullptr;
+    delete pMessagesCache; pMessagesCache = nullptr;
+    delete pMessageSubscribedChannelsCache; pMessageSubscribedChannelsCache = nullptr;
+    delete pMessagesSeenAddressCache; pMessagesSeenAddressCache = nullptr;
+    delete pmessagedb; pmessagedb = nullptr;
+    delete pmessagechanneldb; pmessagechanneldb = nullptr;
+    delete pSnapshotRequestDb; pSnapshotRequestDb = nullptr;
+    delete pAssetSnapshotDb; pAssetSnapshotDb = nullptr;
+    delete pDistributeSnapshotDb; pDistributeSnapshotDb = nullptr;
 
 #ifdef ENABLE_ZMQ
     if (g_zmq_notification_interface) {
@@ -1893,6 +1901,14 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
         delete passetsQualifierCache;
         delete passetsRestrictionCache;
         delete passetsGlobalRestrictionCache;
+        delete pmessagedb; pmessagedb = nullptr;
+        delete pmessagechanneldb; pmessagechanneldb = nullptr;
+        delete pMessagesCache; pMessagesCache = nullptr;
+        delete pMessageSubscribedChannelsCache; pMessageSubscribedChannelsCache = nullptr;
+        delete pMessagesSeenAddressCache; pMessagesSeenAddressCache = nullptr;
+        delete pSnapshotRequestDb; pSnapshotRequestDb = nullptr;
+        delete pAssetSnapshotDb; pAssetSnapshotDb = nullptr;
+        delete pDistributeSnapshotDb; pDistributeSnapshotDb = nullptr;
 
         // Note: -reindexassets does NOT wipe the DB here; ReindexAssets() selectively
         // erases only the address-balance keys ('B'/'C') while preserving asset metadata ('A' keys).
