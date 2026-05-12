@@ -899,6 +899,25 @@ RPCHelpMan signmessage();
 // rewards (wallet/rpc/rewards.cpp)
 RPCHelpMan distributereward();
 
+// assets (wallet/rpc/assets.cpp)
+RPCHelpMan issue();
+RPCHelpMan issueunique();
+RPCHelpMan issuequalifierasset();
+RPCHelpMan issuerestrictedasset();
+RPCHelpMan transfer();
+RPCHelpMan transferfromaddresses();
+RPCHelpMan transferfromaddress();
+RPCHelpMan transferqualifier();
+RPCHelpMan reissue();
+RPCHelpMan reissuerestrictedasset();
+RPCHelpMan listmyassets();
+RPCHelpMan addtagtoaddress();
+RPCHelpMan removetagfromaddress();
+RPCHelpMan freezeaddress();
+RPCHelpMan unfreezeaddress();
+RPCHelpMan freezerestrictedasset();
+RPCHelpMan unfreezerestrictedasset();
+
 // transactions
 RPCHelpMan listreceivedbyaddress();
 RPCHelpMan listreceivedbylabel();
@@ -972,6 +991,23 @@ std::span<const CRPCCommand> GetWalletRPCCommands()
         {"wallet", &walletpassphrasechange},
         {"wallet", &walletprocesspsmt},
         {"rewards", &distributereward},
+        {"assets", &issue},
+        {"assets", &issueunique},
+        {"assets", &issuequalifierasset},
+        {"assets", &issuerestrictedasset},
+        {"assets", &transfer},
+        {"assets", &transferfromaddresses},
+        {"assets", &transferfromaddress},
+        {"assets", &transferqualifier},
+        {"assets", &reissue},
+        {"assets", &reissuerestrictedasset},
+        {"assets", &listmyassets},
+        {"restricted_assets", &addtagtoaddress},
+        {"restricted_assets", &removetagfromaddress},
+        {"restricted_assets", &freezeaddress},
+        {"restricted_assets", &unfreezeaddress},
+        {"restricted_assets", &freezerestrictedasset},
+        {"restricted_assets", &unfreezerestrictedasset},
     };
     return commands;
 }

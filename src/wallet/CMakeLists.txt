@@ -21,6 +21,7 @@ add_library(meowcoin_wallet STATIC EXCLUDE_FROM_ALL
   rpc/backup.cpp
   rpc/coins.cpp
   rpc/encrypt.cpp
+  rpc/assets.cpp
   rpc/rewards.cpp
   rpc/signmessage.cpp
   rpc/spend.cpp
