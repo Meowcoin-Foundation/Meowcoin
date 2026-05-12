@@ -1905,6 +1905,18 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
         passetsRestrictionCache = new CLRUCache<std::string, int8_t>(MAX_CACHE_ASSETS_SIZE);
         passetsGlobalRestrictionCache = new CLRUCache<std::string, int8_t>(MAX_CACHE_ASSETS_SIZE);
 
+        // Messaging databases and caches
+        pMessagesCache = new CLRUCache<std::string, CMessage>(1000);
+        pMessageSubscribedChannelsCache = new CLRUCache<std::string, int8_t>(1000);
+        pMessagesSeenAddressCache = new CLRUCache<std::string, int8_t>(1000);
+        pmessagedb = new CMessageDB(args.GetDataDirNet(), nAssetDBCache, false, false);
+        pmessagechanneldb = new CMessageChannelDB(args.GetDataDirNet(), nAssetDBCache, false, false);
+
+        // Reward snapshot databases
+        pSnapshotRequestDb = new CSnapshotRequestDB(args.GetDataDirNet(), nAssetDBCache, false, false);
+        pAssetSnapshotDb = new CAssetSnapshotDB(args.GetDataDirNet(), nAssetDBCache, false, false);
+        pDistributeSnapshotDb = new CDistributeSnapshotRequestDB(args.GetDataDirNet(), nAssetDBCache, false, false);
+
         if (!passetsdb->LoadAssets(*passetsCache, &passets->mapAssetsAddressAmount, fAssetIndex)) {
             return InitError(_("Failed to load Assets Database"));
         }
