@@ -166,8 +166,8 @@ public:
         consensus.fStrictChainId = true;
         consensus.nLegacyBlocksBefore = 1614560;
 
-        consensus.nMinimumChainWork = uint256{"0000000000000000000000000000000000000000000000000859d8e6ba8224a4"};
-        consensus.defaultAssumeValid = uint256{"0000000000043a9280011ff1382e99ade4d90d51821cc4dadfb20bd1a0905b1c"}; // Block 50000
+        consensus.nMinimumChainWork = uint256{"0000000000000000000000000000000000000000000000197526491f2a073489"};
+        consensus.defaultAssumeValid = uint256{"0000000001325379def7e999973c963c62bac9bc150b466008bcfd49054d8c79"}; // Block 1911844
 
         /**
          * The message start string is designed to be unlikely to occur in normal data.
@@ -178,8 +178,8 @@ public:
         pchMessageStart[3] = 0x43; // C
         nDefaultPort = 8788;
         nPruneAfterHeight = 100000;
-        m_assumed_blockchain_size = 10;
-        m_assumed_chain_state_size = 2;
+        m_assumed_blockchain_size = 5;
+        m_assumed_chain_state_size = 1;
 
         // Set activation timestamps BEFORE genesis creation so GetHash() uses
         // the correct PoW algorithm during serialization.
@@ -216,9 +216,9 @@ public:
         m_assumeutxo_data = {}; // No assumeutxo data for Meowcoin yet
 
         chainTxData = ChainTxData{
-            .nTime    = 1665504479,
-            .tx_count = 99360,
-            .dTxRate  = 0.03289449084985968,
+            .nTime    = 1778698801,
+            .tx_count = 3489594,
+            .dTxRate  = 0.0179955433176024,
         };
 
         /** Meowcoin asset parameters **/
