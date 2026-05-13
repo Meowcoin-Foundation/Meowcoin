@@ -197,7 +197,6 @@ public:
         assert(consensus.hashGenesisBlock == uint256{"000000edd819220359469c54f2614b5602ebc775ea67a64602f354bdaa320f70"});
         assert(genesis.hashMerkleRoot == uint256{"e8916cf6592c8433d598c3a5fe60a9741fd2a997b39d93af2d789cdd9d9a7390"});
 
-        vSeeds.emplace_back("seed-mainnet-mewc.meowcoin.cc");
         vSeeds.emplace_back("dnsseed.nodeslist.xyz");
 
         base58Prefixes[PUBKEY_ADDRESS] = std::vector<unsigned char>(1,50);
@@ -209,7 +208,7 @@ public:
         bech32_hrp = "mewc";
         nExtCoinType = 1669;
 
-        vFixedSeeds.clear(); // TODO: populate with Meowcoin seed nodes
+        vFixedSeeds = std::vector<uint8_t>(std::begin(chainparams_seed_main), std::end(chainparams_seed_main));
 
         fDefaultConsistencyChecks = false;
         m_is_mockable_chain = false;
