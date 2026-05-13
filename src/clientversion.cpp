@@ -73,9 +73,9 @@ std::string CopyrightHolders(const std::string& strPrefix)
 {
     std::string str;
 
-    str += strPrefix + strprintf("Copyright (C) 2009-%i The Bitcoin Core developers", COPYRIGHT_YEAR);
-    str += "\n" + strPrefix + strprintf("Copyright (C) 2017-%i The Ravencoin developers", COPYRIGHT_YEAR);
-    str += "\n" + strPrefix + strprintf("Copyright (C) 2021-%i The Meowcoin Core developers", COPYRIGHT_YEAR);
+    str += strPrefix + strprintf("The Bitcoin Core developers");
+    str += "\n" + strprintf("Copyright (C) 2017-%i The Ravencoin developers", COPYRIGHT_YEAR);
+    str += "\n" + strprintf("Copyright (C) 2021-%i The Meowcoin Core developers", COPYRIGHT_YEAR);
 
     return str;
 }
