@@ -1,14 +1,14 @@
-/**********************************************************************
- * Copyright (c) 2020 Pieter Wuille                                   *
- * Distributed under the MIT software license, see the accompanying   *
- * file COPYING or http://www.opensource.org/licenses/mit-license.php.*
- **********************************************************************/
+/***********************************************************************
+ * Copyright (c) 2020 Pieter Wuille                                    *
+ * Distributed under the MIT software license, see the accompanying    *
+ * file COPYING or https://www.opensource.org/licenses/mit-license.php.*
+ ***********************************************************************/
 
-#ifndef _SECP256K1_MODULE_SCHNORRSIG_TESTS_EXHAUSTIVE_
-#define _SECP256K1_MODULE_SCHNORRSIG_TESTS_EXHAUSTIVE_
+#ifndef SECP256K1_MODULE_SCHNORRSIG_TESTS_EXHAUSTIVE_H
+#define SECP256K1_MODULE_SCHNORRSIG_TESTS_EXHAUSTIVE_H
 
-#include "include/secp256k1_schnorrsig.h"
-#include "src/modules/schnorrsig/main_impl.h"
+#include "../../../include/secp256k1_schnorrsig.h"
+#include "main_impl.h"
 
 static const unsigned char invalid_pubkey_bytes[][32] = {
     /* 0 */
@@ -58,15 +58,19 @@ static const unsigned char invalid_pubkey_bytes[][32] = {
 
 #define NUM_INVALID_KEYS (sizeof(invalid_pubkey_bytes) / sizeof(invalid_pubkey_bytes[0]))
 
-static int secp256k1_hardened_nonce_function_smallint(unsigned char *nonce32, const unsigned char *msg32,
+static int secp256k1_hardened_nonce_function_smallint(unsigned char *nonce32, const unsigned char *msg,
+                                                      size_t msglen,
                                                       const unsigned char *key32, const unsigned char *xonly_pk32,
-                                                      const unsigned char *algo16, void* data) {
+                                                      const unsigned char *algo, size_t algolen,
+                                                      void* data) {
     secp256k1_scalar s;
     int *idata = data;
-    (void)msg32;
+    (void)msg;
+    (void)msglen;
     (void)key32;
     (void)xonly_pk32;
-    (void)algo16;
+    (void)algo;
+    (void)algolen;
     secp256k1_scalar_set_int(&s, *idata);
     secp256k1_scalar_get_b32(nonce32, &s);
     return 1;
@@ -100,26 +104,26 @@ static void test_exhaustive_schnorrsig_verify(const secp256k1_context *ctx, cons
             while (e_count_done < EXHAUSTIVE_TEST_ORDER) {
                 secp256k1_scalar e;
                 unsigned char msg32[32];
-                secp256k1_testrand256(msg32);
-                secp256k1_schnorrsig_challenge(&e, sig64, msg32, pk32);
+                testrand256(msg32);
+                secp256k1_schnorrsig_challenge(&e, sig64, msg32, sizeof(msg32), pk32);
                 /* Only do work if we hit a challenge we haven't tried before. */
                 if (!e_done[e]) {
                     /* Iterate over the possible valid last 32 bytes in the signature.
                        0..order=that s value; order+1=random bytes */
-                    int count_valid = 0, s;
+                    int count_valid = 0;
+                    unsigned int s;
                     for (s = 0; s <= EXHAUSTIVE_TEST_ORDER + 1; ++s) {
                         int expect_valid, valid;
                         if (s <= EXHAUSTIVE_TEST_ORDER) {
-                            secp256k1_scalar s_s;
-                            secp256k1_scalar_set_int(&s_s, s);
-                            secp256k1_scalar_get_b32(sig64 + 32, &s_s);
+                            memset(sig64 + 32, 0, 32);
+                            secp256k1_write_be32(sig64 + 60, s);
                             expect_valid = actual_k != -1 && s != EXHAUSTIVE_TEST_ORDER &&
-                                           (s_s == (actual_k + actual_d * e) % EXHAUSTIVE_TEST_ORDER);
+                                           (s == (actual_k + actual_d * e) % EXHAUSTIVE_TEST_ORDER);
                         } else {
-                            secp256k1_testrand256(sig64 + 32);
+                            testrand256(sig64 + 32);
                             expect_valid = 0;
                         }
-                        valid = secp256k1_schnorrsig_verify(ctx, sig64, msg32, &pubkeys[d - 1]);
+                        valid = secp256k1_schnorrsig_verify(ctx, sig64, msg32, sizeof(msg32), &pubkeys[d - 1]);
                         CHECK(valid == expect_valid);
                         count_valid += valid;
                     }
@@ -137,6 +141,8 @@ static void test_exhaustive_schnorrsig_verify(const secp256k1_context *ctx, cons
 static void test_exhaustive_schnorrsig_sign(const secp256k1_context *ctx, unsigned char (*xonly_pubkey_bytes)[32], const secp256k1_keypair* keypairs, const int* parities) {
     int d, k;
     uint64_t iter = 0;
+    secp256k1_schnorrsig_extraparams extraparams = SECP256K1_SCHNORRSIG_EXTRAPARAMS_INIT;
+
     /* Loop over keys. */
     for (d = 1; d < EXHAUSTIVE_TEST_ORDER; ++d) {
         int actual_d = d;
@@ -149,19 +155,21 @@ static void test_exhaustive_schnorrsig_sign(const secp256k1_context *ctx, unsign
             unsigned char sig64[64];
             int actual_k = k;
             if (skip_section(&iter)) continue;
+            extraparams.noncefp = secp256k1_hardened_nonce_function_smallint;
+            extraparams.ndata = &k;
             if (parities[k - 1]) actual_k = EXHAUSTIVE_TEST_ORDER - k;
             /* Generate random messages until all challenges have been tried. */
             while (e_count_done < EXHAUSTIVE_TEST_ORDER) {
                 secp256k1_scalar e;
-                secp256k1_testrand256(msg32);
-                secp256k1_schnorrsig_challenge(&e, xonly_pubkey_bytes[k - 1], msg32, xonly_pubkey_bytes[d - 1]);
+                testrand256(msg32);
+                secp256k1_schnorrsig_challenge(&e, xonly_pubkey_bytes[k - 1], msg32, sizeof(msg32), xonly_pubkey_bytes[d - 1]);
                 /* Only do work if we hit a challenge we haven't tried before. */
                 if (!e_done[e]) {
                     secp256k1_scalar expected_s = (actual_k + e * actual_d) % EXHAUSTIVE_TEST_ORDER;
                     unsigned char expected_s_bytes[32];
                     secp256k1_scalar_get_b32(expected_s_bytes, &expected_s);
                     /* Invoke the real function to construct a signature. */
-                    CHECK(secp256k1_schnorrsig_sign(ctx, sig64, msg32, &keypairs[d - 1], secp256k1_hardened_nonce_function_smallint, &k));
+                    CHECK(secp256k1_schnorrsig_sign_custom(ctx, sig64, msg32, sizeof(msg32), &keypairs[d - 1], &extraparams));
                     /* The first 32 bytes must match the xonly pubkey for the specified k. */
                     CHECK(secp256k1_memcmp_var(sig64, xonly_pubkey_bytes[k - 1], 32) == 0);
                     /* The last 32 bytes must match the expected s value. */

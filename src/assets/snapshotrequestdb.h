@@ -2,8 +2,8 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef SNAPSHOTREQUESTDB_H
-#define SNAPSHOTREQUESTDB_H
+#ifndef BITCOIN_ASSETS_SNAPSHOTREQUESTDB_H
+#define BITCOIN_ASSETS_SNAPSHOTREQUESTDB_H
 
 #include <dbwrapper.h>
 
@@ -11,8 +11,9 @@
 #include <vector>
 #include <set>
 
-#include "amount.h"
-#include "assets/rewards.h"
+#include <consensus/amount.h>
+#include <assets/rewards.h>
+#include <util/fs.h>
 
 class CSnapshotRequestDBEntry
 {
@@ -42,21 +43,18 @@ public:
     }
 
     // Serialization methods
-    ADD_SERIALIZE_METHODS;
-
-    template<typename Stream, typename Operation>
-    inline void SerializationOp(Stream &s, Operation ser_action)
+    SERIALIZE_METHODS(CSnapshotRequestDBEntry, obj)
     {
-        READWRITE(assetName);
-        READWRITE(heightForSnapshot);
-        READWRITE(heightAndName);
+        READWRITE(obj.assetName);
+        READWRITE(obj.heightForSnapshot);
+        READWRITE(obj.heightAndName);
     }
 };
 
 class CSnapshotRequestDB  : public CDBWrapper
 {
 public:
-    explicit CSnapshotRequestDB(size_t nCacheSize, bool fMemory = false, bool fWipe = false);
+    explicit CSnapshotRequestDB(const fs::path& datadir, size_t nCacheSize, bool fMemory = false, bool fWipe = false);
 
     CSnapshotRequestDB(const CSnapshotRequestDB&) = delete;
     CSnapshotRequestDB& operator=(const CSnapshotRequestDB&) = delete;
@@ -89,7 +87,7 @@ public:
 class CDistributeSnapshotRequestDB  : public CDBWrapper
 {
 public:
-    explicit CDistributeSnapshotRequestDB(size_t nCacheSize, bool fMemory = false, bool fWipe = false);
+    explicit CDistributeSnapshotRequestDB(const fs::path& datadir, size_t nCacheSize, bool fMemory = false, bool fWipe = false);
 
     CDistributeSnapshotRequestDB(const CDistributeSnapshotRequestDB&) = delete;
     CDistributeSnapshotRequestDB& operator=(const CDistributeSnapshotRequestDB&) = delete;
@@ -114,4 +112,4 @@ public:
 
 
 
-#endif //SNAPSHOTREQUESTDB_H
+#endif // BITCOIN_ASSETS_SNAPSHOTREQUESTDB_H

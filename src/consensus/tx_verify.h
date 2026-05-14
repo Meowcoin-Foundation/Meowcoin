@@ -1,32 +1,29 @@
-// Copyright (c) 2017-2017 The Bitcoin Core developers
-// Copyright (c) 2017-2020 The Meowcoin Core developers
+// Copyright (c) 2017-present The Meowcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef MEOWCOIN_CONSENSUS_TX_VERIFY_H
-#define MEOWCOIN_CONSENSUS_TX_VERIFY_H
+#ifndef BITCOIN_CONSENSUS_TX_VERIFY_H
+#define BITCOIN_CONSENSUS_TX_VERIFY_H
 
-#include "amount.h"
+#include <consensus/amount.h>
 
-#include <stdint.h>
-#include <vector>
-#include <string>
+#include <cstdint>
+#include <map>
 #include <set>
+#include <string>
+#include <vector>
 
 class CBlockIndex;
 class CCoinsViewCache;
 class CTransaction;
-class CValidationState;
+class TxValidationState;
 class CAssetsCache;
-class CTxOut;
-class uint256;
+class CTxMemPool;
 class CMessage;
 class CNullAssetTxData;
+class uint256;
 
 /** Transaction validation functions */
-
-/** Context-independent validity checks */
-bool CheckTransaction(const CTransaction& tx, CValidationState& state, bool fCheckDuplicateInputs=true, bool fMempoolCheck = false, bool fBlockCheck = false);
 
 namespace Consensus {
 /**
@@ -35,11 +32,16 @@ namespace Consensus {
  * @param[out] txfee Set to the transaction fee if successful.
  * Preconditions: tx.IsCoinBase() is false.
  */
-bool CheckTxInputs(const CTransaction& tx, CValidationState& state, const CCoinsViewCache& inputs, int nSpendHeight, CAmount& txfee);
+[[nodiscard]] bool CheckTxInputs(const CTransaction& tx, TxValidationState& state, const CCoinsViewCache& inputs, int nSpendHeight, CAmount& txfee);
 
-/** MEWC START */
-bool CheckTxAssets(const CTransaction& tx, CValidationState& state, const CCoinsViewCache& inputs, CAssetsCache* assetCache, bool fCheckMempool, std::vector<std::pair<std::string, uint256> >& vPairReissueAssets, const bool fRunningUnitTests = false, std::set<CMessage>* setMessages = nullptr, int64_t nBlocktime = 0,  std::vector<std::pair<std::string, CNullAssetTxData>>* myNullAssetData = nullptr);
-/** MEWC END */
+/** Check asset inputs/outputs balance and validate asset operations */
+bool CheckTxAssets(const CTransaction& tx, TxValidationState& state, const CCoinsViewCache& inputs,
+                   CAssetsCache* assetCache, const CTxMemPool* mempool,
+                   std::vector<std::pair<std::string, uint256>>& vPairReissueAssets,
+                   const bool fRunningUnitTests = false,
+                   std::set<CMessage>* setMessages = nullptr,
+                   int64_t nBlocktime = 0,
+                   std::vector<std::pair<std::string, CNullAssetTxData>>* myNullAssetData = nullptr);
 } // namespace Consensus
 
 /** Auxiliary functions for transaction validation (ideally should not be exposed) */
@@ -53,7 +55,7 @@ unsigned int GetLegacySigOpCount(const CTransaction& tx);
 
 /**
  * Count ECDSA signature operations in pay-to-script-hash inputs.
- * 
+ *
  * @param[in] mapInputs Map of previous transactions that have outputs we're spending
  * @return maximum number of sigops required to validate this transaction's inputs
  * @see CTransaction::FetchInputs
@@ -64,10 +66,10 @@ unsigned int GetP2SHSigOpCount(const CTransaction& tx, const CCoinsViewCache& ma
  * Compute total signature operation cost of a transaction.
  * @param[in] tx     Transaction for which we are computing the cost
  * @param[in] inputs Map of previous transactions that have outputs we're spending
- * @param[out] flags Script verification flags
+ * @param[in] flags Script verification flags
  * @return Total signature operation cost of tx
  */
-int64_t GetTransactionSigOpCost(const CTransaction& tx, const CCoinsViewCache& inputs, int flags);
+int64_t GetTransactionSigOpCost(const CTransaction& tx, const CCoinsViewCache& inputs, uint32_t flags);
 
 /**
  * Check if transaction is final and can be included in a block with the
@@ -78,16 +80,16 @@ bool IsFinalTx(const CTransaction &tx, int nBlockHeight, int64_t nBlockTime);
 /**
  * Calculates the block height and previous block's median time past at
  * which the transaction will be considered final in the context of BIP 68.
- * Also removes from the vector of input heights any entries which did not
- * correspond to sequence locked inputs as they do not affect the calculation.
+ * For each input that is not sequence locked, the corresponding entries in
+ * prevHeights are set to 0 as they do not affect the calculation.
  */
-std::pair<int, int64_t> CalculateSequenceLocks(const CTransaction &tx, int flags, std::vector<int>* prevHeights, const CBlockIndex& block);
+std::pair<int, int64_t> CalculateSequenceLocks(const CTransaction &tx, int flags, std::vector<int>& prevHeights, const CBlockIndex& block);
 
 bool EvaluateSequenceLocks(const CBlockIndex& block, std::pair<int, int64_t> lockPair);
 /**
  * Check if transaction is final per BIP 68 sequence numbers and can be included in a block.
  * Consensus critical. Takes as input a list of heights at which tx's inputs (in order) confirmed.
  */
-bool SequenceLocks(const CTransaction &tx, int flags, std::vector<int>* prevHeights, const CBlockIndex& block);
+bool SequenceLocks(const CTransaction &tx, int flags, std::vector<int>& prevHeights, const CBlockIndex& block);
 
-#endif // MEOWCOIN_CONSENSUS_TX_VERIFY_H
+#endif // BITCOIN_CONSENSUS_TX_VERIFY_H

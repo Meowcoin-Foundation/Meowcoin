@@ -1,30 +1,38 @@
 #!/usr/bin/env python3
-# Copyright (c) 2017 The Bitcoin Core developers
-# Copyright (c) 2017-2020 The Meowcoin Core developers
+# Copyright (c) 2017-2021 The Meowcoin Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
+"""Test various fingerprinting protections.
 
-"""
-Test various fingerprinting protections.
-
-If an stale block more than a month old or its header are requested by a peer,
+If a stale block more than a month old or its header are requested by a peer,
 the node should pretend that it does not have it to avoid fingerprinting.
 """
 
 import time
-from test_framework.blocktools import create_block, create_coinbase
-from test_framework.mininode import CInv, NetworkThread, NodeConn, NodeConnCB, MsgHeaders, MsgBlock, MsgGetdata, MsgGetHeaders, wait_until
-from test_framework.test_framework import MeowcoinTestFramework
-from test_framework.util import assert_equal, p2p_port
 
-class P2PFingerprintTest(MeowcoinTestFramework):
+from test_framework.blocktools import (create_block, create_coinbase)
+from test_framework.messages import CInv, MSG_BLOCK
+from test_framework.p2p import (
+    P2PInterface,
+    msg_headers,
+    msg_block,
+    msg_getdata,
+    msg_getheaders,
+    p2p_lock,
+)
+from test_framework.test_framework import BitcoinTestFramework
+from test_framework.util import (
+    assert_equal,
+)
+
+
+class P2PFingerprintTest(BitcoinTestFramework):
     def set_test_params(self):
         self.setup_clean_chain = True
         self.num_nodes = 1
 
     # Build a chain of blocks on top of given one
-    @staticmethod
-    def build_chain(nblocks, prev_hash, prev_height, prev_median_time):
+    def build_chain(self, nblocks, prev_hash, prev_height, prev_median_time):
         blocks = []
         for _ in range(nblocks):
             coinbase = create_coinbase(prev_height + 1)
@@ -33,57 +41,35 @@ class P2PFingerprintTest(MeowcoinTestFramework):
             block.solve()
 
             blocks.append(block)
-            prev_hash = block.hash
+            prev_hash = block.hash_hex
             prev_height += 1
             prev_median_time = block_time
         return blocks
 
     # Send a getdata request for a given block hash
-    @staticmethod
-    def send_block_request(block_hash, node):
-        msg = MsgGetdata()
-        msg.inv.append(CInv(2, block_hash))  # 2 == "Block"
-        node.send_message(msg)
+    def send_block_request(self, block_hash, node):
+        msg = msg_getdata()
+        msg.inv.append(CInv(MSG_BLOCK, block_hash))
+        node.send_without_ping(msg)
 
     # Send a getheaders request for a given single block hash
-    @staticmethod
-    def send_header_request(block_hash, node):
-        msg = MsgGetHeaders()
+    def send_header_request(self, block_hash, node):
+        msg = msg_getheaders()
         msg.hashstop = block_hash
-        node.send_message(msg)
-
-    # Check whether last block received from node has a given hash
-    @staticmethod
-    def last_block_equals(expected_hash, node):
-        block_msg = node.last_message.get("block")
-        return block_msg and block_msg.block.rehash() == expected_hash
-
-    # Check whether last block header received from node has a given hash
-    @staticmethod
-    def last_header_equals(expected_hash, node):
-        headers_msg = node.last_message.get("headers")
-        return (headers_msg and
-                headers_msg.headers and
-                headers_msg.headers[0].rehash() == expected_hash)
+        node.send_without_ping(msg)
 
     # Checks that stale blocks timestamped more than a month ago are not served
     # by the node while recent stale blocks and old active chain blocks are.
     # This does not currently test that stale blocks timestamped within the
     # last month but that have over a month's worth of work are also withheld.
     def run_test(self):
-        node0 = NodeConnCB()
-
-        connections = [NodeConn('127.0.0.1', p2p_port(0), self.nodes[0], node0)]
-        node0.add_connection(connections[0])
-
-        NetworkThread().start()
-        node0.wait_for_verack()
+        node0 = self.nodes[0].add_p2p_connection(P2PInterface())
 
         # Set node time to 60 days ago
-        self.nodes[0].setmocktime(int(time.time()) - 60 * 24 * 60 * 6)
+        self.nodes[0].setmocktime(int(time.time()) - 60 * 24 * 60 * 60)
 
         # Generating a chain of 10 blocks
-        block_hashes = self.nodes[0].generate(nblocks=10)
+        block_hashes = self.generatetoaddress(self.nodes[0], 10, self.nodes[0].get_deterministic_priv_key().address)
 
         # Create longer chain starting 2 blocks before current tip
         height = len(block_hashes) - 2
@@ -92,10 +78,10 @@ class P2PFingerprintTest(MeowcoinTestFramework):
         new_blocks = self.build_chain(5, block_hash, height, block_time)
 
         # Force reorg to a longer chain
-        node0.send_message(MsgHeaders(new_blocks))
-        node0.wait_for_getdata()
+        node0.send_without_ping(msg_headers(new_blocks))
+        node0.wait_for_getdata([x.hash_int for x in new_blocks])
         for block in new_blocks:
-            node0.send_and_ping(MsgBlock(block))
+            node0.send_and_ping(msg_block(block))
 
         # Check that reorg succeeded
         assert_equal(self.nodes[0].getblockcount(), 13)
@@ -104,34 +90,31 @@ class P2PFingerprintTest(MeowcoinTestFramework):
 
         # Check that getdata request for stale block succeeds
         self.send_block_request(stale_hash, node0)
-        test_function = lambda: self.last_block_equals(stale_hash, node0)
-        wait_until(test_function, timeout=3, err_msg="test_function 1")
+        node0.wait_for_block(stale_hash, timeout=3)
 
         # Check that getheader request for stale block header succeeds
         self.send_header_request(stale_hash, node0)
-        test_function = lambda: self.last_header_equals(stale_hash, node0)
-        wait_until(test_function, timeout=3, err_msg="test_function 2")
+        node0.wait_for_header(hex(stale_hash), timeout=3)
 
         # Longest chain is extended so stale is much older than chain tip
         self.nodes[0].setmocktime(0)
-        tip = self.nodes[0].generate(nblocks=1)[0]
+        block_hash = int(self.generatetoaddress(self.nodes[0], 1, self.nodes[0].get_deterministic_priv_key().address)[-1], 16)
         assert_equal(self.nodes[0].getblockcount(), 14)
-
-        # Send getdata & getheaders to refresh last received getheader message
-        block_hash = int(tip, 16)
-        self.send_block_request(block_hash, node0)
-        self.send_header_request(block_hash, node0)
-        node0.sync_with_ping()
+        node0.wait_for_block(block_hash, timeout=3)
 
         # Request for very old stale block should now fail
+        with p2p_lock:
+            node0.last_message.pop("block", None)
         self.send_block_request(stale_hash, node0)
-        time.sleep(3)
-        assert not self.last_block_equals(stale_hash, node0)
+        node0.sync_with_ping()
+        assert "block" not in node0.last_message
 
         # Request for very old stale block header should now fail
+        with p2p_lock:
+            node0.last_message.pop("headers", None)
         self.send_header_request(stale_hash, node0)
-        time.sleep(3)
-        assert not self.last_header_equals(stale_hash, node0)
+        node0.sync_with_ping()
+        assert "headers" not in node0.last_message
 
         # Verify we can fetch very old blocks and headers on the active chain
         block_hash = int(block_hashes[2], 16)
@@ -140,12 +123,11 @@ class P2PFingerprintTest(MeowcoinTestFramework):
         node0.sync_with_ping()
 
         self.send_block_request(block_hash, node0)
-        test_function = lambda: self.last_block_equals(block_hash, node0)
-        wait_until(test_function, timeout=3, err_msg="test_function 3")
+        node0.wait_for_block(block_hash, timeout=3)
 
         self.send_header_request(block_hash, node0)
-        test_function = lambda: self.last_header_equals(block_hash, node0)
-        wait_until(test_function, timeout=3, err_msg="test_function 4")
+        node0.wait_for_header(hex(block_hash), timeout=3)
+
 
 if __name__ == '__main__':
-    P2PFingerprintTest().main()
+    P2PFingerprintTest(__file__).main()

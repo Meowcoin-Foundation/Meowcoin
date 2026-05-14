@@ -1,85 +1,105 @@
-Build instructions for Meowcoin 
-=================================
-FreeBSD 13.0
----------------------------------
-This will install most of the dependencies from FreeBSD pkg.
+# FreeBSD Build Guide
 
-The only one we build, is Berkeley DB 4.8.
+**Updated for FreeBSD [14.3](https://www.freebsd.org/releases/14.3R/announce/)**
 
+This guide describes how to build meowcoind, command-line utilities, and GUI on FreeBSD.
 
-Install dependencies:
-----------------------------
-`# pkg install autoconf automake boost-libs git gmake libevent libtool pkgconf openssl
-`
+## Preparation
 
-Optional dependencies
-----------------------
-Qt5 for GUI
+### 1. Install Required Dependencies
+Run the following as root to install the base dependencies for building.
 
-`# pkg install qt5`
+```bash
+pkg install boost-libs cmake git libevent pkgconf
+```
 
-libqrencode for QR Code support.
+SQLite is required for the wallet:
 
-`# pkg install libqrencode`
+```bash
+pkg install sqlite3
+```
 
+To build Meowcoin Core without the wallet, use `-DENABLE_WALLET=OFF`.
 
-Directory structure
-------------------
-Meowcoin sources in `$HOME/src`
+Cap'n Proto is needed for IPC functionality (see [multiprocess.md](multiprocess.md)):
 
-Berkeley DB will be installed to `$HOME/src/db4`
+```bash
+pkg install capnproto
+```
 
+Compile with `-DENABLE_IPC=OFF` if you do not need IPC functionality.
 
-Meowcoin
-------------------
+See [dependencies.md](dependencies.md) for a complete overview.
 
-Start in $HOME
+### 2. Clone Meowcoin Repo
+Now that `git` and all the required dependencies are installed, let's clone the Meowcoin Core repository to a directory. All build scripts and commands will run from this directory.
+```bash
+git clone https://github.com/meowcoin/meowcoin.git
+```
 
-Make the directory for sources and go into it.
+### 3. Install Optional Dependencies
 
-`mkdir src`
+#### GUI Dependencies
+###### Qt6
 
-`cd src`
+Meowcoin Core includes a GUI built with the cross-platform Qt Framework. To compile the GUI, we need to install
+the necessary parts of Qt, the libqrencode and pass `-DBUILD_GUI=ON`. Skip if you don't intend to use the GUI.
 
-__Download Meowcoin source.__
+```bash
+pkg install qt6-base qt6-tools
+```
 
-`git clone https://github.com/JustAResearcher/Meowcoin`
+###### libqrencode
 
-`cd Meowcoin`
+The GUI will be able to encode addresses in QR codes unless this feature is explicitly disabled. To install libqrencode, run:
 
-`git checkout develop` # this checks out the develop branch.
+```bash
+pkg install libqrencode
+```
 
-__Download and build Berkeley DB 4.8__
+Otherwise, if you don't need QR encoding support, use the `-DWITH_QRENCODE=OFF` option to disable this feature in order to compile the GUI.
 
-`contrib/install_db4.sh ../`
+---
 
-__The build process:__
+#### Notifications
+###### ZeroMQ
 
-`./autogen.sh`
+Meowcoin Core can provide notifications via ZeroMQ. If the package is installed, support will be compiled in.
+```bash
+pkg install libzmq4
+```
 
-This is for `sh` or `bash`. 
+#### Test Suite Dependencies
+There is an included test suite that is useful for testing code changes when developing.
+To run the test suite (recommended), you will need to have Python 3 installed:
 
-`export BDB_PREFIX=$HOME/src/db4`
+```bash
+pkg install python3 databases/py-sqlite3 net/py-pyzmq
+```
+---
 
-`./configure BDB_LIBS="-L${BDB_PREFIX}/lib -ldb_cxx-4.8" BDB_CFLAGS="-I${BDB_PREFIX}/include" CFLAGS="-fPIC" CXXFLAGS="-fPIC -I/usr/local/include" --prefix=/usr/local --enable-sse2 --disable-tests MAKE=gmake`
+## Building Meowcoin Core
 
-_Adjust to own needs. `--prefix=/usr/local` will install the binaries to `/usr/local/bin`_
+### 1. Configuration
 
+There are many ways to configure Meowcoin Core, here are a few common examples:
 
-`gmake -j8`  # 8 for 8 build threads, adjust to fit your setup.
+##### Wallet and GUI:
+This enables the GUI, assuming `sqlite` and `qt` are installed.
+```bash
+cmake -B build -DBUILD_GUI=ON
+```
 
-You can now start meowcoin-qt from the build directory.
+Run `cmake -B build -LH` to see the full list of available options.
 
-`src/qt/meowcoin-qt`
+##### No Wallet or GUI
+```bash
+cmake -B build -DENABLE_WALLET=OFF
+```
 
-meowcoind and meowcoin-cli are in `src/`
+### 2. Compile
 
-
-__Optional:__
-
-`make install`  # if you want to install the binaries to /usr/local/bin.
-
-
-
-
-
+```bash
+cmake --build build     # Append "-j N" for N parallel jobs.
+ctest --test-dir build  # Append "-j N" for N parallel tests.
+```

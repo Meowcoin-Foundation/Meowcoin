@@ -1,54 +1,62 @@
-// Copyright (c) 2017 The Bitcoin Core developers
-// Copyright (c) 2017-2020 The Meowcoin Core developers
+// Copyright (c) 2017-present The Meowcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef MEOWCOIN_RPC_BLOCKCHAIN_H
-#define MEOWCOIN_RPC_BLOCKCHAIN_H
-#include <map>
-#include <string>
-#include "primitives/algos.h"
+#ifndef BITCOIN_RPC_BLOCKCHAIN_H
+#define BITCOIN_RPC_BLOCKCHAIN_H
+
+#include <consensus/amount.h>
+#include <core_io.h>
+#include <streams.h>
+#include <sync.h>
+#include <util/fs.h>
+#include <validation.h>
+
+#include <any>
+#include <cstdint>
+#include <vector>
 
 class CBlock;
 class CBlockIndex;
-class CTxMemPool;
+class Chainstate;
 class UniValue;
-class JSONRPCRequest;
+namespace node {
+class BlockManager;
+struct NodeContext;
+} // namespace node
 
-
-// To be used by local rpc GPU mining only
-extern std::map<std::string, CBlock> mapMEWCKAWBlockTemplates;
-extern std::map<std::string, CBlock> mapMEWCMEOWBlockTemplates;
-
+static constexpr int NUM_GETBLOCKSTATS_PERCENTILES = 5;
 
 /**
- * Get the difficulty of the net wrt to the given block index, or the chain tip if
- * not provided.
+ * Get the difficulty of the net wrt to the given block index.
  *
  * @return A floating point number that is a multiple of the main net minimum
  * difficulty (4295032833 hashes).
  */
-double GetDifficulty(const CBlockIndex* blockindex = nullptr);
-double GetDifficulty(PowAlgo algo);
-
-/** Callback for when block tip changed. */
-void RPCNotifyBlockChange(bool ibd, const CBlockIndex *);
+double GetDifficulty(const CBlockIndex& blockindex);
 
 /** Block description to JSON */
-UniValue blockToJSON(const CBlock& block, const CBlockIndex* blockindex, bool txDetails = false);
-UniValue decodeblockToJSON(const CBlock& block);
-
-/** Mempool information to JSON */
-UniValue MempoolInfoToJSON(CTxMemPool& pool);
-
-/** Mempool to JSON */
-UniValue mempoolToJSON(bool fVerbose = false);
+UniValue blockToJSON(node::BlockManager& blockman, const CBlock& block, const CBlockIndex& tip, const CBlockIndex& blockindex, TxVerbosity verbosity, const uint256 pow_limit) LOCKS_EXCLUDED(cs_main);
 
 /** Block header to JSON */
-UniValue blockheaderToJSON(const CBlockIndex* blockindex);
+UniValue blockheaderToJSON(const CBlockIndex& tip, const CBlockIndex& blockindex, const uint256 pow_limit) LOCKS_EXCLUDED(cs_main);
 
-/** Block statistics to JSON */
-UniValue getblockstats(const JSONRPCRequest& request);
+/** Used by getblockstats to get feerates at different percentiles by weight  */
+void CalculatePercentilesByWeight(CAmount result[NUM_GETBLOCKSTATS_PERCENTILES], std::vector<std::pair<CAmount, int64_t>>& scores, int64_t total_weight);
 
-#endif
+/**
+ * Test-only helper to create UTXO snapshots given a chainstate and a file handle.
+ * @return a UniValue map containing metadata about the snapshot.
+ */
+UniValue CreateUTXOSnapshot(
+    node::NodeContext& node,
+    Chainstate& chainstate,
+    AutoFile&& afile,
+    const fs::path& path,
+    const fs::path& tmppath);
 
+//! Return height of highest block that has been pruned, or std::nullopt if no blocks have been pruned
+std::optional<int> GetPruneHeight(const node::BlockManager& blockman, const CChain& chain) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+void CheckBlockDataAvailability(node::BlockManager& blockman, const CBlockIndex& blockindex, bool check_for_undo) EXCLUSIVE_LOCKS_REQUIRED(::cs_main);
+
+#endif // BITCOIN_RPC_BLOCKCHAIN_H

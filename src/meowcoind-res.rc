@@ -1,10 +1,8 @@
 #include <windows.h>             // needed for VERSIONINFO
 #include "clientversion.h"       // holds the needed client version information
 
-#define VER_PRODUCTVERSION     CLIENT_VERSION_MAJOR,CLIENT_VERSION_MINOR,CLIENT_VERSION_REVISION,CLIENT_VERSION_BUILD
-#define VER_PRODUCTVERSION_STR STRINGIZE(CLIENT_VERSION_MAJOR) "." STRINGIZE(CLIENT_VERSION_MINOR) "." STRINGIZE(CLIENT_VERSION_REVISION) "." STRINGIZE(CLIENT_VERSION_BUILD)
+#define VER_PRODUCTVERSION     CLIENT_VERSION_MAJOR,CLIENT_VERSION_MINOR,CLIENT_VERSION_BUILD
 #define VER_FILEVERSION        VER_PRODUCTVERSION
-#define VER_FILEVERSION_STR    VER_PRODUCTVERSION_STR
 
 VS_VERSION_INFO VERSIONINFO
 FILEVERSION     VER_FILEVERSION
@@ -16,15 +14,15 @@ BEGIN
     BEGIN
         BLOCK "040904E4" // U.S. English - multilingual (hex)
         BEGIN
-            VALUE "CompanyName",        "Meowcoin"
+            VALUE "CompanyName",        CLIENT_NAME " project"
             VALUE "FileDescription",    "meowcoind (Meowcoin node with a JSON-RPC server)"
-            VALUE "FileVersion",        VER_FILEVERSION_STR
+            VALUE "FileVersion",        CLIENT_VERSION_STRING
             VALUE "InternalName",       "meowcoind"
             VALUE "LegalCopyright",     COPYRIGHT_STR
             VALUE "LegalTrademarks1",   "Distributed under the MIT software license, see the accompanying file COPYING or http://www.opensource.org/licenses/mit-license.php."
             VALUE "OriginalFilename",   "meowcoind.exe"
             VALUE "ProductName",        "meowcoind"
-            VALUE "ProductVersion",     VER_PRODUCTVERSION_STR
+            VALUE "ProductVersion",     CLIENT_VERSION_STRING
         END
     END
 

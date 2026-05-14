@@ -3,14 +3,16 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include "amount.h"
-#include "uint256.h"
+#include <consensus/amount.h>
+#include <uint256.h>
 
 #include <QList>
 #include <QString>
 
+namespace wallet {
 class CWallet;
 class CWalletTx;
+}
 
 /** UI model for a transaction. A core transaction can be represented by multiple UI transactions if it has
     multiple outputs.
@@ -50,8 +52,8 @@ public:
 
     /** Decompose CWallet transaction to model transaction records.
      */
-    static bool showTransaction(const CWalletTx &wtx);
-    static QList<MyRestrictedAssetRecord> decomposeTransaction(const CWallet *wallet, const CWalletTx &wtx);
+    static bool showTransaction(const wallet::CWalletTx &wtx);
+    static QList<MyRestrictedAssetRecord> decomposeTransaction(const wallet::CWallet *wallet, const wallet::CWalletTx &wtx);
 
     /** @name Immutable transaction attributes
       @{*/

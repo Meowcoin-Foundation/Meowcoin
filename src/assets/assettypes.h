@@ -1,17 +1,22 @@
 // Copyright (c) 2019 The Meowcoin Core developers
+// Copyright (c) 2022 The Meowcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef MEOWCOINCOIN_NEWASSET_H
-#define MEOWCOINCOIN_NEWASSET_H
+#ifndef BITCOIN_ASSETS_ASSETTYPES_H
+#define BITCOIN_ASSETS_ASSETTYPES_H
 
-#include <string>
-#include <sstream>
+#include <addresstype.h>
+#include <consensus/amount.h>
+#include <primitives/transaction.h>
+#include <serialize.h>
+#include <uint256.h>
+
+#include <cstdint>
 #include <list>
+#include <sstream>
+#include <string>
 #include <unordered_map>
-#include "amount.h"
-#include "script/standard.h"
-#include "primitives/transaction.h"
 
 #define MAX_UNIT 8
 #define MIN_UNIT 0
@@ -43,7 +48,7 @@ enum class QualifierType
 enum class RestrictedType
 {
     UNFREEZE_ADDRESS = 0,
-    FREEZE_ADDRESS= 1,
+    FREEZE_ADDRESS = 1,
     GLOBAL_UNFREEZE = 2,
     GLOBAL_FREEZE = 3
 };
@@ -51,48 +56,69 @@ enum class RestrictedType
 int IntFromAssetType(AssetType type);
 AssetType AssetTypeFromInt(int nType);
 
-const char IPFS_SHA2_256 = 0x12;
-const char TXID_NOTIFIER = 0x54;
-const char IPFS_SHA2_256_LEN = 0x20;
+// Integer constants matching IsAssetScript() return values.
+// These correspond to TxoutType enum class values in script/solver.h but are used
+// as plain ints by the asset subsystem's IsAssetScript() which predates enum class.
+static constexpr int TX_NEW_ASSET = 8;
+static constexpr int TX_REISSUE_ASSET = 9;
+static constexpr int TX_TRANSFER_ASSET = 10;
+static constexpr int TX_RESTRICTED_ASSET_DATA = 11;
 
-template <typename Stream, typename Operation>
-bool ReadWriteAssetHash(Stream &s, Operation ser_action, std::string &strIPFSHash)
+// Output entry describing an asset found in a transaction output
+struct CAssetOutputEntry
 {
-    // assuming 34-byte IPFS SHA2-256 decoded hash (0x12, 0x20, 32 more bytes)
-    if (ser_action.ForRead())
-    {
-        strIPFSHash = "";
-        if (!s.empty() and s.size() >= 33) {
-            char _sha2_256;
-            ::Unserialize(s, _sha2_256);
-            std::basic_string<char> hash;
-            ::Unserialize(s, hash);
+    int type;               // TX_NEW_ASSET, TX_TRANSFER_ASSET, TX_REISSUE_ASSET
+    std::string assetName;
+    CTxDestination destination;
+    CAmount nAmount;
+    std::string message;    // for transfers with attached message
+    int64_t expireTime{0};  // for transfers with expiration
+};
 
-            std::ostringstream os;
+static constexpr int8_t IPFS_SHA2_256 = 0x12;
+static constexpr int8_t TXID_NOTIFIER = 0x54;
+static constexpr int8_t IPFS_SHA2_256_LEN = 0x20;
 
-            // If it is an ipfs hash, we put the Q and the m 'Qm' at the front
-            if (_sha2_256 == IPFS_SHA2_256)
-                os << IPFS_SHA2_256 << IPFS_SHA2_256_LEN;
-
-            os << hash.substr(0, 32); // Get the 32 bytes of data
-            strIPFSHash = os.str();
-            return true;
-        }
-    }
-    else
-    {
-        if (strIPFSHash.length() == 34) {
-            ::Serialize(s, IPFS_SHA2_256);
-            ::Serialize(s, strIPFSHash.substr(2));
-            return true;
-        } else if (strIPFSHash.length() == 32) {
-            ::Serialize(s, TXID_NOTIFIER);
-            ::Serialize(s, strIPFSHash);
-            return true;
-        }
+// Helper: serialize an IPFS/TXID hash to a stream
+template <typename Stream>
+bool SerializeIPFSHash(Stream& s, const std::string& strIPFSHash)
+{
+    if (strIPFSHash.length() == 34) {
+        int8_t type = IPFS_SHA2_256;
+        ::Serialize(s, type);
+        std::string hashData = strIPFSHash.substr(2);
+        ::Serialize(s, hashData);
+        return true;
+    } else if (strIPFSHash.length() == 32) {
+        int8_t type = TXID_NOTIFIER;
+        ::Serialize(s, type);
+        ::Serialize(s, strIPFSHash);
+        return true;
     }
     return false;
-};
+}
+
+// Helper: unserialize an IPFS/TXID hash from a stream
+// Requires the stream to support size() and empty() (e.g., DataStream).
+template <typename Stream>
+bool UnserializeIPFSHash(Stream& s, std::string& strIPFSHash)
+{
+    strIPFSHash.clear();
+    if (!s.empty() && s.size() >= 33) {
+        int8_t type;
+        ::Unserialize(s, type);
+        std::string hash;
+        ::Unserialize(s, hash);
+
+        if (type == IPFS_SHA2_256) {
+            strIPFSHash += char(IPFS_SHA2_256);
+            strIPFSHash += char(IPFS_SHA2_256_LEN);
+        }
+        strIPFSHash.append(hash, 0, 32);
+        return true;
+    }
+    return false;
+}
 
 class CNewAsset
 {
@@ -102,7 +128,9 @@ public:
     int8_t units;        // 1 Byte
     int8_t nReissuable;  // 1 Byte
     int8_t nHasIPFS;     // 1 Byte
+    int8_t nHasANS;      // 1 Byte
     std::string strIPFSHash; // MAX 40 Bytes
+    std::string strANSID;    // MAX 40 Bytes
 
     CNewAsset()
     {
@@ -110,6 +138,7 @@ public:
     }
 
     CNewAsset(const std::string& strName, const CAmount& nAmount, const int& units, const int& nReissuable, const int& nHasIPFS, const std::string& strIPFSHash);
+    CNewAsset(const std::string& strName, const CAmount& nAmount, const int& units, const int& nReissuable, const int& nHasIPFS, const std::string& strIPFSHash, const int& nHasANS, const std::string& strANSID);
     CNewAsset(const std::string& strName, const CAmount& nAmount);
 
     CNewAsset(const CNewAsset& asset);
@@ -117,12 +146,14 @@ public:
 
     void SetNull()
     {
-        strName= "";
+        strName = "";
         nAmount = 0;
         units = int8_t(MAX_UNIT);
         nReissuable = int8_t(0);
         nHasIPFS = int8_t(0);
         strIPFSHash = "";
+        nHasANS = int8_t(0);
+        strANSID = "";
     }
 
     bool IsNull() const;
@@ -131,18 +162,45 @@ public:
     void ConstructTransaction(CScript& script) const;
     void ConstructOwnerTransaction(CScript& script) const;
 
-    ADD_SERIALIZE_METHODS;
-
-    template <typename Stream, typename Operation>
-    inline void SerializationOp(Stream& s, Operation ser_action)
+    // Explicit Serialize/Unserialize for custom IPFS hash handling.
+    // Binary format must match Meowcoin exactly for consensus compatibility.
+    template <typename Stream>
+    void Serialize(Stream& s) const
     {
-        READWRITE(strName);
-        READWRITE(nAmount);
-        READWRITE(units);
-        READWRITE(nReissuable);
-        READWRITE(nHasIPFS);
+        ::Serialize(s, strName);
+        ::Serialize(s, nAmount);
+        ::Serialize(s, units);
+        ::Serialize(s, nReissuable);
+        ::Serialize(s, nHasIPFS);
         if (nHasIPFS == 1) {
-            ReadWriteAssetHash(s, ser_action, strIPFSHash);
+            SerializeIPFSHash(s, strIPFSHash);
+        }
+        ::Serialize(s, nHasANS);
+        if (nHasANS == 1) {
+            ::Serialize(s, strANSID);
+        }
+    }
+
+    template <typename Stream>
+    void Unserialize(Stream& s)
+    {
+        ::Unserialize(s, strName);
+        ::Unserialize(s, nAmount);
+        ::Unserialize(s, units);
+        ::Unserialize(s, nReissuable);
+        ::Unserialize(s, nHasIPFS);
+        if (nHasIPFS == 1) {
+            UnserializeIPFSHash(s, strIPFSHash);
+        }
+        // nHasANS/strANSID were not present in legacy on-chain transactions.
+        // Only read them if more data remains in the stream.
+        nHasANS = 0;
+        strANSID.clear();
+        if (!s.empty()) {
+            ::Unserialize(s, nHasANS);
+            if (nHasANS == 1) {
+                ::Unserialize(s, strANSID);
+            }
         }
     }
 };
@@ -173,14 +231,9 @@ public:
         blockHash = uint256();
     }
 
-    ADD_SERIALIZE_METHODS;
-
-    template <typename Stream, typename Operation>
-    inline void SerializationOp(Stream& s, Operation ser_action)
+    SERIALIZE_METHODS(CDatabasedAssetData, obj)
     {
-        READWRITE(asset);
-        READWRITE(nHeight);
-        READWRITE(blockHash);
+        READWRITE(obj.asset, obj.nHeight, obj.blockHash);
     }
 };
 
@@ -205,26 +258,29 @@ public:
         nExpireTime = 0;
     }
 
-    ADD_SERIALIZE_METHODS;
-
-    template <typename Stream, typename Operation>
-    inline void SerializationOp(Stream& s, Operation ser_action)
+    // Explicit Serialize/Unserialize for custom IPFS hash + optional expire time.
+    template <typename Stream>
+    void Serialize(Stream& s) const
     {
-        READWRITE(strName);
-        READWRITE(nAmount);
-        bool validIPFS = ReadWriteAssetHash(s, ser_action, message);
+        ::Serialize(s, strName);
+        ::Serialize(s, nAmount);
+        bool validIPFS = SerializeIPFSHash(s, message);
+        if (validIPFS && nExpireTime != 0) {
+            ::Serialize(s, nExpireTime);
+        }
+    }
+
+    template <typename Stream>
+    void Unserialize(Stream& s)
+    {
+        ::Unserialize(s, strName);
+        ::Unserialize(s, nAmount);
+        bool validIPFS = UnserializeIPFSHash(s, message);
         if (validIPFS) {
-            if (ser_action.ForRead()) {
-                if (!s.empty() && s.size() >= sizeof(int64_t)) {
-                    ::Unserialize(s, nExpireTime);
-                }
-            } else {
-                if (nExpireTime != 0) {
-                    ::Serialize(s, nExpireTime);
-                }
+            if (!s.empty() && s.size() >= sizeof(int64_t)) {
+                ::Unserialize(s, nExpireTime);
             }
         }
-
     }
 
     CAssetTransfer(const std::string& strAssetName, const CAmount& nAmount, const std::string& message = "", const int64_t& nExpireTime = 0);
@@ -241,6 +297,7 @@ public:
     int8_t nUnits;
     int8_t nReissuable;
     std::string strIPFSHash;
+    std::string strANSID;
 
     CReissueAsset()
     {
@@ -254,21 +311,37 @@ public:
         nUnits = 0;
         nReissuable = 1;
         strIPFSHash = "";
+        strANSID = "";
     }
 
-    ADD_SERIALIZE_METHODS;
-
-    template <typename Stream, typename Operation>
-    inline void SerializationOp(Stream& s, Operation ser_action)
+    // Explicit Serialize/Unserialize for custom IPFS hash handling.
+    template <typename Stream>
+    void Serialize(Stream& s) const
     {
-        READWRITE(strName);
-        READWRITE(nAmount);
-        READWRITE(nUnits);
-        READWRITE(nReissuable);
-        ReadWriteAssetHash(s, ser_action, strIPFSHash);
+        ::Serialize(s, strName);
+        ::Serialize(s, nAmount);
+        ::Serialize(s, nUnits);
+        ::Serialize(s, nReissuable);
+        SerializeIPFSHash(s, strIPFSHash);
+        ::Serialize(s, strANSID);
     }
 
-    CReissueAsset(const std::string& strAssetName, const CAmount& nAmount, const int& nUnits, const int& nReissuable, const std::string& strIPFSHash);
+    template <typename Stream>
+    void Unserialize(Stream& s)
+    {
+        ::Unserialize(s, strName);
+        ::Unserialize(s, nAmount);
+        ::Unserialize(s, nUnits);
+        ::Unserialize(s, nReissuable);
+        UnserializeIPFSHash(s, strIPFSHash);
+        // strANSID was not present in legacy on-chain transactions.
+        strANSID.clear();
+        if (!s.empty()) {
+            ::Unserialize(s, strANSID);
+        }
+    }
+
+    CReissueAsset(const std::string& strAssetName, const CAmount& nAmount, const int& nUnits, const int& nReissuable, const std::string& strIPFSHash, const std::string& strANSID);
     void ConstructTransaction(CScript& script) const;
     bool IsNull() const;
 };
@@ -289,13 +362,9 @@ public:
         asset_name = "";
     }
 
-    ADD_SERIALIZE_METHODS;
-
-    template <typename Stream, typename Operation>
-    inline void SerializationOp(Stream& s, Operation ser_action)
+    SERIALIZE_METHODS(CNullAssetTxData, obj)
     {
-        READWRITE(asset_name);
-        READWRITE(flag);
+        READWRITE(obj.asset_name, obj.flag);
     }
 
     CNullAssetTxData(const std::string& strAssetname, const int8_t& nFlag);
@@ -316,15 +385,12 @@ public:
 
     void SetNull()
     {
-        verifier_string ="";
+        verifier_string = "";
     }
 
-    ADD_SERIALIZE_METHODS;
-
-    template <typename Stream, typename Operation>
-    inline void SerializationOp(Stream& s, Operation ser_action)
+    SERIALIZE_METHODS(CNullAssetTxVerifierString, obj)
     {
-        READWRITE(verifier_string);
+        READWRITE(obj.verifier_string);
     }
 
     CNullAssetTxVerifierString(const std::string& verifier);
@@ -361,7 +427,6 @@ struct CAssetCacheReissueAsset
     uint256 blockHash;
     int blockHeight;
 
-
     CAssetCacheReissueAsset(const CReissueAsset& reissue, const std::string& address, const COutPoint& out, const int& blockHeight, const uint256& blockHash)
     {
         this->reissue = reissue;
@@ -375,7 +440,6 @@ struct CAssetCacheReissueAsset
     {
         return out < rhs.out;
     }
-
 };
 
 struct CAssetCacheNewTransfer
@@ -391,7 +455,7 @@ struct CAssetCacheNewTransfer
         this->out = out;
     }
 
-    bool operator<(const CAssetCacheNewTransfer& rhs ) const
+    bool operator<(const CAssetCacheNewTransfer& rhs) const
     {
         return out < rhs.out;
     }
@@ -410,7 +474,6 @@ struct CAssetCacheNewOwner
 
     bool operator<(const CAssetCacheNewOwner& rhs) const
     {
-
         return assetName < rhs.assetName;
     }
 };
@@ -604,7 +667,6 @@ public:
         return cacheItemsMap.size();
     }
 
-
     void Clear()
     {
         cacheItemsMap.clear();
@@ -622,22 +684,20 @@ public:
         return maxSize;
     }
 
-
     void SetSize(const size_t size)
     {
         maxSize = size;
     }
 
-   const std::unordered_map<cache_key_t, list_iterator_t>& GetItemsMap()
+    const std::unordered_map<cache_key_t, list_iterator_t>& GetItemsMap()
     {
         return cacheItemsMap;
-    };
+    }
 
     const std::list<key_value_pair_t>& GetItemsList()
     {
         return cacheItemsList;
-    };
-
+    }
 
     CLRUCache(const CLRUCache& cache)
     {
@@ -652,4 +712,4 @@ private:
     size_t maxSize;
 };
 
-#endif //MEOWCOINCOIN_NEWASSET_H
+#endif // BITCOIN_ASSETS_ASSETTYPES_H

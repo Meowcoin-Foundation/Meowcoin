@@ -1,16 +1,19 @@
-// Copyright (c) 2018-2020 The Meowcoin Core developers
+// Copyright (c) 2018-2019 The Meowcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 
-#ifndef MEOWCOINCOIN_MESSAGES_H
-#define MEOWCOINCOIN_MESSAGES_H
+#ifndef BITCOIN_ASSETS_MESSAGES_H
+#define BITCOIN_ASSETS_MESSAGES_H
 
-#include <uint256.h>
 #include <serialize.h>
+#include <sync.h>
+#include <uint256.h>
+#include <primitives/transaction.h>
+#include <tinyformat.h>
+#include <assets/assets.h>
 
 class CMessage;
-class COutPoint;
 
 // Message Database caches
 extern std::set<COutPoint> setDirtyMessagesRemove;
@@ -27,7 +30,7 @@ extern std::set<std::string> setDirtySeenAddressAdd;
 extern std::set<std::string> setAddressAskedForFalse;
 
 // Lock for messaging
-extern CCriticalSection cs_messaging;
+extern Mutex cs_messaging;
 
 size_t GetMessageDirtyCacheSize();
 bool IsChannelSubscribed(const std::string &name); // Is this channel marked as spamA
@@ -46,9 +49,6 @@ void RemoveMessage(const COutPoint &out);
 void OrphanMessage(const CMessage &message);
 void OrphanMessage(const COutPoint &out);
 
-#ifdef ENABLE_WALLET
-bool ScanForMessageChannels(std::string& strError);
-#endif
 bool IsAddressSeen(const std::string &address); // Has this address already been sent an asset before
 void AddAddressSeen(const std::string &address);
 
@@ -102,24 +102,30 @@ public:
         return out < rhs.out;
     }
 
-    ADD_SERIALIZE_METHODS;
+    template <typename Stream>
+    void Serialize(Stream& s) const
+    {
+        ::Serialize(s, out);
+        ::Serialize(s, strName);
+        ::Serialize(s, ipfsHash);
+        ::Serialize(s, time);
+        ::Serialize(s, nExpiredTime);
+        ::Serialize(s, nBlockHeight);
+        ::Serialize(s, IntFromMessageStatus(status));
+    }
 
-    template<typename Stream, typename Operation>
-    inline void SerializationOp(Stream &s, Operation ser_action) {
-        READWRITE(out);
-        READWRITE(strName);
-        READWRITE(ipfsHash);
-        READWRITE(time);
-        READWRITE(nExpiredTime);
-        READWRITE(nBlockHeight);
-
-        if (ser_action.ForRead()) {
-            int8_t nStatus = 6;
-            ::Unserialize(s, nStatus);
-            status = MessageStatusFromInt(nStatus);
-        } else {
-            ::Serialize(s, IntFromMessageStatus(status));
-        }
+    template <typename Stream>
+    void Unserialize(Stream& s)
+    {
+        ::Unserialize(s, out);
+        ::Unserialize(s, strName);
+        ::Unserialize(s, ipfsHash);
+        ::Unserialize(s, time);
+        ::Unserialize(s, nExpiredTime);
+        ::Unserialize(s, nBlockHeight);
+        int8_t nStatus = 6;
+        ::Unserialize(s, nStatus);
+        status = MessageStatusFromInt(nStatus);
     }
 };
 
@@ -140,4 +146,4 @@ public:
     std::string createJsonString();
 };
 
-#endif //MEOWCOINCOIN_MESSAGES_H
+#endif // BITCOIN_ASSETS_MESSAGES_H

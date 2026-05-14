@@ -1,20 +1,23 @@
-// Copyright (c) 2017-2021 The Meowcoin Core developers
+// Copyright (c) 2017-2019 The Meowcoin Core developers
+// Copyright (c) 2022 The Meowcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#ifndef BITCOIN_ASSETS_ASSETS_H
+#define BITCOIN_ASSETS_ASSETS_H
 
-#ifndef MEOWCOINCOIN_ASSET_PROTOCOL_H
-#define MEOWCOINCOIN_ASSET_PROTOCOL_H
-
-#include "amount.h"
-#include "tinyformat.h"
-#include "assettypes.h"
+#include <consensus/amount.h>
+#include <tinyformat.h>
+#include <assets/assettypes.h>
 
 #include <string>
 #include <set>
 #include <map>
+
+class UniValue;
 #include <unordered_map>
 #include <list>
+#include <vector>
 
 #define MEWC_R 114
 #define MEWC_V 118
@@ -23,10 +26,15 @@
 #define MEWC_T 116
 #define MEWC_O 111
 
+/** Native coin ticker for RPC, indexes, and rewards (not an issued asset name). */
+inline const std::string NATIVE_ASSET_TICKER{"MEWC"};
+
 #define DEFAULT_UNITS 0
 #define DEFAULT_REISSUABLE 1
 #define DEFAULT_HAS_IPFS 0
 #define DEFAULT_IPFS ""
+#define DEFAULT_HAS_ANS 0
+#define DEFAULT_ANS ""
 #define MIN_ASSET_LENGTH 3
 #define MAX_ASSET_LENGTH 32
 #define OWNER_TAG "!"
@@ -51,17 +59,14 @@
 #define MINIMUM_REWARDS_PAYOUT_HEIGHT 60
 
 class CScript;
-class CDataStream;
 class CTransaction;
+class CTxMemPool;
 class CTxOut;
 class Coin;
-class CWallet;
-class CReserveKey;
-class CWalletTx;
+class CAssetsDB;
+class CRestrictedDB;
 struct CAssetOutputEntry;
-class CCoinControl;
 struct CBlockAssetUndo;
-class COutput;
 
 // 2500 * 82 Bytes == 205 KB (kilobytes) of memory
 #define MAX_CACHE_ASSETS_SIZE 2500
@@ -70,6 +75,19 @@ class COutput;
 // If an asset name is in this map, any other reissue transactions wont be accepted into the mempool
 extern std::map<uint256, std::string> mapReissuedTx;
 extern std::map<std::string, uint256> mapReissuedAssets;
+
+// Asset global state
+extern CAssetsCache* passets;
+extern CAssetsDB* passetsdb;
+extern CLRUCache<std::string, CDatabasedAssetData>* passetsCache;
+extern CRestrictedDB* prestricteddb;
+extern CLRUCache<std::string, CNullAssetTxVerifierString>* passetsVerifierCache;
+extern CLRUCache<std::string, int8_t>* passetsQualifierCache;
+extern CLRUCache<std::string, int8_t>* passetsRestrictionCache;
+extern CLRUCache<std::string, int8_t>* passetsGlobalRestrictionCache;
+extern bool fAssetIndex;
+
+CAssetsCache* GetCurrentAssetCache();
 
 class CAssets {
 public:
@@ -271,7 +289,7 @@ public :
     bool RemoveNewAsset(const CNewAsset& asset, const std::string address);
     bool RemoveTransfer(const CAssetTransfer& transfer, const std::string& address, const COutPoint& out);
     bool RemoveOwnerAsset(const std::string& assetsName, const std::string address);
-    bool RemoveReissueAsset(const CReissueAsset& reissue, const std::string address, const COutPoint& out, const std::vector<std::pair<std::string, CBlockAssetUndo> >& vUndoIPFS);
+    bool RemoveReissueAsset(const CReissueAsset& reissue, const std::string address, const COutPoint& out, const std::vector<std::pair<std::string, CBlockAssetUndo> >& vUndoData);
     bool UndoAssetCoin(const Coin& coin, const COutPoint& out);
     bool RemoveQualifierAddress(const std::string& assetName, const std::string& address, const QualifierType type);
     bool RemoveRestrictedAddress(const std::string& assetName, const std::string& address, const RestrictedType type);
@@ -393,6 +411,9 @@ CAmount GetBurnAmount(const int nType);
 std::string GetBurnAddress(const AssetType type);
 std::string GetBurnAddress(const int nType);
 
+//! Check if an address is any of the known asset burn addresses
+bool IsBurnAddress(const std::string& address);
+
 void GetTxOutAssetTypes(const std::vector<CTxOut>& vout, int& issues, int& reissues, int& transfers, int& owners);
 
 //! Check is an asset name is valid, and being able to return the asset type if needed
@@ -463,10 +484,10 @@ bool CheckIssueBurnTx(const CTxOut& txOut, const AssetType& type);
 bool CheckReissueBurnTx(const CTxOut& txOut);
 
 //! issue asset scripts to make sure script meets the standards
-bool CheckIssueDataTx(const CTxOut& txOut); // OP_MEOWCOIN_ASSET MEWCQ (That is a Q as in Que not an O)
-bool CheckOwnerDataTx(const CTxOut& txOut);// OP_MEOWCOIN_ASSET MEWCO
-bool CheckReissueDataTx(const CTxOut& txOut);// OP_MEOWCOIN_ASSET MEWCR
-bool CheckTransferOwnerTx(const CTxOut& txOut);// OP_MEOWCOIN_ASSET MEWCT
+bool CheckIssueDataTx(const CTxOut& txOut); // OP_MEWC_ASSET + rvnq (new asset payload)
+bool CheckOwnerDataTx(const CTxOut& txOut); // OP_MEWC_ASSET + rvno (owner payload)
+bool CheckReissueDataTx(const CTxOut& txOut); // OP_MEWC_ASSET + rvnr (reissue payload)
+bool CheckTransferOwnerTx(const CTxOut& txOut); // OP_MEWC_ASSET + rvnt (transfer payload)
 
 //! Check the Encoded hash and make sure it is either an IPFS hash or a OIP hash
 bool CheckEncoded(const std::string& hash, std::string& strError);
@@ -508,9 +529,6 @@ bool IsScriptNewRestrictedAsset(const CScript &scriptPubKey, int &nStartingIndex
 
 bool IsNewOwnerTxValid(const CTransaction& tx, const std::string& assetName, const std::string& address, std::string& errorMsg);
 
-void GetAllAdministrativeAssets(CWallet *pwallet, std::vector<std::string> &names, int nMinConf = 1);
-void GetAllMyAssets(CWallet* pwallet, std::vector<std::string>& names, int nMinConf = 1, bool fIncludeAdministrator = false, bool fOnlyAdministrator = false);
-
 bool GetAssetInfoFromCoin(const Coin& coin, std::string& strName, CAmount& nAmount);
 bool GetAssetInfoFromScript(const CScript& scriptPubKey, std::string& strName, CAmount& nAmount);
 
@@ -518,35 +536,11 @@ bool GetAssetData(const CScript& script, CAssetOutputEntry& data);
 
 bool GetBestAssetAddressAmount(CAssetsCache& cache, const std::string& assetName, const std::string& address);
 
-
-//! Decode and Encode IPFS hashes, or OIP hashes
+//! Decode and Encode IPFS hashes, ANS IDs, or OIP hashes
 std::string DecodeAssetData(std::string encoded);
 std::string EncodeAssetData(std::string decoded);
 std::string DecodeIPFS(std::string encoded);
 std::string EncodeIPFS(std::string decoded);
-
-#ifdef ENABLE_WALLET
-
-bool GetAllMyAssetBalances(std::map<std::string, std::vector<COutput> >& outputs, std::map<std::string, CAmount>& amounts, const int confirmations = 0, const std::string& prefix = "");
-bool GetMyAssetBalance(const std::string& name, CAmount& balance, const int& confirmations);
-
-//! Creates new asset issuance transaction
-bool CreateAssetTransaction(CWallet* pwallet, CCoinControl& coinControl, const CNewAsset& asset, const std::string& address, std::pair<int, std::string>& error, CWalletTx& wtxNew, CReserveKey& reservekey, CAmount& nFeeRequired, std::string* verifier_string = nullptr);
-bool CreateAssetTransaction(CWallet* pwallet, CCoinControl& coinControl, const std::vector<CNewAsset> assets, const std::string& address, std::pair<int, std::string>& error, CWalletTx& wtxNew, CReserveKey& reservekey, CAmount& nFeeRequired, std::string* verifier_string = nullptr);
-
-//! Create a reissue asset transaction
-bool CreateReissueAssetTransaction(CWallet* pwallet, CCoinControl& coinControl, const CReissueAsset& asset, const std::string& address, std::pair<int, std::string>& error, CWalletTx& wtxNew, CReserveKey& reservekey, CAmount& nFeeRequired, std::string* verifier_string = nullptr);
-
-
-//! Create a transfer asset transaction
-bool CreateTransferAssetTransaction(CWallet* pwallet, const CCoinControl& coinControl, const std::vector< std::pair<CAssetTransfer, std::string> >vTransfers, const std::string& changeAddress, std::pair<int, std::string>& error, CWalletTx& wtxNew, CReserveKey& reservekey, CAmount& nFeeRequired, std::vector<std::pair<CNullAssetTxData, std::string> >* nullAssetTxData = nullptr, std::vector<CNullAssetTxData>* nullGlobalRestrictionData = nullptr);
-
-//! Send any type of asset transaction to the network
-bool SendAssetTransaction(CWallet* pwallet, CWalletTx& transaction, CReserveKey& reserveKey, std::pair<int, std::string>& error, std::string& txid);
-
-/** Verifies that this wallet owns the give asset */
-bool VerifyWalletHasAsset(const std::string& asset_name, std::pair<int, std::string>& pairError);
-#endif
 
 /** Helper method for extracting address bytes, asset name and amount from an asset script */
 bool ParseAssetScript(CScript scriptPubKey, uint160 &hashBytes, std::string &assetName, CAmount &assetAmount);
@@ -572,11 +566,40 @@ bool ContextualCheckNullAssetTxOut(const CTxOut& txout, CAssetsCache* assetCache
 bool ContextualCheckGlobalAssetTxOut(const CTxOut& txout, CAssetsCache* assetCache, std::string& strError);
 bool ContextualCheckVerifierAssetTxOut(const CTxOut& txout, CAssetsCache* assetCache, std::string& strError);
 bool ContextualCheckVerifierString(CAssetsCache* cache, const std::string& verifier, const std::string& check_address, std::string& strError, ErrorReport* errorReport = nullptr);
-bool ContextualCheckNewAsset(CAssetsCache* assetCache, const CNewAsset& asset, std::string& strError, bool fCheckMempool = false);
+bool ContextualCheckNewAsset(CAssetsCache* assetCache, const CNewAsset& asset, std::string& strError, const CTxMemPool* mempool = nullptr);
 bool ContextualCheckTransferAsset(CAssetsCache* assetCache, const CAssetTransfer& transfer, const std::string& address, std::string& strError);
 bool ContextualCheckReissueAsset(CAssetsCache* assetCache, const CReissueAsset& reissue_asset, std::string& strError, const CTransaction& tx);
 bool ContextualCheckReissueAsset(CAssetsCache* assetCache, const CReissueAsset& reissue_asset, std::string& strError);
 bool ContextualCheckUniqueAssetTx(CAssetsCache* assetCache, std::string& strError, const CTransaction& tx);
 bool ContextualCheckUniqueAsset(CAssetsCache* assetCache, const CNewAsset& unique_asset, std::string& strError);
 
-#endif //MEOWCOINCOIN_ASSET_PROTOCOL_H
+//! Free functions for transaction asset type checking (converted from CTransaction member functions)
+bool IsNewAsset(const CTransaction& tx);
+bool IsNewUniqueAsset(const CTransaction& tx);
+bool VerifyNewUniqueAsset(const CTransaction& tx, std::string& strError);
+bool VerifyNewAsset(const CTransaction& tx, std::string& strError);
+bool IsNewMsgChannelAsset(const CTransaction& tx);
+bool VerifyNewMsgChannelAsset(const CTransaction& tx, std::string& strError);
+bool IsNewQualifierAsset(const CTransaction& tx);
+bool VerifyNewQualfierAsset(const CTransaction& tx, std::string& strError);
+bool IsNewRestrictedAsset(const CTransaction& tx);
+bool VerifyNewRestrictedAsset(const CTransaction& tx, std::string& strError);
+bool GetVerifierStringFromTx(const CTransaction& tx, CNullAssetTxVerifierString& verifier, std::string& strError, bool& fNotFound);
+bool GetVerifierStringFromTx(const CTransaction& tx, CNullAssetTxVerifierString& verifier, std::string& strError);
+bool IsReissueAsset(const CTransaction& tx);
+bool VerifyReissueAsset(const CTransaction& tx, std::string& strError);
+bool CheckAddingTagBurnFee(const CTransaction& tx, const int& count);
+
+//! Deployment check functions
+bool AreAssetsDeployed();
+bool AreMessagesDeployed();
+bool AreRestrictedAssetsDeployed();
+bool IsMeowcoinNameSystemDeployed();
+
+//! Format a raw asset amount using the asset's unit precision
+UniValue UnitValueFromAmount(const CAmount& amount, int8_t units);
+
+//! Format a raw asset amount, looking up the asset's units from the cache
+UniValue AssetUnitValueFromAmount(const CAmount& amount, const std::string& assetName);
+
+#endif //BITCOIN_ASSETS_ASSETS_H

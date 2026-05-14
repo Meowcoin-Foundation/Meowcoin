@@ -19,5 +19,5 @@ depending on the speed of your computer and network connection, the synchronizat
 process can take anywhere from a few hours to a day or more.
 
 See the meowcoin wiki at:
-  https://meowcoin.wiki/wiki/Meowcoincoin_Wiki
+  https://en.meowcoin.it/wiki/Main_Page
 for more help and information.

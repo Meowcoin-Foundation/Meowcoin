@@ -1,67 +1,34 @@
-// Copyright (c) 2019 The Meowcoin Core developers
+// Copyright (c) 2017-2019 The Meowcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef MEOWCOIN_QT_ASSIGNQUALIFIER_H
-#define MEOWCOIN_QT_ASSIGNQUALIFIER_H
-
-#include "amount.h"
+#ifndef AVIAN_QT_RESTRICTEDASSIGNQUALIFIER_H
+#define AVIAN_QT_RESTRICTEDASSIGNQUALIFIER_H
 
 #include <QWidget>
-#include <QMenu>
-#include <memory>
 
-class ClientModel;
 class PlatformStyle;
 class WalletModel;
-class QStringListModel;
-class QSortFilterProxyModel;
-class QCompleter;
-class AssetFilterProxy;
-
 
 namespace Ui {
     class AssignQualifier;
 }
 
-QT_BEGIN_NAMESPACE
-class QModelIndex;
-QT_END_NAMESPACE
-
-/** Overview ("home") page widget */
 class AssignQualifier : public QWidget
 {
     Q_OBJECT
-
 public:
-    explicit AssignQualifier(const PlatformStyle *_platformStyle, QWidget *parent = 0);
+    explicit AssignQualifier(const PlatformStyle *platformStyle, QWidget *parent = nullptr);
     ~AssignQualifier();
 
-    void setClientModel(ClientModel *clientModel);
-    void setWalletModel(WalletModel *walletModel);
-    void showOutOfSyncWarning(bool fShow);
-    Ui::AssignQualifier* getUI();
-    bool eventFilter(QObject* object, QEvent* event);
-
-    void enableSubmitButton();
-    void showWarning(QString string, bool failure = true);
-    void hideWarning();
-
-    AssetFilterProxy *assetFilterProxy;
-    QCompleter* completer;
-
+    void setWalletModel(WalletModel *model);
+    Ui::AssignQualifier *getUI() { return ui; }
     void clear();
 
 private:
     Ui::AssignQualifier *ui;
-    ClientModel *clientModel;
-    WalletModel *walletModel;
+    WalletModel *model{nullptr};
     const PlatformStyle *platformStyle;
-
-private Q_SLOTS:
-    void check();
-    void dataChanged();
-    void changeAddressChanged(int);
 };
 
-#endif // MEOWCOIN_QT_ASSIGNQUALIFIER_H
+#endif // AVIAN_QT_RESTRICTEDASSIGNQUALIFIER_H

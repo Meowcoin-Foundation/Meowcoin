@@ -1,42 +1,42 @@
-#!/sbin/runscript
+#!/sbin/openrc-run
 
 # backward compatibility for existing gentoo layout 
 #
 if [ -d "/var/lib/meowcoin/.meowcoin" ]; then
-	MEOWCOIND_DEFAULT_DATADIR="/var/lib/meowcoin/.meowcoin"
+	BITCOIND_DEFAULT_DATADIR="/var/lib/meowcoin/.meowcoin"
 else
-	MEOWCOIND_DEFAULT_DATADIR="/var/lib/meowcoind"
+	BITCOIND_DEFAULT_DATADIR="/var/lib/meowcoind"
 fi
 
-MEOWCOIND_CONFIGFILE=${MEOWCOIND_CONFIGFILE:-/etc/meowcoin/meowcoin.conf}
-MEOWCOIND_PIDDIR=${MEOWCOIND_PIDDIR:-/var/run/meowcoind}
-MEOWCOIND_PIDFILE=${MEOWCOIND_PIDFILE:-${MEOWCOIND_PIDDIR}/meowcoind.pid}
-MEOWCOIND_DATADIR=${MEOWCOIND_DATADIR:-${MEOWCOIND_DEFAULT_DATADIR}}
-MEOWCOIND_USER=${MEOWCOIND_USER:-${MEOWCOIN_USER:-meowcoin}}
-MEOWCOIND_GROUP=${MEOWCOIND_GROUP:-meowcoin}
-MEOWCOIND_BIN=${MEOWCOIND_BIN:-/usr/bin/meowcoind}
-MEOWCOIND_NICE=${MEOWCOIND_NICE:-${NICELEVEL:-0}}
-MEOWCOIND_OPTS="${MEOWCOIND_OPTS:-${MEOWCOIN_OPTS}}"
+BITCOIND_CONFIGFILE=${BITCOIND_CONFIGFILE:-/etc/meowcoin/meowcoin.conf}
+BITCOIND_PIDDIR=${BITCOIND_PIDDIR:-/var/run/meowcoind}
+BITCOIND_PIDFILE=${BITCOIND_PIDFILE:-${BITCOIND_PIDDIR}/meowcoind.pid}
+BITCOIND_DATADIR=${BITCOIND_DATADIR:-${BITCOIND_DEFAULT_DATADIR}}
+BITCOIND_USER=${BITCOIND_USER:-${BITCOIN_USER:-meowcoin}}
+BITCOIND_GROUP=${BITCOIND_GROUP:-meowcoin}
+BITCOIND_BIN=${BITCOIND_BIN:-/usr/bin/meowcoind}
+BITCOIND_NICE=${BITCOIND_NICE:-${NICELEVEL:-0}}
+BITCOIND_OPTS="${BITCOIND_OPTS:-${BITCOIN_OPTS}}"
 
 name="Meowcoin Core Daemon"
 description="Meowcoin cryptocurrency P2P network daemon"
 
 command="/usr/bin/meowcoind"
-command_args="-pid=\"${MEOWCOIND_PIDFILE}\" \
-		-conf=\"${MEOWCOIND_CONFIGFILE}\" \
-		-datadir=\"${MEOWCOIND_DATADIR}\" \
+command_args="-pid=\"${BITCOIND_PIDFILE}\" \
+		-conf=\"${BITCOIND_CONFIGFILE}\" \
+		-datadir=\"${BITCOIND_DATADIR}\" \
 		-daemon \
-		${MEOWCOIND_OPTS}"
+		${BITCOIND_OPTS}"
 
-required_files="${MEOWCOIND_CONFIGFILE}"
-start_stop_daemon_args="-u ${MEOWCOIND_USER} \
-			-N ${MEOWCOIND_NICE} -w 2000"
-pidfile="${MEOWCOIND_PIDFILE}"
+required_files="${BITCOIND_CONFIGFILE}"
+start_stop_daemon_args="-u ${BITCOIND_USER} \
+			-N ${BITCOIND_NICE} -w 2000"
+pidfile="${BITCOIND_PIDFILE}"
 
 # The retry schedule to use when stopping the daemon. Could be either
 # a timeout in seconds or multiple signal/timeout pairs (like
 # "SIGKILL/180 SIGTERM/300")
-retry="${MEOWCOIND_SIGTERM_TIMEOUT}"
+retry="${BITCOIND_SIGTERM_TIMEOUT}"
 
 depend() {
 	need localmount net
@@ -50,29 +50,30 @@ start_pre() {
 	checkpath \
 	-d \
 	--mode 0750 \
-	--owner "${MEOWCOIND_USER}:${MEOWCOIND_GROUP}" \
-	"${MEOWCOIND_DATADIR}"
+	--owner "${BITCOIND_USER}:${BITCOIND_GROUP}" \
+	"${BITCOIND_DATADIR}"
 
 	checkpath \
 	-d \
 	--mode 0755 \
-	--owner "${MEOWCOIND_USER}:${MEOWCOIND_GROUP}" \
-	"${MEOWCOIND_PIDDIR}"
+	--owner "${BITCOIND_USER}:${BITCOIND_GROUP}" \
+	"${BITCOIND_PIDDIR}"
 
 	checkpath -f \
-	-o ${MEOWCOIND_USER}:${MEOWCOIND_GROUP} \
+	-o "${BITCOIND_USER}:${BITCOIND_GROUP}" \
 	-m 0660 \
-	${MEOWCOIND_CONFIGFILE}
+	"${BITCOIND_CONFIGFILE}"
 
 	checkconfig || return 1
 }
 
 checkconfig()
 {
-	if ! grep -qs '^rpcpassword=' "${MEOWCOIND_CONFIGFILE}" ; then
+	if grep -qs '^rpcuser=' "${BITCOIND_CONFIGFILE}" && \
+		! grep -qs '^rpcpassword=' "${BITCOIND_CONFIGFILE}" ; then
 		eerror ""
 		eerror "ERROR: You must set a secure rpcpassword to run meowcoind."
-		eerror "The setting must appear in ${MEOWCOIND_CONFIGFILE}"
+		eerror "The setting must appear in ${BITCOIND_CONFIGFILE}"
 		eerror ""
 		eerror "This password is security critical to securing wallets "
 		eerror "and must not be the same as the rpcuser setting."

@@ -1,75 +1,111 @@
 #!/usr/bin/env python3
-# Copyright (c) 2014-2016 The Bitcoin Core developers
-# Copyright (c) 2017-2020 The Meowcoin Core developers
+# Copyright (c) 2014-2022 The Meowcoin Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
-
-"""
-Test the abandontransaction RPC.
+"""Test the abandontransaction RPC.
 
  The abandontransaction RPC marks a transaction and all its in-wallet
  descendants as abandoned which allows their inputs to be respent. It can be
  used to replace "stuck" or evicted transactions. It only works on transactions
  which are not included in a block and are not currently in the mempool. It has
- no effect on transactions which are already conflicted or abandoned.
+ no effect on transactions which are already abandoned.
 """
+from decimal import Decimal
 
-from test_framework.test_framework import MeowcoinTestFramework
-from test_framework.util import sync_blocks, Decimal, sync_mempools, disconnect_nodes, assert_equal, connect_nodes
+from test_framework.blocktools import COINBASE_MATURITY
+from test_framework.test_framework import BitcoinTestFramework
+from test_framework.util import (
+    assert_equal,
+    assert_raises_rpc_error,
+)
 
-class AbandonConflictTest(MeowcoinTestFramework):
+
+class AbandonConflictTest(BitcoinTestFramework):
     def set_test_params(self):
         self.num_nodes = 2
         self.extra_args = [["-minrelaytxfee=0.00001"], []]
+        # whitelist peers to speed up tx relay / mempool sync
+        self.noban_tx_relay = True
+
+    def skip_test_if_missing_module(self):
+        self.skip_if_no_wallet()
 
     def run_test(self):
-        self.nodes[1].generate(100)
-        sync_blocks(self.nodes)
-        balance = self.nodes[0].getbalance()
-        txA = self.nodes[0].sendtoaddress(self.nodes[0].getnewaddress(), Decimal("10"))
-        txB = self.nodes[0].sendtoaddress(self.nodes[0].getnewaddress(), Decimal("10"))
-        txC = self.nodes[0].sendtoaddress(self.nodes[0].getnewaddress(), Decimal("10"))
-        sync_mempools(self.nodes)
-        self.nodes[1].generate(1)
+        # create two wallets to tests conflicts from both sender's and receiver's sides
+        alice = self.nodes[0].get_wallet_rpc(self.default_wallet_name)
+        self.nodes[0].createwallet(wallet_name="bob")
+        bob = self.nodes[0].get_wallet_rpc("bob")
 
-        sync_blocks(self.nodes)
-        new_balance = self.nodes[0].getbalance()
-        assert(balance - new_balance < Decimal("0.01")) #no more than fees lost
-        balance = new_balance
+        self.generate(self.nodes[1], COINBASE_MATURITY)
+        balance = alice.getbalance()
+        txA = alice.sendtoaddress(alice.getnewaddress(), Decimal("10"))
+        txB = alice.sendtoaddress(alice.getnewaddress(), Decimal("10"))
+        txC = alice.sendtoaddress(alice.getnewaddress(), Decimal("10"))
+        self.sync_mempools()
+
+        # Can not abandon transaction in mempool
+        assert_raises_rpc_error(-5, 'Transaction not eligible for abandonment', lambda: alice.abandontransaction(txid=txA))
+
+        self.generate(self.nodes[1], 1)
+
+        # Can not abandon non-wallet transaction
+        assert_raises_rpc_error(-5, 'Invalid or non-wallet transaction id', lambda: alice.abandontransaction(txid='ff' * 32))
+        # Can not abandon confirmed transaction
+        assert_raises_rpc_error(-5, 'Transaction not eligible for abandonment', lambda: alice.abandontransaction(txid=txA))
+
+        newbalance = alice.getbalance()
+        assert balance - newbalance < Decimal("0.001")  #no more than fees lost
+        balance = newbalance
 
         # Disconnect nodes so node0's transactions don't get into node1's mempool
-        disconnect_nodes(self.nodes[0], 1)
+        self.disconnect_nodes(0, 1)
 
         # Identify the 10btc outputs
-        nA = next(i for i, vout in enumerate(self.nodes[0].getrawtransaction(txA, 1)["vout"]) if vout["value"] == Decimal("10"))
-        nB = next(i for i, vout in enumerate(self.nodes[0].getrawtransaction(txB, 1)["vout"]) if vout["value"] == Decimal("10"))
-        nC = next(i for i, vout in enumerate(self.nodes[0].getrawtransaction(txC, 1)["vout"]) if vout["value"] == Decimal("10"))
+        nA = next(tx_out["vout"] for tx_out in alice.gettransaction(txA)["details"] if tx_out["amount"] == Decimal("10"))
+        nB = next(tx_out["vout"] for tx_out in alice.gettransaction(txB)["details"] if tx_out["amount"] == Decimal("10"))
+        nC = next(tx_out["vout"] for tx_out in alice.gettransaction(txC)["details"] if tx_out["amount"] == Decimal("10"))
 
-        inputs = [{"txid": txA, "vout": nA}, {"txid": txB, "vout": nB}]
+        inputs = []
         # spend 10btc outputs from txA and txB
-        outputs = {self.nodes[0].getnewaddress(): Decimal("14.99998"), self.nodes[1].getnewaddress(): Decimal("5")}
+        inputs.append({"txid": txA, "vout": nA})
+        inputs.append({"txid": txB, "vout": nB})
+        outputs = {}
 
-        signed = self.nodes[0].signrawtransaction(self.nodes[0].createrawtransaction(inputs, outputs))
+        outputs[alice.getnewaddress()] = Decimal("14.99998")
+        outputs[bob.getnewaddress()] = Decimal("5")
+        signed = alice.signrawtransactionwithwallet(alice.createrawtransaction(inputs, outputs))
         txAB1 = self.nodes[0].sendrawtransaction(signed["hex"])
 
         # Identify the 14.99998btc output
-        nAB = next(i for i, vout in enumerate(self.nodes[0].getrawtransaction(txAB1, 1)["vout"]) if vout["value"] == Decimal("14.99998"))
+        nAB = next(tx_out["vout"] for tx_out in alice.gettransaction(txAB1)["details"] if tx_out["amount"] == Decimal("14.99998"))
 
         #Create a child tx spending AB1 and C
-        inputs = [{"txid": txAB1, "vout": nAB}, {"txid": txC, "vout": nC}]
-        outputs = {self.nodes[0].getnewaddress(): Decimal("24.9996")}
-        signed2 = self.nodes[0].signrawtransaction(self.nodes[0].createrawtransaction(inputs, outputs))
+        inputs = []
+        inputs.append({"txid": txAB1, "vout": nAB})
+        inputs.append({"txid": txC, "vout": nC})
+        outputs = {}
+        outputs[alice.getnewaddress()] = Decimal("24.9996")
+        signed2 = alice.signrawtransactionwithwallet(alice.createrawtransaction(inputs, outputs))
         txABC2 = self.nodes[0].sendrawtransaction(signed2["hex"])
 
+        # Create a child tx spending ABC2
+        signed3_change = Decimal("24.999")
+        inputs = [{"txid": txABC2, "vout": 0}]
+        outputs = {alice.getnewaddress(): signed3_change}
+        signed3 = alice.signrawtransactionwithwallet(alice.createrawtransaction(inputs, outputs))
+        # note tx is never directly referenced, only abandoned as a child of the above
+        self.nodes[0].sendrawtransaction(signed3["hex"])
+
         # In mempool txs from self should increase balance from change
-        new_balance = self.nodes[0].getbalance()
-        assert_equal(new_balance, balance - Decimal("30") + Decimal("24.9996"))
-        balance = new_balance
+        newbalance = alice.getbalance()
+        assert_equal(newbalance, balance - Decimal("30") + signed3_change)
+        balance = newbalance
 
         # Restart the node with a higher min relay fee so the parent tx is no longer in mempool
         # TODO: redo with eviction
-        self.stop_node(0)
-        self.start_node(0, extra_args=["-minrelaytxfee=0.0001"])
+        self.restart_node(0, extra_args=["-minrelaytxfee=0.0001"])
+        alice = self.nodes[0].get_wallet_rpc(self.default_wallet_name)
+        assert self.nodes[0].getmempoolinfo()['loaded']
 
         # Verify txs no longer in either node's mempool
         assert_equal(len(self.nodes[0].getrawmempool()), 0)
@@ -77,77 +113,133 @@ class AbandonConflictTest(MeowcoinTestFramework):
 
         # Not in mempool txs from self should only reduce balance
         # inputs are still spent, but change not received
-        new_balance = self.nodes[0].getbalance()
-        assert_equal(new_balance, balance - Decimal("24.9996"))
+        newbalance = alice.getbalance()
+        assert_equal(newbalance, balance - signed3_change)
         # Unconfirmed received funds that are not in mempool, also shouldn't show
         # up in unconfirmed balance
-        unconf_balance = self.nodes[0].getunconfirmedbalance() + self.nodes[0].getbalance()
-        assert_equal(unconf_balance, new_balance)
+        balances = alice.getbalances()['mine']
+        assert_equal(balances['untrusted_pending'] + balances['trusted'], newbalance)
         # Also shouldn't show up in listunspent
-        assert(not txABC2 in [utxo["txid"] for utxo in self.nodes[0].listunspent(0)])
-        balance = new_balance
+        assert not txABC2 in [utxo["txid"] for utxo in alice.listunspent(0)]
+        balance = newbalance
 
         # Abandon original transaction and verify inputs are available again
         # including that the child tx was also abandoned
-        self.nodes[0].abandontransaction(txAB1)
-        new_balance = self.nodes[0].getbalance()
-        assert_equal(new_balance, balance + Decimal("30"))
-        balance = new_balance
+        alice.abandontransaction(txAB1)
+        newbalance = alice.getbalance()
+        assert_equal(newbalance, balance + Decimal("30"))
+        balance = newbalance
 
-        # Verify that even with a low min relay fee, the tx is not re-accepted from wallet on startup once abandoned
-        self.stop_node(0)
-        self.start_node(0, extra_args=["-minrelaytxfee=0.00001"])
+        self.log.info("Check abandoned transactions in listsinceblock")
+        listsinceblock = alice.listsinceblock()
+        txAB1_listsinceblock = [d for d in listsinceblock['transactions'] if d['txid'] == txAB1 and d['category'] == 'send']
+        for tx in txAB1_listsinceblock:
+            assert_equal(tx['abandoned'], True)
+            assert_equal(tx['confirmations'], 0)
+            assert_equal(tx['trusted'], False)
+
+        # Verify that even with a low min relay fee, the tx is not reaccepted from wallet on startup once abandoned
+        self.restart_node(0, extra_args=["-minrelaytxfee=0.00001"])
+        alice = self.nodes[0].get_wallet_rpc(self.default_wallet_name)
+        assert self.nodes[0].getmempoolinfo()['loaded']
+
         assert_equal(len(self.nodes[0].getrawmempool()), 0)
-        assert_equal(self.nodes[0].getbalance(), balance)
+        assert_equal(alice.getbalance(), balance)
 
-        # But if its received again then it is un-abandoned
+        # But if it is received again then it is unabandoned
         # And since now in mempool, the change is available
         # But its child tx remains abandoned
         self.nodes[0].sendrawtransaction(signed["hex"])
-        new_balance = self.nodes[0].getbalance()
-        assert_equal(new_balance, balance - Decimal("20") + Decimal("14.99998"))
-        balance = new_balance
+        newbalance = alice.getbalance()
+        assert_equal(newbalance, balance - Decimal("20") + Decimal("14.99998"))
+        balance = newbalance
 
-        # Send child tx again so its un-abandoned
+        # Send child tx again so it is unabandoned
         self.nodes[0].sendrawtransaction(signed2["hex"])
-        new_balance = self.nodes[0].getbalance()
-        assert_equal(new_balance, balance - Decimal("10") - Decimal("14.99998") + Decimal("24.9996"))
-        balance = new_balance
+        newbalance = alice.getbalance()
+        assert_equal(newbalance, balance - Decimal("10") - Decimal("14.99998") + Decimal("24.9996"))
+        balance = newbalance
 
         # Remove using high relay fee again
-        self.stop_node(0)
-        self.start_node(0, extra_args=["-minrelaytxfee=0.0001"])
+        self.restart_node(0, extra_args=["-minrelaytxfee=0.0001"])
+        alice = self.nodes[0].get_wallet_rpc(self.default_wallet_name)
+        assert self.nodes[0].getmempoolinfo()['loaded']
         assert_equal(len(self.nodes[0].getrawmempool()), 0)
-        new_balance = self.nodes[0].getbalance()
-        assert_equal(new_balance, balance - Decimal("24.9996"))
-        balance = new_balance
+        newbalance = alice.getbalance()
+        assert_equal(newbalance, balance - Decimal("24.9996"))
+        balance = newbalance
+
+        self.log.info("Test transactions conflicted by a double spend")
+        self.nodes[0].loadwallet("bob")
+        bob = self.nodes[0].get_wallet_rpc("bob")
 
         # Create a double spend of AB1 by spending again from only A's 10 output
         # Mine double spend from node 1
-        inputs = [{"txid": txA, "vout": nA}]
-        outputs = {self.nodes[1].getnewaddress(): Decimal("9.998")}
-        tx = self.nodes[0].createrawtransaction(inputs, outputs)
-        signed = self.nodes[0].signrawtransaction(tx)
-        self.nodes[1].sendrawtransaction(signed["hex"])
-        self.nodes[1].generate(1)
+        inputs = []
+        inputs.append({"txid": txA, "vout": nA})
+        outputs = {}
+        outputs[self.nodes[1].getnewaddress()] = Decimal("3.9999")
+        outputs[bob.getnewaddress()] = Decimal("5.9999")
+        tx = alice.createrawtransaction(inputs, outputs)
+        signed = alice.signrawtransactionwithwallet(tx)
+        double_spend_txid = self.nodes[1].sendrawtransaction(signed["hex"])
+        self.connect_nodes(0, 1)
+        self.generate(self.nodes[1], 1)
 
-        connect_nodes(self.nodes[0], 1)
-        sync_blocks(self.nodes)
+        tx_list = alice.listtransactions()
+
+        conflicted = [tx for tx in tx_list if tx["confirmations"] < 0]
+        assert_equal(4, len(conflicted))
+
+        wallet_conflicts = [tx for tx in conflicted if tx["walletconflicts"]]
+        assert_equal(2, len(wallet_conflicts))
+
+        double_spends = [tx for tx in tx_list if tx["walletconflicts"] and tx["confirmations"] > 0]
+        assert_equal(2, len(double_spends))  # one for each output
+        double_spend = double_spends[0]
+
+        # Test the properties of the conflicted transactions, i.e. with confirmations < 0.
+        for tx in conflicted:
+            assert_equal(tx["abandoned"], False)
+            assert_equal(tx["confirmations"], -1)
+            assert_equal(tx["trusted"], False)
+
+        # Test the properties of the double-spend transaction, i.e. having wallet conflicts and confirmations > 0.
+        assert_equal(double_spend["abandoned"], False)
+        assert_equal(double_spend["confirmations"], 1)
+        assert "trusted" not in double_spend.keys()  # "trusted" only returned if tx has 0 or negative confirmations.
+
+        # Test the walletconflicts field of each.
+        for tx in wallet_conflicts:
+            assert_equal(double_spend["walletconflicts"], [tx["txid"]])
+            assert_equal(tx["walletconflicts"], [double_spend["txid"]])
+
+        # Test walletconflicts on the receiver's side
+        txinfo = bob.gettransaction(txAB1)
+        assert_equal(txinfo['confirmations'], -1)
+        assert_equal(txinfo['walletconflicts'], [double_spend['txid']])
+
+        double_spends = [tx for tx in bob.listtransactions() if tx["walletconflicts"] and tx["confirmations"] > 0]
+        assert_equal(1, len(double_spends))
+        double_spend = double_spends[0]
+        assert_equal(double_spend_txid, double_spend['txid'])
+        assert_equal(double_spend["walletconflicts"], [txAB1])
 
         # Verify that B and C's 10 MEWC outputs are available for spending again because AB1 is now conflicted
-        new_balance = self.nodes[0].getbalance()
-        assert_equal(new_balance, balance + Decimal("20"))
-        balance = new_balance
+        assert_equal(alice.gettransaction(txAB1)["confirmations"], -1)
+        newbalance = alice.getbalance()
+        assert_equal(newbalance, balance + Decimal("20"))
+        balance = newbalance
 
-        # There is currently a minor bug around this and so this test doesn't work.  See Issue #7315
-        # Invalidate the block with the double spend and B's 10 MEWC output should no longer be available
-        # Don't think C's should either
-        self.nodes[0].invalidateblock(self.nodes[0].getbestblockhash())
-        new_balance = self.nodes[0].getbalance()
-        #assert_equal(new_balance, balance - Decimal("10"))
-        self.log.info("If balance has not declined after invalidateblock then out of mempool wallet tx which is no longer")
-        self.log.info("conflicted has not resumed causing its inputs to be seen as spent.  See Issue #7315")
-        self.log.info(str(balance) + " -> " + str(new_balance) + " ?")
+        # Invalidate the block with the double spend. B & C's 10 MEWC outputs should no longer be available
+        blk = self.nodes[0].getbestblockhash()
+        # mine 10 blocks so that when the blk is invalidated, the transactions are not
+        # returned to the mempool
+        self.generate(self.nodes[1], 10)
+        self.nodes[0].invalidateblock(blk)
+        assert_equal(alice.gettransaction(txAB1)["confirmations"], 0)
+        newbalance = alice.getbalance()
+        assert_equal(newbalance, balance - Decimal("20"))
 
 if __name__ == '__main__':
-    AbandonConflictTest().main()
+    AbandonConflictTest(__file__).main()

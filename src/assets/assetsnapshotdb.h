@@ -2,13 +2,14 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef ASSETSNAPSHOTDB_H
-#define ASSETSNAPSHOTDB_H
+#ifndef BITCOIN_ASSETS_ASSETSNAPSHOTDB_H
+#define BITCOIN_ASSETS_ASSETSNAPSHOTDB_H
 
 #include <set>
 
 #include <dbwrapper.h>
-#include "amount.h"
+#include <consensus/amount.h>
+#include <util/fs.h>
 
 class CAssetSnapshotDBEntry
 {
@@ -41,21 +42,18 @@ public:
     }
 
     // Serialization methods
-    ADD_SERIALIZE_METHODS;
-
-    template<typename Stream, typename Operation>
-    inline void SerializationOp(Stream &s, Operation ser_action)
+    SERIALIZE_METHODS(CAssetSnapshotDBEntry, obj)
     {
-        READWRITE(height);
-        READWRITE(assetName);
-        READWRITE(ownersAndAmounts);
-        READWRITE(heightAndName);
+        READWRITE(obj.height);
+        READWRITE(obj.assetName);
+        READWRITE(obj.ownersAndAmounts);
+        READWRITE(obj.heightAndName);
     }
 };
 
 class CAssetSnapshotDB  : public CDBWrapper {
 public:
-    explicit CAssetSnapshotDB(size_t nCacheSize, bool fMemory = false, bool fWipe = false);
+    explicit CAssetSnapshotDB(const fs::path& datadir, size_t nCacheSize, bool fMemory = false, bool fWipe = false);
 
     CAssetSnapshotDB(const CAssetSnapshotDB&) = delete;
     CAssetSnapshotDB& operator=(const CAssetSnapshotDB&) = delete;
@@ -75,4 +73,4 @@ public:
 };
 
 
-#endif //ASSETSNAPSHOTDB_H
+#endif // BITCOIN_ASSETS_ASSETSNAPSHOTDB_H

@@ -1,35 +1,48 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-// Copyright (c) 2009-2017 The Bitcoin Core developers
-// Copyright (c) 2017-2019 The Meowcoin Core developers
+// Copyright (c) 2009-present The Meowcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef MEOWCOIN_WALLET_FEES_H
-#define MEOWCOIN_WALLET_FEES_H
+#ifndef BITCOIN_WALLET_FEES_H
+#define BITCOIN_WALLET_FEES_H
 
-#include "amount.h"
+#include <consensus/amount.h>
 
-class CBlockPolicyEstimator;
-class CCoinControl;
 class CFeeRate;
-class CTxMemPool;
 struct FeeCalculation;
 
+namespace wallet {
+class CCoinControl;
+class CWallet;
+
 /**
- * Return the minimum required fee taking into account the
- * floating relay fee and user set minimum transaction fee
+ * Return the minimum required absolute fee for this size
+ * based on the required fee rate
  */
-CAmount GetRequiredFee(unsigned int nTxBytes);
+CAmount GetRequiredFee(const CWallet& wallet, unsigned int nTxBytes);
 
 /**
  * Estimate the minimum fee considering user set parameters
  * and the required fee
  */
-CAmount GetMinimumFee(unsigned int nTxBytes, const CCoinControl& coin_control, const CTxMemPool& pool, const CBlockPolicyEstimator& estimator, FeeCalculation *feeCalc);
+CAmount GetMinimumFee(const CWallet& wallet, unsigned int nTxBytes, const CCoinControl& coin_control, FeeCalculation* feeCalc);
+
+/**
+ * Return the minimum required feerate taking into account the
+ * minimum relay feerate and user set minimum transaction feerate
+ */
+CFeeRate GetRequiredFeeRate(const CWallet& wallet);
+
+/**
+ * Estimate the minimum fee rate considering user set parameters
+ * and the required fee
+ */
+CFeeRate GetMinimumFeeRate(const CWallet& wallet, const CCoinControl& coin_control, FeeCalculation* feeCalc);
 
 /**
  * Return the maximum feerate for discarding change.
  */
-CFeeRate GetDiscardRate(const CBlockPolicyEstimator& estimator);
+CFeeRate GetDiscardRate(const CWallet& wallet);
+} // namespace wallet
 
-#endif // MEOWCOIN_WALLET_FEES_H
+#endif // BITCOIN_WALLET_FEES_H

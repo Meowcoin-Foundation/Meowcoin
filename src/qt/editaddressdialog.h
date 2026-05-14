@@ -1,10 +1,9 @@
-// Copyright (c) 2011-2015 The Bitcoin Core developers
-// Copyright (c) 2017-2019 The Meowcoin Core developers
+// Copyright (c) 2011-2020 The Meowcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef MEOWCOIN_QT_EDITADDRESSDIALOG_H
-#define MEOWCOIN_QT_EDITADDRESSDIALOG_H
+#ifndef BITCOIN_QT_EDITADDRESSDIALOG_H
+#define BITCOIN_QT_EDITADDRESSDIALOG_H
 
 #include <QDialog>
 
@@ -26,13 +25,12 @@ class EditAddressDialog : public QDialog
 
 public:
     enum Mode {
-        NewReceivingAddress,
         NewSendingAddress,
         EditReceivingAddress,
         EditSendingAddress
     };
 
-    explicit EditAddressDialog(Mode mode, QWidget *parent);
+    explicit EditAddressDialog(Mode mode, QWidget *parent = nullptr);
     ~EditAddressDialog();
 
     void setModel(AddressTableModel *model);
@@ -42,17 +40,20 @@ public:
     void setAddress(const QString &address);
 
 public Q_SLOTS:
-    void accept();
+    void accept() override;
 
 private:
     bool saveCurrentRow();
 
+    /** Return a descriptive string when adding an already-existing address fails. */
+    QString getDuplicateAddressWarning() const;
+
     Ui::EditAddressDialog *ui;
-    QDataWidgetMapper *mapper;
+    QDataWidgetMapper* mapper{nullptr};
     Mode mode;
-    AddressTableModel *model;
+    AddressTableModel* model{nullptr};
 
     QString address;
 };
 
-#endif // MEOWCOIN_QT_EDITADDRESSDIALOG_H
+#endif // BITCOIN_QT_EDITADDRESSDIALOG_H

@@ -43,12 +43,12 @@ related to the DNS seed operation.
 
 If these expectations cannot be satisfied the operator should
 discontinue providing services and contact the active Meowcoin
-Core development team by sending an email to:
-[feedback@mewccrypto.com](mailto:feedback@mewccrypto.com).
+Core development team as well as posting on
+[meowcoin-dev](https://groups.google.com/g/meowcoindev).
 
 Behavior outside of these expectations may be reasonable in some
 situations but should be discussed in public in advance.
 
 See also
 ----------
-- [meowcoin-seeder](https://github.com/MeowcoinProject/meowcoin-seeder) is a reference implementation of a DNS seed.
+- [meowcoin-seeder](https://github.com/sipa/meowcoin-seeder) is a reference implementation of a DNS seed.

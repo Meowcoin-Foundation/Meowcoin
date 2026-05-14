@@ -1,21 +1,25 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-// Copyright (c) 2009-2016 The Bitcoin Core developers
-// Copyright (c) 2017-2020 The Meowcoin Core developers
+// Copyright (c) 2009-2022 The Meowcoin Core developers
+// Copyright (c) 2017-2021 The Meowcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef MEOWCOIN_PRIMITIVES_BLOCK_H
-#define MEOWCOIN_PRIMITIVES_BLOCK_H
+#ifndef BITCOIN_PRIMITIVES_BLOCK_H
+#define BITCOIN_PRIMITIVES_BLOCK_H
 
-#include "auxpow.h"
-#include "primitives/pureheader.h"
-#include "primitives/transaction.h"
-#include "serialize.h"
-#include "uint256.h"
-#include <boost/shared_ptr.hpp>
-#include "tinyformat.h"
-#include "utilstrencodings.h"
-#include "util.h"
+#include <auxpow.h>
+#include <primitives/pureheader.h>
+#include <primitives/transaction.h>
+#include <serialize.h>
+#include <uint256.h>
+#include <util/time.h>
+
+#include <memory>
+
+/** Global activation timestamps set from chainparams at init time. */
+extern uint32_t nKAWPOWActivationTime;
+extern uint32_t nMEOWPOWActivationTime;
+
 /** Nodes collect new transactions into a block, hash them into a hash tree,
  * and scan through nonce values to make the block's hash satisfy proof-of-work
  * requirements.  When they solve the proof-of-work, they broadcast the block
@@ -23,71 +27,49 @@
  * in the block is a special one that creates a new coin owned by the creator
  * of the block.
  */
-
-extern uint32_t nKAWPOWActivationTime;
-extern uint32_t nMEOWPOWActivationTime;
-
-class BlockNetwork
-{
-public:
-    BlockNetwork();
-    bool fOnRegtest;
-    bool fOnTestnet;
-    void SetNetwork(const std::string& network);
-};
-
-extern BlockNetwork bNetwork;
-
-
 class CBlockHeader : public CPureBlockHeader
 {
 public:
-    //KAAAWWWPOW+Meowpow data
+    // KAWPOW / MEOWPOW fields
     uint32_t nHeight;
     uint64_t nNonce64;
     uint256 mix_hash;
 
-    // auxpow (if this is a merge-minded block)
-    boost::shared_ptr<CAuxPow> auxpow;
+    // auxpow (if this is a merge-mined block)
+    std::shared_ptr<CAuxPow> auxpow;
 
     CBlockHeader()
     {
         SetNull();
     }
 
-    ADD_SERIALIZE_METHODS;
+    SERIALIZE_METHODS(CBlockHeader, obj)
+    {
+        // Always serialize the pure header fields.
+        READWRITE(obj.nVersion, obj.hashPrevBlock, obj.hashMerkleRoot, obj.nTime, obj.nBits);
 
-    template <typename Stream, typename Operation>
-    inline void SerializationOp(Stream& s, Operation ser_action) {
-        // First serialize everything in CPureBlockHeader
-        READWRITE(this->nVersion);
-        READWRITE(hashPrevBlock);
-        READWRITE(hashMerkleRoot);
-        READWRITE(nTime);
-        READWRITE(nBits);
-        if (this->nTime < nKAWPOWActivationTime || this->nVersion.IsAuxpow()) {
-            READWRITE(nNonce);
-            if (this->nVersion.IsAuxpow())
-            {
-                if (ser_action.ForRead())
-                    auxpow.reset(new CAuxPow());
-                assert(auxpow);
-                READWRITE(*auxpow);
-            } else if (ser_action.ForRead()) {
-                auxpow.reset();
+        // Pre-KAWPOW or AuxPoW blocks use nNonce + optional auxpow.
+        // KAWPOW/MEOWPOW blocks use nHeight/nNonce64/mix_hash.
+        if (obj.nTime < nKAWPOWActivationTime || obj.nVersion.IsAuxpow()) {
+            READWRITE(obj.nNonce);
+            if (obj.nVersion.IsAuxpow()) {
+                SER_READ(obj, obj.auxpow = std::make_shared<CAuxPow>());
+                if (obj.auxpow) {
+                    READWRITE(*obj.auxpow);
+                }
+            } else {
+                SER_READ(obj, obj.auxpow.reset());
             }
         } else {
-            READWRITE(nHeight);
-            READWRITE(nNonce64);
-            READWRITE(mix_hash);
+            READWRITE(obj.nHeight, obj.nNonce64, obj.mix_hash);
         }
     }
 
     void SetNull()
     {
         CPureBlockHeader::SetNull();
-        nNonce64 = 0;
         nHeight = 0;
+        nNonce64 = 0;
         mix_hash.SetNull();
         auxpow.reset();
     }
@@ -104,24 +86,25 @@ public:
     uint256 GetHashFull(uint256& mix_hash) const;
     uint256 GetKAWPOWHeaderHash() const;
     uint256 GetMEOWPOWHeaderHash() const;
-    std::string ToString() const;
 
-    /// Use for testing algo switch
-    uint256 TestTiger() const;
-    uint256 TestSha512() const;
-    uint256 TestGost512() const;
+    NodeSeconds Time() const
+    {
+        return NodeSeconds{std::chrono::seconds{nTime}};
+    }
 
     int64_t GetBlockTime() const
     {
         return (int64_t)nTime;
     }
 
+    std::string ToString() const;
+
     /**
      * Set the block's auxpow (or unset it).  This takes care of updating
      * the version accordingly.
-     * @param apow Pointer to the auxpow to use or NULL.
+     * @param apow Pointer to the auxpow to use or nullptr.
      */
-    void SetAuxpow(CAuxPow* apow);
+    void SetAuxpow(std::shared_ptr<CAuxPow> apow);
 };
 
 
@@ -131,9 +114,10 @@ public:
     // network and disk
     std::vector<CTransactionRef> vtx;
 
-    // memory only
-    mutable bool fChecked;
-
+    // Memory-only flags for caching expensive checks
+    mutable bool fChecked;                            // CheckBlock()
+    mutable bool m_checked_witness_commitment{false}; // CheckWitnessCommitment()
+    mutable bool m_checked_merkle_root{false};        // CheckMerkleRoot()
 
     CBlock()
     {
@@ -143,15 +127,12 @@ public:
     CBlock(const CBlockHeader &header)
     {
         SetNull();
-        *((CBlockHeader*)this) = header;
+        *(static_cast<CBlockHeader*>(this)) = header;
     }
 
-    ADD_SERIALIZE_METHODS;
-
-    template <typename Stream, typename Operation>
-    inline void SerializationOp(Stream& s, Operation ser_action) {
-        READWRITE(*(CBlockHeader*)this);
-        READWRITE(vtx);
+    SERIALIZE_METHODS(CBlock, obj)
+    {
+        READWRITE(AsBase<CBlockHeader>(obj), obj.vtx);
     }
 
     void SetNull()
@@ -159,6 +140,8 @@ public:
         CBlockHeader::SetNull();
         vtx.clear();
         fChecked = false;
+        m_checked_witness_commitment = false;
+        m_checked_merkle_root = false;
     }
 
     CBlockHeader GetBlockHeader() const
@@ -171,20 +154,51 @@ public:
         block.nBits          = nBits;
         block.nNonce         = nNonce;
         block.auxpow         = auxpow;
-
-        // KAWPOW
         block.nHeight        = nHeight;
         block.nNonce64       = nNonce64;
         block.mix_hash       = mix_hash;
         return block;
     }
 
-    // void SetPrevBlockHash(uint256 prevHash)
-    // {
-    //     block.hashPrevBlock = prevHash;
-    // }
-
     std::string ToString() const;
+};
+
+/**
+ * Custom serializer for CBlockHeader that omits the nNonce64 and mixHash,
+ * for use as input to KAWPOW ProgPow.
+ */
+class CKAWPOWInput : private CBlockHeader
+{
+public:
+    CKAWPOWInput(const CBlockHeader& header)
+    {
+        CBlockHeader::SetNull();
+        *(static_cast<CBlockHeader*>(this)) = header;
+    }
+
+    SERIALIZE_METHODS(CKAWPOWInput, obj)
+    {
+        READWRITE(obj.nVersion, obj.hashPrevBlock, obj.hashMerkleRoot, obj.nTime, obj.nBits, obj.nHeight);
+    }
+};
+
+/**
+ * Custom serializer for CBlockHeader that omits the nNonce64 and mixHash,
+ * for use as input to MEOWPOW ProgPow.
+ */
+class CMEOWPOWInput : private CBlockHeader
+{
+public:
+    CMEOWPOWInput(const CBlockHeader& header)
+    {
+        CBlockHeader::SetNull();
+        *(static_cast<CBlockHeader*>(this)) = header;
+    }
+
+    SERIALIZE_METHODS(CMEOWPOWInput, obj)
+    {
+        READWRITE(obj.nVersion, obj.hashPrevBlock, obj.hashMerkleRoot, obj.nTime, obj.nBits, obj.nHeight);
+    }
 };
 
 /** Describes a place in the block chain to another node such that if the
@@ -193,20 +207,26 @@ public:
  */
 struct CBlockLocator
 {
+    /** Historically CBlockLocator's version field has been written to network
+     * streams as the negotiated protocol version and to disk streams as the
+     * client version, but the value has never been used.
+     *
+     * Hard-code to the highest protocol version ever written to a network stream.
+     * SerParams can be used if the field requires any meaning in the future,
+     **/
+    static constexpr int DUMMY_VERSION = 70016;
+
     std::vector<uint256> vHave;
 
-    CBlockLocator() {}
+    CBlockLocator() = default;
 
-    explicit CBlockLocator(const std::vector<uint256>& vHaveIn) : vHave(vHaveIn) {}
+    explicit CBlockLocator(std::vector<uint256>&& have) : vHave(std::move(have)) {}
 
-    ADD_SERIALIZE_METHODS;
-
-    template <typename Stream, typename Operation>
-    inline void SerializationOp(Stream& s, Operation ser_action) {
-        int nVersion = s.GetVersion();
-        if (!(s.GetType() & SER_GETHASH))
-            READWRITE(nVersion);
-        READWRITE(vHave);
+    SERIALIZE_METHODS(CBlockLocator, obj)
+    {
+        int nVersion = DUMMY_VERSION;
+        READWRITE(nVersion);
+        READWRITE(obj.vHave);
     }
 
     void SetNull()
@@ -220,53 +240,4 @@ struct CBlockLocator
     }
 };
 
-/**
- * Custom serializer for CBlockHeader that omits the nNonce and mixHash, for use
- * as input to ProgPow.
- */
-class CKAWPOWInput : private CBlockHeader
-{
-public:
-    CKAWPOWInput(const CBlockHeader &header)
-    {
-        CBlockHeader::SetNull();
-        *((CBlockHeader*)this) = header;
-    }
-
-    ADD_SERIALIZE_METHODS;
-
-    template <typename Stream, typename Operation>
-    inline void SerializationOp(Stream& s, Operation ser_action) {
-        READWRITE(this->nVersion);
-        READWRITE(hashPrevBlock);
-        READWRITE(hashMerkleRoot);
-        READWRITE(nTime);
-        READWRITE(nBits);
-        READWRITE(nHeight);
-    }
-};
-
-//MEOWPOW
-class CMEOWPOWInput : private CBlockHeader
-{
-public:
-    CMEOWPOWInput(const CBlockHeader &header)
-    {
-        CBlockHeader::SetNull();
-        *((CBlockHeader*)this) = header;
-    }
-
-    ADD_SERIALIZE_METHODS;
-
-    template <typename Stream, typename Operation>
-    inline void SerializationOp(Stream& s, Operation ser_action) {
-        READWRITE(this->nVersion);
-        READWRITE(hashPrevBlock);
-        READWRITE(hashMerkleRoot);
-        READWRITE(nTime);
-        READWRITE(nBits);
-        READWRITE(nHeight);
-    }
-};
-
-#endif // MEOWCOIN_PRIMITIVES_BLOCK_H
+#endif // BITCOIN_PRIMITIVES_BLOCK_H

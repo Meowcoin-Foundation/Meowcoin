@@ -1,17 +1,16 @@
-// Copyright (c) 2011-2016 The Bitcoin Core developers
-// Copyright (c) 2017-2019 The Meowcoin Core developers
+// Copyright (c) 2011-2018 The Meowcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include "csvmodelwriter.h"
+#include <qt/csvmodelwriter.h>
 
 #include <QAbstractItemModel>
 #include <QFile>
 #include <QTextStream>
 
-CSVModelWriter::CSVModelWriter(const QString &_filename, QObject *parent) :
-    QObject(parent),
-    filename(_filename), model(0)
+CSVModelWriter::CSVModelWriter(const QString& _filename, QObject* parent)
+    : QObject(parent),
+      filename(_filename)
 {
 }
 

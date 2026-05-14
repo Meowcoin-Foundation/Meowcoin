@@ -1,18 +1,37 @@
-// Copyright (c) 2011-2016 The Bitcoin Core developers
-// Copyright (c) 2017-2021 The Meowcoin Core developers
+// Copyright (c) 2011-present The Meowcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef MEOWCOIN_QT_OPTIONSMODEL_H
-#define MEOWCOIN_QT_OPTIONSMODEL_H
+#ifndef BITCOIN_QT_OPTIONSMODEL_H
+#define BITCOIN_QT_OPTIONSMODEL_H
 
-#include "amount.h"
+#include <cstdint>
+#include <qt/meowcoinunits.h>
+#include <qt/guiconstants.h>
 
 #include <QAbstractListModel>
+#include <QFont>
 
-QT_BEGIN_NAMESPACE
-class QNetworkProxy;
-QT_END_NAMESPACE
+#include <cassert>
+#include <variant>
+
+struct bilingual_str;
+namespace interfaces {
+class Node;
+}
+
+extern const char *DEFAULT_GUI_PROXY_HOST;
+static constexpr uint16_t DEFAULT_GUI_PROXY_PORT = 9050;
+
+/**
+ * Convert configured prune target MiB to displayed GB. Round up to avoid underestimating max disk usage.
+ */
+static inline int PruneMiBtoGB(int64_t mib) { return (mib * 1024 * 1024 + GB_BYTES - 1) / GB_BYTES; }
+
+/**
+ * Convert displayed prune target GB to configured MiB. Round down so roundtrip GB -> MiB -> GB conversion is stable.
+ */
+static inline int64_t PruneGBtoMiB(int gb) { return gb * GB_BYTES / 1024 / 1024; }
 
 /** Interface from Qt to configuration data structure for Meowcoin client.
    To Qt, the options are presented as a list with the different options
@@ -25,14 +44,13 @@ class OptionsModel : public QAbstractListModel
     Q_OBJECT
 
 public:
-    explicit OptionsModel(QObject *parent = 0, bool resetSettings = false);
+    explicit OptionsModel(interfaces::Node& node, QObject *parent = nullptr);
 
     enum OptionID {
         StartAtStartup,         // bool
-        HideTrayIcon,           // bool
+        ShowTrayIcon,           // bool
         MinimizeToTray,         // bool
-        ToolbarIconsOnly,       // bool
-        MapPortUPnP,            // bool
+        MapPortNatpmp,          // bool
         MinimizeOnClose,        // bool
         ProxyUse,               // bool
         ProxyIP,                // QString
@@ -40,81 +58,102 @@ public:
         ProxyUseTor,            // bool
         ProxyIPTor,             // QString
         ProxyPortTor,           // int
-        DisplayUnit,            // MeowcoinUnits::Unit
-        DisplayCurrencyIndex,   // int
+        DisplayUnit,            // BitcoinUnit
         ThirdPartyTxUrls,       // QString
-        IpfsUrl,                // QString
         Language,               // QString
+        FontForMoney,           // FontChoice
         CoinControlFeatures,    // bool
+        SubFeeFromAmount,       // bool
         ThreadsScriptVerif,     // int
+        Prune,                  // bool
+        PruneSize,              // int
         DatabaseCache,          // int
+        ExternalSignerPath,     // QString
         SpendZeroConfChange,    // bool
         Listen,                 // bool
-        CustomFeeFeatures,      // bool
-        DarkModeEnabled,        // bool
+        Server,                 // bool
+        EnablePSMTControls,     // bool
+        MaskValues,             // bool
         OptionIDRowCount,
     };
 
-    void Init(bool resetSettings = false);
+    enum class FontChoiceAbstract {
+        EmbeddedFont,
+        BestSystemFont,
+    };
+    typedef std::variant<FontChoiceAbstract, QFont> FontChoice;
+    static inline const FontChoice UseBestSystemFont{FontChoiceAbstract::BestSystemFont};
+    static QFont getFontForChoice(const FontChoice& fc);
+
+    bool Init(bilingual_str& error);
     void Reset();
 
-    int rowCount(const QModelIndex & parent = QModelIndex()) const;
-    QVariant data(const QModelIndex & index, int role = Qt::DisplayRole) const;
-    bool setData(const QModelIndex & index, const QVariant & value, int role = Qt::EditRole);
-    /** Updates current unit in memory, settings and emits displayUnitChanged(newUnit) signal */
-    void setDisplayUnit(const QVariant &value);
-    /** Updates current unit in memory, settings and emits displayCurrencyIndexChanged(newIndex) signal */
-    void setDisplayCurrencyIndex(const QVariant &value);
+    int rowCount(const QModelIndex & parent = QModelIndex()) const override;
+    QVariant data(const QModelIndex & index, int role = Qt::DisplayRole) const override;
+    bool setData(const QModelIndex & index, const QVariant & value, int role = Qt::EditRole) override;
+    QVariant getOption(OptionID option, const std::string& suffix="") const;
+    bool setOption(OptionID option, const QVariant& value, const std::string& suffix="");
+    /** Updates current unit in memory, settings and emits displayUnitChanged(new_unit) signal */
+    void setDisplayUnit(const QVariant& new_unit);
 
     /* Explicit getters */
-    bool getHideTrayIcon() const { return fHideTrayIcon; }
+    bool getShowTrayIcon() const { return m_show_tray_icon; }
     bool getMinimizeToTray() const { return fMinimizeToTray; }
     bool getMinimizeOnClose() const { return fMinimizeOnClose; }
-    int getDisplayUnit() const { return nDisplayUnit; }
-    int getDisplayCurrencyIndex() const { return nDisplayCurrencyIndex; }
+    BitcoinUnit getDisplayUnit() const { return m_display_meowcoin_unit; }
     QString getThirdPartyTxUrls() const { return strThirdPartyTxUrls; }
-    QString getIpfsUrl() const { return strIpfsUrl; }
-    bool getProxySettings(QNetworkProxy& proxy) const;
+    QFont getFontForMoney() const;
     bool getCoinControlFeatures() const { return fCoinControlFeatures; }
-    bool getCustomFeeFeatures() const { return fCustomFeeFeatures; }
-    bool getDarkModeEnabled() const { return fDarkModeEnabled; }
+    bool getSubFeeFromAmount() const { return m_sub_fee_from_amount; }
+    bool getEnablePSMTControls() const { return m_enable_psmt_controls; }
     const QString& getOverriddenByCommandLine() { return strOverriddenByCommandLine; }
+
+    /** Whether -signer was set or not */
+    bool hasSigner();
+
+    /* Explicit setters */
+    void SetPruneTargetGB(int prune_target_gb);
 
     /* Restart flag helper */
     void setRestartRequired(bool fRequired);
     bool isRestartRequired() const;
 
+    interfaces::Node& node() const { return m_node; }
+
 private:
+    interfaces::Node& m_node;
     /* Qt-only settings */
-    bool fHideTrayIcon;
+    bool m_show_tray_icon;
     bool fMinimizeToTray;
     bool fMinimizeOnClose;
-    bool fToolbarIconsOnly;
     QString language;
-    int nDisplayUnit;
-    int nDisplayCurrencyIndex;
+    BitcoinUnit m_display_meowcoin_unit;
     QString strThirdPartyTxUrls;
-    QString strIpfsUrl;
+    FontChoice m_font_money{FontChoiceAbstract::EmbeddedFont};
     bool fCoinControlFeatures;
-    /** MEWC START*/
-    bool fCustomFeeFeatures;
-    bool fDarkModeEnabled;
-    /** MEWC END*/
+    bool m_sub_fee_from_amount;
+    bool m_enable_psmt_controls;
+    bool m_mask_values;
+
     /* settings that were overridden by command-line */
     QString strOverriddenByCommandLine;
+
+    static QString FontChoiceToString(const OptionsModel::FontChoice&);
+    static FontChoice FontChoiceFromString(const QString&);
 
     // Add option to list of GUI options overridden through command line/config file
     void addOverriddenOption(const std::string &option);
 
     // Check settings version and upgrade default values if required
     void checkAndMigrate();
+
 Q_SIGNALS:
-    void displayUnitChanged(int unit);
-    void displayCurrencyIndexChanged(int unit);
+    void displayUnitChanged(BitcoinUnit unit);
     void coinControlFeaturesChanged(bool);
-    void customFeeFeaturesChanged(bool);
-    void hideTrayIconChanged(bool);
-    void updateIconsOnlyToolbar(bool);
+    void showTrayIconChanged(bool);
+    void fontForMoneyChanged(const QFont&);
 };
 
-#endif // MEOWCOIN_QT_OPTIONSMODEL_H
+Q_DECLARE_METATYPE(OptionsModel::FontChoice)
+
+#endif // BITCOIN_QT_OPTIONSMODEL_H

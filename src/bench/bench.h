@@ -1,81 +1,84 @@
-// Copyright (c) 2015-2016 The Bitcoin Core developers
-// Copyright (c) 2017-2019 The Meowcoin Core developers
+// Copyright (c) 2015-2022 The Meowcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef MEOWCOIN_BENCH_BENCH_H
-#define MEOWCOIN_BENCH_BENCH_H
+#ifndef BITCOIN_BENCH_BENCH_H
+#define BITCOIN_BENCH_BENCH_H
 
+#include <bench/nanobench.h> // IWYU pragma: export
+#include <util/fs.h>
+#include <util/macros.h>
+
+#include <chrono>
+#include <cstdint>
 #include <functional>
-#include <limits>
 #include <map>
 #include <string>
-
-#include <boost/preprocessor/cat.hpp>
-#include <boost/preprocessor/stringize.hpp>
-
-// Simple micro-benchmarking framework; API mostly matches a subset of the Google Benchmark
-// framework (see https://github.com/google/benchmark)
-// Why not use the Google Benchmark framework? Because adding Yet Another Dependency
-// (that uses cmake as its build system and has lots of features we don't need) isn't
-// worth it.
+#include <utility>
+#include <vector>
 
 /*
  * Usage:
 
-static void CODE_TO_TIME(benchmark::State& state)
+static void NameOfYourBenchmarkFunction(benchmark::Bench& bench)
 {
-    ... do any setup needed...
-    while (state.KeepRunning()) {
-       ... do stuff you want to time...
-    }
-    ... do any cleanup needed...
+    ...do any setup needed...
+
+    bench.run([&] {
+         ...do stuff you want to time; refer to src/bench/nanobench.h
+            for more information and the options that can be passed here...
+    });
+
+    ...do any cleanup needed...
 }
 
-BENCHMARK(CODE_TO_TIME);
+BENCHMARK(NameOfYourBenchmarkFunction);
 
  */
- 
+
 namespace benchmark {
 
-    class State {
-        std::string name;
-        double maxElapsed;
-        double beginTime;
-        double lastTime, minTime, maxTime;
-        uint64_t count;
-        uint64_t countMask;
-        uint64_t beginCycles;
-        uint64_t lastCycles;
-        uint64_t minCycles;
-        uint64_t maxCycles;
-    public:
-        State(std::string _name, double _maxElapsed) : name(_name), maxElapsed(_maxElapsed), count(0) {
-            minTime = std::numeric_limits<double>::max();
-            maxTime = std::numeric_limits<double>::min();
-            minCycles = std::numeric_limits<uint64_t>::max();
-            maxCycles = std::numeric_limits<uint64_t>::min();
-            countMask = 1;
-        }
-        bool KeepRunning();
-    };
+using ankerl::nanobench::Bench;
 
-    typedef std::function<void(State&)> BenchFunction;
+typedef std::function<void(Bench&)> BenchFunction;
 
-    class BenchRunner
-    {
-        typedef std::map<std::string, BenchFunction> BenchmarkMap;
-        static BenchmarkMap &benchmarks();
+enum PriorityLevel : uint8_t
+{
+    LOW = 1 << 0,
+    HIGH = 1 << 2,
+};
 
-    public:
-        BenchRunner(std::string name, BenchFunction func);
+// List priority labels, comma-separated and sorted by increasing priority
+std::string ListPriorities();
+uint8_t StringToPriority(const std::string& str);
 
-        static void RunAll(double elapsedTimeForOne=1.0);
-    };
-}
+struct Args {
+    bool is_list_only;
+    bool sanity_check;
+    std::chrono::milliseconds min_time;
+    std::vector<double> asymptote;
+    fs::path output_csv;
+    fs::path output_json;
+    std::string regex_filter;
+    uint8_t priority;
+    std::vector<std::string> setup_args;
+};
 
-// BENCHMARK(foo) expands to:  benchmark::BenchRunner bench_11foo("foo", foo);
-#define BENCHMARK(n) \
-    benchmark::BenchRunner BOOST_PP_CAT(bench_, BOOST_PP_CAT(__LINE__, n))(BOOST_PP_STRINGIZE(n), n);
+class BenchRunner
+{
+    // maps from "name" -> (function, priority_level)
+    typedef std::map<std::string, std::pair<BenchFunction, PriorityLevel>> BenchmarkMap;
+    static BenchmarkMap& benchmarks();
 
-#endif // MEOWCOIN_BENCH_BENCH_H
+public:
+    BenchRunner(std::string name, BenchFunction func, PriorityLevel level);
+
+    static void RunAll(const Args& args);
+};
+} // namespace benchmark
+
+// BENCHMARK(foo) expands to:  benchmark::BenchRunner bench_11foo("foo", foo, priority_level);
+#define BENCHMARK(n, priority_level) \
+    benchmark::BenchRunner PASTE2(bench_, PASTE2(__LINE__, n))(STRINGIZE(n), n, priority_level);
+
+#endif // BITCOIN_BENCH_BENCH_H

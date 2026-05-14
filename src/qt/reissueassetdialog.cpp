@@ -1,65 +1,94 @@
 // Copyright (c) 2011-2016 The Bitcoin Core developers
-// Copyright (c) 2017-2021 The Meowcoin Core developers
+// Copyright (c) 2017-2019 The Meowcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 
-#include "reissueassetdialog.h"
+#include <qt/reissueassetdialog.h>
+#include <qt/addresstablemodel.h>
+#include <assets/ans.h>
+#include <assets/assets.h>
+#include <assets/assettypes.h>
+#include <qt/assettablemodel.h>
+#include <qt/bitcoinunits.h>
+#include <qt/clientmodel.h>
+#include <qt/coincontroldialog.h>
+#include <core_io.h>
+#include <util/moneystr.h>
+#include <qt/guiconstants.h>
+#include <qt/guiutil.h>
+#include <qt/optionsmodel.h>
+#include <qt/platformstyle.h>
+#include <qt/sendcoinsdialog.h>
 #include "ui_reissueassetdialog.h"
-#include "platformstyle.h"
-#include "walletmodel.h"
-#include "assettablemodel.h"
-#include "addresstablemodel.h"
-#include "core_io.h"
-#include "univalue.h"
-#include "assets/assettypes.h"
-#include "meowcoinunits.h"
-#include "optionsmodel.h"
-#include "sendcoinsdialog.h"
-#include "coincontroldialog.h"
-#include "guiutil.h"
-#include "clientmodel.h"
-#include "guiconstants.h"
+#include <univalue.h>
+#include <qt/walletmodel.h>
 
-#include <validation.h>
-#include <script/standard.h>
-#include <wallet/wallet.h>
+#include <key_io.h>
 #include <policy/policy.h>
-#include <base58.h>
+#include <addresstype.h>
+#include <outputtype.h>
+#include <validation.h>
+#include <wallet/wallet.h>
+#include <wallet/spend.h>
 
-#include "wallet/coincontrol.h"
-#include "policy/fees.h"
-#include "wallet/fees.h"
+#include <wallet/coincontrol.h>
+#include <wallet/asset_tx.h>
+#include <policy/fees.h>
 
-#include <QGraphicsDropShadowEffect>
-#include <QModelIndex>
-#include <QDebug>
-#include <QMessageBox>
 #include <QClipboard>
-#include <QSettings>
-#include <QStringListModel>
-#include <QSortFilterProxyModel>
 #include <QCompleter>
-#include <QUrl>
+#include <QDebug>
 #include <QDesktopServices>
+#include <QMessageBox>
+#include <QModelIndex>
+#include <QSettings>
+#include <QSortFilterProxyModel>
+#include <QStringListModel>
+#include <QUrl>
+#include <thread>
 
-#if QT_VERSION < QT_VERSION_CHECK(5, 11, 0)
-#define QTversionPreFiveEleven
-#endif
+static const int confTargets[] = {2, 4, 6, 12, 24, 48};
+static int getConfTargetForIndex(int index) {
+    int maxI = static_cast<int>(sizeof(confTargets)/sizeof(confTargets[0])) - 1;
+    if (index < 0) return confTargets[0];
+    if (index > maxI) return confTargets[maxI];
+    return confTargets[index];
+}
+static int getIndexForConfTarget(int target) {
+    for (unsigned int i = 0; i < sizeof(confTargets)/sizeof(confTargets[0]); i++)
+        if (confTargets[i] >= target) return i;
+    return sizeof(confTargets)/sizeof(confTargets[0]) - 1;
+}
+
+static wallet::CCoinControl& s_coinControl()
+{
+    static wallet::CCoinControl instance;
+    return instance;
+}
 
 
-ReissueAssetDialog::ReissueAssetDialog(const PlatformStyle *_platformStyle, QWidget *parent) :
-        QDialog(parent),
-        ui(new Ui::ReissueAssetDialog),
-        platformStyle(_platformStyle)
+ReissueAssetDialog::ReissueAssetDialog(const PlatformStyle* _platformStyle, QWidget* parent) : QDialog(parent),
+                                                                                               ui(new Ui::ReissueAssetDialog),
+                                                                                               platformStyle(_platformStyle)
 {
     ui->setupUi(this);
     setWindowTitle("Reissue Assets");
+
+    if (!IsMeowcoinNameSystemDeployed()) {
+        ui->ansBox->hide();
+        ui->ansType->hide();
+        ui->ansText->hide();
+    }
+
     connect(ui->comboBox, SIGNAL(activated(int)), this, SLOT(onAssetSelected(int)));
     connect(ui->quantitySpinBox, SIGNAL(valueChanged(double)), this, SLOT(onQuantityChanged(double)));
     connect(ui->ipfsBox, SIGNAL(clicked()), this, SLOT(onIPFSStateChanged()));
+    connect(ui->ansBox, SIGNAL(clicked()), this, SLOT(onANSStateChanged()));
     connect(ui->openIpfsButton, SIGNAL(clicked()), this, SLOT(openIpfsBrowser()));
     connect(ui->ipfsText, SIGNAL(textChanged(QString)), this, SLOT(onIPFSHashChanged(QString)));
+    connect(ui->ansText, SIGNAL(textChanged(QString)), this, SLOT(onANSDataChanged(QString)));
+    connect(ui->ansType, SIGNAL(currentIndexChanged(int)), this, SLOT(onANSTypeChanged(int)));
     connect(ui->addressText, SIGNAL(textChanged(QString)), this, SLOT(onAddressNameChanged(QString)));
     connect(ui->reissueAssetButton, SIGNAL(clicked()), this, SLOT(onReissueAssetClicked()));
     connect(ui->reissuableBox, SIGNAL(clicked()), this, SLOT(onReissueBoxChanged()));
@@ -74,16 +103,16 @@ ReissueAssetDialog::ReissueAssetDialog(const PlatformStyle *_platformStyle, QWid
     // Coin Control
     connect(ui->pushButtonCoinControl, SIGNAL(clicked()), this, SLOT(coinControlButtonClicked()));
     connect(ui->checkBoxCoinControlChange, SIGNAL(stateChanged(int)), this, SLOT(coinControlChangeChecked(int)));
-    connect(ui->lineEditCoinControlChange, SIGNAL(textEdited(const QString &)), this, SLOT(coinControlChangeEdited(const QString &)));
+    connect(ui->lineEditCoinControlChange, SIGNAL(textEdited(const QString&)), this, SLOT(coinControlChangeEdited(const QString&)));
 
     // Coin Control: clipboard actions
-    QAction *clipboardQuantityAction = new QAction(tr("Copy quantity"), this);
-    QAction *clipboardAmountAction = new QAction(tr("Copy amount"), this);
-    QAction *clipboardFeeAction = new QAction(tr("Copy fee"), this);
-    QAction *clipboardAfterFeeAction = new QAction(tr("Copy after fee"), this);
-    QAction *clipboardBytesAction = new QAction(tr("Copy bytes"), this);
-    QAction *clipboardLowOutputAction = new QAction(tr("Copy dust"), this);
-    QAction *clipboardChangeAction = new QAction(tr("Copy change"), this);
+    QAction* clipboardQuantityAction = new QAction(tr("Copy quantity"), this);
+    QAction* clipboardAmountAction = new QAction(tr("Copy amount"), this);
+    QAction* clipboardFeeAction = new QAction(tr("Copy fee"), this);
+    QAction* clipboardAfterFeeAction = new QAction(tr("Copy after fee"), this);
+    QAction* clipboardBytesAction = new QAction(tr("Copy bytes"), this);
+    QAction* clipboardLowOutputAction = new QAction(tr("Copy dust"), this);
+    QAction* clipboardChangeAction = new QAction(tr("Copy change"), this);
     connect(clipboardQuantityAction, SIGNAL(triggered()), this, SLOT(coinControlClipboardQuantity()));
     connect(clipboardAmountAction, SIGNAL(triggered()), this, SLOT(coinControlClipboardAmount()));
     connect(clipboardFeeAction, SIGNAL(triggered()), this, SLOT(coinControlClipboardFee()));
@@ -104,13 +133,13 @@ ReissueAssetDialog::ReissueAssetDialog(const PlatformStyle *_platformStyle, QWid
     if (!settings.contains("fFeeSectionMinimized"))
         settings.setValue("fFeeSectionMinimized", true);
     if (!settings.contains("nFeeRadio") && settings.contains("nTransactionFee") && settings.value("nTransactionFee").toLongLong() > 0) // compatibility
-        settings.setValue("nFeeRadio", 1); // custom
+        settings.setValue("nFeeRadio", 1);                                                                                             // custom
     if (!settings.contains("nFeeRadio"))
         settings.setValue("nFeeRadio", 0); // recommended
     if (!settings.contains("nSmartFeeSliderPosition"))
         settings.setValue("nSmartFeeSliderPosition", 0);
     if (!settings.contains("nTransactionFee"))
-        settings.setValue("nTransactionFee", (qint64)DEFAULT_TRANSACTION_FEE);
+        settings.setValue("nTransactionFee", (qint64)10000); // default transaction fee
     if (!settings.contains("fPayOnlyMinFee"))
         settings.setValue("fPayOnlyMinFee", false);
     ui->groupFee->setId(ui->radioSmartFee, 0);
@@ -141,7 +170,7 @@ ReissueAssetDialog::ReissueAssetDialog(const PlatformStyle *_platformStyle, QWid
     ui->comboBox->lineEdit()->setPlaceholderText(tr("Select an asset to reissue.."));
     ui->comboBox->lineEdit()->setToolTip(tr("Select the asset you want to reissue."));
 
-    completer = new QCompleter(proxy,this);
+    completer = new QCompleter(proxy, this);
     completer->setCompletionMode(QCompleter::PopupCompletion);
     completer->setCaseSensitivity(Qt::CaseInsensitive);
     ui->comboBox->setCompleter(completer);
@@ -153,30 +182,28 @@ ReissueAssetDialog::ReissueAssetDialog(const PlatformStyle *_platformStyle, QWid
     ui->lineEditVerifierString->installEventFilter(this);
 }
 
-void ReissueAssetDialog::setClientModel(ClientModel *_clientModel)
+void ReissueAssetDialog::setClientModel(ClientModel* _clientModel)
 {
     this->clientModel = _clientModel;
 
     if (_clientModel) {
-        connect(_clientModel, SIGNAL(numBlocksChanged(int,QDateTime,double,bool)), this, SLOT(updateSmartFeeLabel()));
+        connect(_clientModel, SIGNAL(numBlocksChanged(int, QDateTime, double, bool)), this, SLOT(updateSmartFeeLabel()));
     }
 }
 
-void ReissueAssetDialog::setModel(WalletModel *_model)
+void ReissueAssetDialog::setModel(WalletModel* _model)
 {
     this->model = _model;
 
-    if(_model && _model->getOptionsModel())
-    {
-        setBalance(_model->getBalance(), _model->getUnconfirmedBalance(), _model->getImmatureBalance(),
-                   _model->getWatchBalance(), _model->getWatchUnconfirmedBalance(), _model->getWatchImmatureBalance());
-        connect(_model, SIGNAL(balanceChanged(CAmount,CAmount,CAmount,CAmount,CAmount,CAmount)), this, SLOT(setBalance(CAmount,CAmount,CAmount,CAmount,CAmount,CAmount)));
-        connect(_model->getOptionsModel(), SIGNAL(displayUnitChanged(int)), this, SLOT(updateDisplayUnit()));
+    if (_model && _model->getOptionsModel()) {
+        setBalance(_model->getCachedBalance());
+        connect(_model, &WalletModel::balanceChanged, this, &ReissueAssetDialog::setBalance);
+        connect(_model->getOptionsModel(), &OptionsModel::displayUnitChanged, this, &ReissueAssetDialog::updateDisplayUnit);
         updateDisplayUnit();
 
         // Coin Control
-        connect(_model->getOptionsModel(), SIGNAL(displayUnitChanged(int)), this, SLOT(coinControlUpdateLabels()));
-        connect(_model->getOptionsModel(), SIGNAL(coinControlFeaturesChanged(bool)), this, SLOT(coinControlFeatureChanged(bool)));
+        connect(_model->getOptionsModel(), &OptionsModel::displayUnitChanged, this, &ReissueAssetDialog::coinControlUpdateLabels);
+        connect(_model->getOptionsModel(), &OptionsModel::coinControlFeaturesChanged, this, &ReissueAssetDialog::coinControlFeatureChanged);
         bool fCoinControlEnabled = _model->getOptionsModel()->getCoinControlFeatures();
         ui->frameCoinControl->setVisible(fCoinControlEnabled);
         ui->addressText->setVisible(fCoinControlEnabled);
@@ -184,36 +211,30 @@ void ReissueAssetDialog::setModel(WalletModel *_model)
         coinControlUpdateLabels();
 
         // Custom Fee Control
-        ui->frameFee->setVisible(_model->getOptionsModel()->getCustomFeeFeatures());
-        connect(_model->getOptionsModel(), SIGNAL(customFeeFeaturesChanged(bool)), this, SLOT(feeControlFeatureChanged(bool)));
+        ui->frameFee->setVisible(true); // custom fee features always enabled
 
         // fee section
-        for (const int &n : confTargets) {
-            ui->confTargetSelector->addItem(tr("%1 (%2 blocks)").arg(GUIUtil::formatNiceTimeOffset(n * GetParams().GetConsensus().nPowTargetSpacing)).arg(n));
+        for (const int& n : confTargets) {
+            ui->confTargetSelector->addItem(tr("%1 (%2 blocks)").arg(GUIUtil::formatNiceTimeOffset(n * Params().GetConsensus().nPowTargetSpacing)).arg(n));
         }
         connect(ui->confTargetSelector, SIGNAL(currentIndexChanged(int)), this, SLOT(updateSmartFeeLabel()));
         connect(ui->confTargetSelector, SIGNAL(currentIndexChanged(int)), this, SLOT(coinControlUpdateLabels()));
 
-#if (QT_VERSION >= QT_VERSION_CHECK(5, 15, 0))
         connect(ui->groupFee, &QButtonGroup::idClicked, this, &ReissueAssetDialog::updateFeeSectionControls);
         connect(ui->groupFee, &QButtonGroup::idClicked, this, &ReissueAssetDialog::coinControlUpdateLabels);
-#else
-        connect(ui->groupFee, SIGNAL(buttonClicked(int)), this, SLOT(updateFeeSectionControls()));
-        connect(ui->groupFee, SIGNAL(buttonClicked(int)), this, SLOT(coinControlUpdateLabels()));
-#endif
         connect(ui->customFee, SIGNAL(valueChanged()), this, SLOT(coinControlUpdateLabels()));
         connect(ui->checkBoxMinimumFee, SIGNAL(stateChanged(int)), this, SLOT(setMinimumFee()));
         connect(ui->checkBoxMinimumFee, SIGNAL(stateChanged(int)), this, SLOT(updateFeeSectionControls()));
         connect(ui->checkBoxMinimumFee, SIGNAL(stateChanged(int)), this, SLOT(coinControlUpdateLabels()));
-//        connect(ui->optInRBF, SIGNAL(stateChanged(int)), this, SLOT(updateSmartFeeLabel()));
-//        connect(ui->optInRBF, SIGNAL(stateChanged(int)), this, SLOT(coinControlUpdateLabels()));
-        ui->customFee->setSingleStep(GetRequiredFee(1000));
+        //        connect(ui->optInRBF, SIGNAL(stateChanged(int)), this, SLOT(updateSmartFeeLabel()));
+        //        connect(ui->optInRBF, SIGNAL(stateChanged(int)), this, SLOT(coinControlUpdateLabels()));
+        ui->customFee->setSingleStep(model->wallet().getRequiredFee(1000));
         updateFeeSectionControls();
         updateMinFeeLabel();
         updateSmartFeeLabel();
 
         // set default rbf checkbox state
-//        ui->optInRBF->setCheckState(model->getDefaultWalletRbf() ? Qt::Checked : Qt::Unchecked);
+        //        ui->optInRBF->setCheckState(model->getDefaultWalletRbf() ? Qt::Checked : Qt::Unchecked);
         ui->optInRBF->hide();
 
         // set the smartfee-sliders default value (wallets default conf.target or last stored value)
@@ -226,11 +247,11 @@ void ReissueAssetDialog::setModel(WalletModel *_model)
             settings.remove("nSmartFeeSliderPosition");
         }
         if (settings.value("nConfTarget").toInt() == 0)
-            ui->confTargetSelector->setCurrentIndex(getIndexForConfTarget(model->getDefaultConfirmTarget()));
+            ui->confTargetSelector->setCurrentIndex(getIndexForConfTarget(6)); // default confirm target
         else
             ui->confTargetSelector->setCurrentIndex(getIndexForConfTarget(settings.value("nConfTarget").toInt()));
 
-        ui->reissueCostLabel->setText(tr("Cost") + ": " + MeowcoinUnits::formatWithUnit(model->getOptionsModel()->getDisplayUnit(), GetBurnAmount(AssetType::REISSUE)));
+        ui->reissueCostLabel->setText(tr("Cost") + ": " + BitcoinUnits::formatWithUnit(model->getOptionsModel()->getDisplayUnit(), GetBurnAmount(AssetType::REISSUE)));
         ui->reissueCostLabel->setStyleSheet("font-weight: bold");
 
         // Setup the default values
@@ -248,28 +269,22 @@ ReissueAssetDialog::~ReissueAssetDialog()
     delete asset;
 }
 
-bool ReissueAssetDialog::eventFilter(QObject *sender, QEvent *event)
+bool ReissueAssetDialog::eventFilter(QObject* sender, QEvent* event)
 {
-    if (sender == ui->addressText)
-    {
-        if(event->type()== QEvent::FocusIn)
-        {
+    if (sender == ui->addressText) {
+        if (event->type() == QEvent::FocusIn) {
             ui->addressText->setStyleSheet("");
         }
-    } else if (sender == ui->lineEditVerifierString)
-    {
-        if(event->type()== QEvent::FocusIn)
-        {
+    } else if (sender == ui->lineEditVerifierString) {
+        if (event->type() == QEvent::FocusIn) {
             hideInvalidVerifierStringMessage();
         }
-    } else if (sender == ui->comboBox)
-    {
-        if(event->type()== QEvent::Show)
-        {
+    } else if (sender == ui->comboBox) {
+        if (event->type() == QEvent::Show) {
             updateAssetsList();
         }
     }
-    return QWidget::eventFilter(sender,event);
+    return QWidget::eventFilter(sender, event);
 }
 
 /** Helper Methods */
@@ -280,6 +295,13 @@ void ReissueAssetDialog::setUpValues()
 
     ui->reissuableBox->setCheckState(Qt::CheckState::Checked);
     ui->ipfsText->setDisabled(true);
+    ui->ansText->setDisabled(true);
+    ui->ansType->setDisabled(true);
+    if (!IsMeowcoinNameSystemDeployed()) {
+        ui->ansBox->hide();
+        ui->ansText->hide();
+        ui->ansType->hide();
+    }
     ui->openIpfsButton->setDisabled(true);
     hideMessage();
 
@@ -300,162 +322,42 @@ void ReissueAssetDialog::setUpValues()
     // Hide the reissue Warning Label
     ui->reissueWarningLabel->hide();
 
+    // Setup ANS types
+    QStringList listTypes;
+    for (const auto type : ANSTypes)
+        listTypes.append(QString::fromStdString(CMeowcoinNameSystemID::enum_to_string(type).first));
+
+    ui->ansType->addItems(listTypes);
+
     disableAll();
 }
 
-void ReissueAssetDialog::setupCoinControlFrame(const PlatformStyle *platformStyle)
+void ReissueAssetDialog::setupCoinControlFrame(const PlatformStyle* platformStyle)
 {
-    /** Update the assetcontrol frame */
-    ui->frameCoinControl->setStyleSheet(QString(".QFrame {background-color: %1; padding-top: 10px; padding-right: 5px; border: none;}").arg(platformStyle->WidgetBackGroundColor().name()));
-    ui->widgetCoinControl->setStyleSheet(".QWidget {background-color: transparent;}");
-    /** Create the shadow effects on the frames */
-
-    ui->frameCoinControl->setGraphicsEffect(GUIUtil::getShadowEffect());
-
-    ui->labelCoinControlFeatures->setStyleSheet(STRING_LABEL_COLOR);
-    ui->labelCoinControlFeatures->setFont(GUIUtil::getTopLabelFont());
-
-    ui->labelCoinControlQuantityText->setStyleSheet(STRING_LABEL_COLOR);
-    ui->labelCoinControlQuantityText->setFont(GUIUtil::getSubLabelFont());
-
-    ui->labelCoinControlAmountText->setStyleSheet(STRING_LABEL_COLOR);
-    ui->labelCoinControlAmountText->setFont(GUIUtil::getSubLabelFont());
-
-    ui->labelCoinControlFeeText->setStyleSheet(STRING_LABEL_COLOR);
-    ui->labelCoinControlFeeText->setFont(GUIUtil::getSubLabelFont());
-
-    ui->labelCoinControlAfterFeeText->setStyleSheet(STRING_LABEL_COLOR);
-    ui->labelCoinControlAfterFeeText->setFont(GUIUtil::getSubLabelFont());
-
-    ui->labelCoinControlBytesText->setStyleSheet(STRING_LABEL_COLOR);
-    ui->labelCoinControlBytesText->setFont(GUIUtil::getSubLabelFont());
-
-    ui->labelCoinControlLowOutputText->setStyleSheet(STRING_LABEL_COLOR);
-    ui->labelCoinControlLowOutputText->setFont(GUIUtil::getSubLabelFont());
-
-    ui->labelCoinControlChangeText->setStyleSheet(STRING_LABEL_COLOR);
-    ui->labelCoinControlChangeText->setFont(GUIUtil::getSubLabelFont());
-
-    // Align the other labels next to the input buttons to the text in the same height
-    ui->labelCoinControlAutomaticallySelected->setStyleSheet(STRING_LABEL_COLOR);
-
-    // Align the Custom change address checkbox
-    ui->checkBoxCoinControlChange->setStyleSheet(QString(".QCheckBox{ %1; }").arg(STRING_LABEL_COLOR));
-
-    ui->labelCoinControlQuantity->setFont(GUIUtil::getSubLabelFont());
-    ui->labelCoinControlAmount->setFont(GUIUtil::getSubLabelFont());
-    ui->labelCoinControlFee->setFont(GUIUtil::getSubLabelFont());
-    ui->labelCoinControlAfterFee->setFont(GUIUtil::getSubLabelFont());
-    ui->labelCoinControlBytes->setFont(GUIUtil::getSubLabelFont());
-    ui->labelCoinControlLowOutput->setFont(GUIUtil::getSubLabelFont());
-    ui->labelCoinControlChange->setFont(GUIUtil::getSubLabelFont());
-    ui->checkBoxCoinControlChange->setFont(GUIUtil::getSubLabelFont());
-    ui->lineEditCoinControlChange->setFont(GUIUtil::getSubLabelFont());
-    ui->labelCoinControlInsuffFunds->setFont(GUIUtil::getSubLabelFont());
-    ui->labelCoinControlAutomaticallySelected->setFont(GUIUtil::getSubLabelFont());
-
+    Q_UNUSED(platformStyle);
 }
 
-void ReissueAssetDialog::setupAssetDataView(const PlatformStyle *platformStyle)
+void ReissueAssetDialog::setupAssetDataView(const PlatformStyle* platformStyle)
 {
-    /** Update the scrollview*/
-    ui->frame->setStyleSheet(QString(".QFrame {background-color: %1; padding-top: 10px; padding-right: 5px; border: none;}").arg(platformStyle->WidgetBackGroundColor().name()));
-    ui->frame->setGraphicsEffect(GUIUtil::getShadowEffect());
-
-    ui->assetNameLabel->setStyleSheet(STRING_LABEL_COLOR);
-    ui->assetNameLabel->setFont(GUIUtil::getSubLabelFont());
-
-    ui->addressLabel->setStyleSheet(STRING_LABEL_COLOR);
-    ui->addressLabel->setFont(GUIUtil::getSubLabelFont());
-
-    ui->quantityLabel->setStyleSheet(STRING_LABEL_COLOR);
-    ui->quantityLabel->setFont(GUIUtil::getSubLabelFont());
-
-    ui->unitLabel->setStyleSheet(STRING_LABEL_COLOR);
-    ui->unitLabel->setFont(GUIUtil::getSubLabelFont());
-
-    ui->reissuableBox->setStyleSheet(QString(".QCheckBox{ %1; }").arg(STRING_LABEL_COLOR));
-
-    ui->ipfsBox->setStyleSheet(QString(".QCheckBox{ %1; }").arg(STRING_LABEL_COLOR));
-
-    ui->frame_3->setStyleSheet(QString(".QFrame {background-color: %1; padding-top: 10px; padding-right: 5px; border: none;}").arg(platformStyle->WidgetBackGroundColor().name()));
-    ui->frame_3->setGraphicsEffect(GUIUtil::getShadowEffect());
-
-    ui->frame_2->setStyleSheet(QString(".QFrame {background-color: %1; padding-top: 10px; padding-right: 5px; border: none;}").arg(platformStyle->WidgetBackGroundColor().name()));
-    ui->frame_2->setGraphicsEffect(GUIUtil::getShadowEffect());
-
-    ui->currentDataLabel->setStyleSheet(STRING_LABEL_COLOR);
-    ui->currentDataLabel->setFont(GUIUtil::getTopLabelFont());
-
-    ui->labelReissueAsset->setStyleSheet(STRING_LABEL_COLOR);
-    ui->labelReissueAsset->setFont(GUIUtil::getTopLabelFont());
-
-    ui->reissueAssetDataLabel->setStyleSheet(STRING_LABEL_COLOR);
-    ui->reissueAssetDataLabel->setFont(GUIUtil::getTopLabelFont());
-
-    ui->labelVerifierString->setStyleSheet(STRING_LABEL_COLOR);
-    ui->labelVerifierString->setFont(GUIUtil::getSubLabelFont());
-
+    Q_UNUSED(platformStyle);
 }
 
-void ReissueAssetDialog::setupFeeControl(const PlatformStyle *platformStyle)
+void ReissueAssetDialog::setupFeeControl(const PlatformStyle* platformStyle)
 {
-    /** Update the coincontrol frame */
-    ui->frameFee->setStyleSheet(QString(".QFrame {background-color: %1; padding-top: 10px; padding-right: 5px; border: none;}").arg(platformStyle->WidgetBackGroundColor().name()));
-    /** Create the shadow effects on the frames */
-
-    ui->frameFee->setGraphicsEffect(GUIUtil::getShadowEffect());
-
-    ui->labelFeeHeadline->setStyleSheet(STRING_LABEL_COLOR);
-    ui->labelFeeHeadline->setFont(GUIUtil::getSubLabelFont());
-
-    ui->labelSmartFee3->setStyleSheet(STRING_LABEL_COLOR);
-    ui->labelCustomPerKilobyte->setStyleSheet(QString(".QLabel{ %1; }").arg(STRING_LABEL_COLOR));
-    ui->radioSmartFee->setStyleSheet(STRING_LABEL_COLOR);
-    ui->radioCustomFee->setStyleSheet(STRING_LABEL_COLOR);
-    ui->checkBoxMinimumFee->setStyleSheet(QString(".QCheckBox{ %1; }").arg(STRING_LABEL_COLOR));
-
-    ui->buttonChooseFee->setFont(GUIUtil::getSubLabelFont());
-    ui->fallbackFeeWarningLabel->setFont(GUIUtil::getSubLabelFont());
-    ui->buttonMinimizeFee->setFont(GUIUtil::getSubLabelFont());
-    ui->radioSmartFee->setFont(GUIUtil::getSubLabelFont());
-    ui->labelSmartFee2->setFont(GUIUtil::getSubLabelFont());
-    ui->labelSmartFee3->setFont(GUIUtil::getSubLabelFont());
-    ui->confTargetSelector->setFont(GUIUtil::getSubLabelFont());
-    ui->radioCustomFee->setFont(GUIUtil::getSubLabelFont());
-    ui->labelCustomPerKilobyte->setFont(GUIUtil::getSubLabelFont());
-    ui->customFee->setFont(GUIUtil::getSubLabelFont());
-    ui->labelMinFeeWarning->setFont(GUIUtil::getSubLabelFont());
-    ui->optInRBF->setFont(GUIUtil::getSubLabelFont());
-    ui->reissueAssetButton->setFont(GUIUtil::getSubLabelFont());
-    ui->clearButton->setFont(GUIUtil::getSubLabelFont());
-    ui->labelSmartFee->setFont(GUIUtil::getSubLabelFont());
-    ui->labelFeeEstimation->setFont(GUIUtil::getSubLabelFont());
-    ui->labelFeeMinimized->setFont(GUIUtil::getSubLabelFont());
-
+    Q_UNUSED(platformStyle);
+    ui->frameFee->setStyleSheet(QString(".QFrame#frameFee { border-top: 2px solid %1;padding-top: 20px}").arg(QColor("#bd840a").name()));
 }
 
-void ReissueAssetDialog::setBalance(const CAmount& balance, const CAmount& unconfirmedBalance, const CAmount& immatureBalance,
-                                   const CAmount& watchBalance, const CAmount& watchUnconfirmedBalance, const CAmount& watchImmatureBalance)
+void ReissueAssetDialog::setBalance(const interfaces::WalletBalances& balances)
 {
-    Q_UNUSED(unconfirmedBalance);
-    Q_UNUSED(immatureBalance);
-    Q_UNUSED(watchBalance);
-    Q_UNUSED(watchUnconfirmedBalance);
-    Q_UNUSED(watchImmatureBalance);
-
-    ui->labelBalance->setFont(GUIUtil::getSubLabelFont());
-    ui->label->setFont(GUIUtil::getSubLabelFont());
-
-    if(model && model->getOptionsModel())
-    {
-        ui->labelBalance->setText(MeowcoinUnits::formatWithUnit(model->getOptionsModel()->getDisplayUnit(), balance));
+    if (model && model->getOptionsModel()) {
+        ui->labelBalance->setText(BitcoinUnits::formatWithUnit(model->getOptionsModel()->getDisplayUnit(), balances.balance));
     }
 }
 
 void ReissueAssetDialog::updateDisplayUnit()
 {
-    setBalance(model->getBalance(), 0, 0, 0, 0, 0);
+    setBalance(model->getCachedBalance());
     ui->customFee->setDisplayUnit(model->getOptionsModel()->getDisplayUnit());
     updateMinFeeLabel();
     updateSmartFeeLabel();
@@ -467,6 +369,20 @@ void ReissueAssetDialog::toggleIPFSText()
         ui->ipfsText->setDisabled(false);
     } else {
         ui->ipfsText->setDisabled(true);
+    }
+
+    buildUpdatedData();
+    CheckFormState();
+}
+
+void ReissueAssetDialog::toggleANSText()
+{
+    if (ui->ansBox->isChecked()) {
+        ui->ansText->setDisabled(false);
+        ui->ansType->setDisabled(false);
+    } else {
+        ui->ansText->setDisabled(true);
+        ui->ansType->setDisabled(true);
     }
 
     buildUpdatedData();
@@ -521,11 +437,15 @@ void ReissueAssetDialog::CheckFormState()
         return;
     }
 
-    // Check the destination address
+    // Check the destination address (must be legacy P2PKH)
     const CTxDestination dest = DecodeDestination(ui->addressText->text().toStdString());
     if (!ui->addressText->text().isEmpty()) {
         if (!IsValidDestination(dest)) {
             showMessage(tr("Invalid Meowcoin Destination Address"));
+            return;
+        }
+        if (std::get_if<PKHash>(&dest) == nullptr) {
+            showMessage(tr("Address must use legacy (P2PKH) format. SegWit and bech32 addresses are not supported."));
             return;
         }
     }
@@ -534,13 +454,48 @@ void ReissueAssetDialog::CheckFormState()
         if (!checkIPFSHash(ui->ipfsText->text())) {
             ui->openIpfsButton->setDisabled(true);
             return;
-        }
-        else
+        } else
             ui->openIpfsButton->setDisabled(false);
     }
 
-    if (fReissuingRestricted) {
+    if (ui->ansBox->isChecked() && !ui->ansText->text().isEmpty()) {
+        CMeowcoinNameSystemID::Type type = static_cast<CMeowcoinNameSystemID::Type>(ui->ansType->currentIndex());
 
+        std::string error;
+        std::string formattedTypeData;
+        std::string typeData = ui->ansText->text().toStdString();
+
+        formattedTypeData = CMeowcoinNameSystemID::FormatTypeData(type, typeData, error);
+
+        if (error != "") {
+            ui->ansText->setStyleSheet("border: 2px solid red");
+            showMessage(QString::fromStdString(error));
+            disableReissueButton();
+            return;
+        }
+
+        CMeowcoinNameSystemID ans(type, formattedTypeData);
+
+        if (!IsMeowcoinNameSystemDeployed()) {
+            ui->ansText->setStyleSheet("border: 2px solid red");
+            showMessage(tr("ANS not deployed yet."));
+            disableReissueButton();
+            return;
+        }
+
+        if (!CMeowcoinNameSystemID::IsValidID(ans.to_string())) {
+            ui->ansText->setStyleSheet("border: 2px solid red");
+            showMessage(tr("Invalid ANS data."));
+            disableReissueButton();
+            return;
+        } else {
+            ui->ansText->setStyleSheet("");
+            hideMessage();
+            enableReissueButton();
+        }
+    }
+
+    if (fReissuingRestricted) {
         QString qVerifier = ui->lineEditVerifierString->text();
         std::string strVerifier = qVerifier.toStdString();
 
@@ -584,7 +539,7 @@ void ReissueAssetDialog::CheckFormState()
     }
 
     // Keep the button disabled if no changes have been made
-    if ((!ui->ipfsBox->isChecked() || (ui->ipfsBox->isChecked() && ui->ipfsText->text().isEmpty())) && ui->reissuableBox->isChecked() && ui->quantitySpinBox->value() == 0 && ui->unitSpinBox->value() == asset->units && ui->lineEditVerifierString->text().isEmpty()) {
+    if ((!ui->ipfsBox->isChecked() || (ui->ipfsBox->isChecked() && ui->ipfsText->text().isEmpty())) && (!ui->ansBox->isChecked() || (ui->ansBox->isChecked() && ui->ansText->text().isEmpty())) && ui->reissuableBox->isChecked() && ui->quantitySpinBox->value() == 0 && ui->unitSpinBox->value() == asset->units && ui->lineEditVerifierString->text().isEmpty()) {
         hideMessage();
         return;
     }
@@ -593,8 +548,6 @@ void ReissueAssetDialog::CheckFormState()
     enableReissueButton();
     hideMessage();
 }
-
-
 
 void ReissueAssetDialog::disableAll()
 {
@@ -621,10 +574,8 @@ void ReissueAssetDialog::enableDataEntry()
 
 void ReissueAssetDialog::buildUpdatedData()
 {
-    // Get the display value for the asset quantity
-    auto value = ValueFromAmount(asset->nAmount, asset->units);
-
-    double newValue = value.get_real() + ui->quantitySpinBox->value();
+    double currentValue = (double)asset->nAmount / COIN;
+    double newValue = currentValue + ui->quantitySpinBox->value();
 
     std::stringstream ss;
     ss.precision(asset->units);
@@ -669,6 +620,22 @@ void ReissueAssetDialog::buildUpdatedData()
         }
     }
 
+    QString ansID;
+
+    if (asset->nHasANS && (!ui->ansBox->isChecked() || (ui->ansBox->isChecked() && ui->ansText->text().isEmpty()))) {
+        QString qstr = QString::fromStdString(asset->strANSID);
+        ansID = formatBlack.arg(tr("ANS ID"), ":", qstr) + "\n";
+    } else if (ui->ansBox->isChecked() && !ui->ansBox->text().isEmpty()) {
+        std::string error;
+        std::string formattedTypeData;
+        CMeowcoinNameSystemID::Type type = static_cast<CMeowcoinNameSystemID::Type>(ui->ansType->currentIndex());
+        formattedTypeData = CMeowcoinNameSystemID::FormatTypeData(type, ui->ansText->text().toStdString(), error);
+
+        CMeowcoinNameSystemID ansData(type, formattedTypeData);
+        QString qstr = QString::fromStdString(ansData.to_string());
+        ansID = formatGreen.arg(tr("ANS ID"), ":", qstr) + "\n";
+    }
+
     QString verifierString;
     if (!ui->lineEditVerifierString->isHidden()) {
         if (!ui->lineEditVerifierString->text().isEmpty()) {
@@ -692,6 +659,8 @@ void ReissueAssetDialog::buildUpdatedData()
     ui->updatedAssetData->append(reissue);
     if (!ipfs.isEmpty())
         ui->updatedAssetData->append(ipfs);
+    if (!ansID.isEmpty())
+        ui->updatedAssetData->append(ansID);
     if (!verifierString.isEmpty())
         ui->updatedAssetData->append(verifierString);
     ui->updatedAssetData->show();
@@ -735,20 +704,19 @@ void ReissueAssetDialog::onAssetSelected(int index)
             restrictedAssetUnselected();
         }
 
-        // Get the display value for the asset quantity
-        auto value = ValueFromAmount(asset->nAmount, asset->units);
+        double currentValue = (double)asset->nAmount / COIN;
         std::stringstream ss;
         ss.precision(asset->units);
-        ss << std::fixed << value.get_real();
+        ss << std::fixed << currentValue;
 
         ui->unitSpinBox->setMinimum(asset->units);
         ui->unitSpinBox->setValue(asset->units);
 
-        if (asset->units == MAX_ASSET_UNITS) {
+        if (asset->units == MAX_UNIT) {
             ui->unitSpinBox->setDisabled(true);
         }
-        
-        ui->quantitySpinBox->setMaximum(21000000000 - value.get_real());
+
+        ui->quantitySpinBox->setMaximum(21000000000 - currentValue);
 
         ui->currentAssetData->clear();
         // Create the QString to display to the user
@@ -756,17 +724,23 @@ void ReissueAssetDialog::onAssetSelected(int index)
         QString quantity = formatBlack.arg(tr("Current Quantity"), ":", QString::fromStdString(ss.str())) + "\n";
         QString units = formatBlack.arg(tr("Current Units"), ":", QString::number(ui->unitSpinBox->value()));
         QString reissue = formatBlack.arg(tr("Can Reissue"), ":", tr("Yes")) + "\n";
+
         QString assetdatahash = "";
         if (asset->nHasIPFS) {
             QString qstr = QString::fromStdString(EncodeAssetData(asset->strIPFSHash));
             if (qstr.size() == 46) {
-                    assetdatahash = formatBlack.arg(tr("IPFS Hash"), ":", qstr) + "\n";
+                assetdatahash = formatBlack.arg(tr("IPFS Hash"), ":", qstr) + "\n";
             } else if (qstr.size() == 64) {
-                    assetdatahash = formatBlack.arg(tr("Txid Hash"), ":", qstr) + "\n";
-            }
-            else {
+                assetdatahash = formatBlack.arg(tr("Txid Hash"), ":", qstr) + "\n";
+            } else {
                 assetdatahash = formatBlack.arg(tr("Unknown data hash type"), ":", qstr) + "\n";
             }
+        }
+
+        QString assetdataANS = "";
+        if (asset->nHasANS) {
+            QString qstr = QString::fromStdString(asset->strANSID);
+            assetdataANS = formatBlack.arg(tr("ANS ID"), ":", qstr) + "\n";
         }
 
         QString verifierString = "";
@@ -786,6 +760,8 @@ void ReissueAssetDialog::onAssetSelected(int index)
         ui->currentAssetData->append(reissue);
         if (asset->nHasIPFS)
             ui->currentAssetData->append(assetdatahash);
+        if (asset->nHasANS)
+            ui->currentAssetData->append(assetdataANS);
         if (fRestrictedAssetSelected)
             ui->currentAssetData->append(verifierString);
         ui->currentAssetData->setFixedHeight(ui->currentAssetData->document()->size().height());
@@ -811,6 +787,11 @@ void ReissueAssetDialog::onIPFSStateChanged()
     toggleIPFSText();
 }
 
+void ReissueAssetDialog::onANSStateChanged()
+{
+    toggleANSText();
+}
+
 void ReissueAssetDialog::onVerifierStringChanged(QString verifier)
 {
     buildUpdatedData();
@@ -822,7 +803,7 @@ bool ReissueAssetDialog::checkIPFSHash(QString hash)
     if (!hash.isEmpty()) {
         if (!AreMessagesDeployed()) {
             if (hash.length() > 46) {
-                showMessage(tr("Only IPFS Hashes allowed until RIP5 is activated"));
+                showMessage(tr("Only IPFS Hashes allowed until messaging is activated"));
                 disableReissueButton();
                 return false;
             }
@@ -856,9 +837,23 @@ bool ReissueAssetDialog::checkIPFSHash(QString hash)
 
 void ReissueAssetDialog::onIPFSHashChanged(QString hash)
 {
-
     if (checkIPFSHash(hash))
         CheckFormState();
+
+    buildUpdatedData();
+}
+
+void ReissueAssetDialog::onANSDataChanged(QString data)
+{
+    CheckFormState();
+    buildUpdatedData();
+}
+
+void ReissueAssetDialog::onANSTypeChanged(int index)
+{
+    CMeowcoinNameSystemID::Type type = static_cast<CMeowcoinNameSystemID::Type>(index);
+    ui->ansText->setPlaceholderText(QString::fromStdString(CMeowcoinNameSystemID::enum_to_string(type).second));
+    ui->ansText->clear();
 
     buildUpdatedData();
 }
@@ -866,20 +861,17 @@ void ReissueAssetDialog::onIPFSHashChanged(QString hash)
 void ReissueAssetDialog::openIpfsBrowser()
 {
     QString ipfshash = ui->ipfsText->text();
-    QString ipfsbrowser = model->getOptionsModel()->getIpfsUrl();
+    QString ipfsbrowser = QString("https://ipfs.io/ipfs/%s");
 
     // If the ipfs hash isn't there or doesn't start with Qm, disable the action item
-    if (ipfshash.count() > 0 && ipfshash.indexOf("Qm") == 0 && ipfsbrowser.indexOf("http") == 0)
-    {
+    if (ipfshash.size() > 0 && ipfshash.indexOf("Qm") == 0 && ipfsbrowser.indexOf("http") == 0) {
         QUrl ipfsurl = QUrl::fromUserInput(ipfsbrowser.replace("%s", ipfshash));
 
         // Create the box with everything.
-        if(QMessageBox::Yes == QMessageBox::question(this,
-                                                        tr("Open IPFS content?"),
-                                                        tr("Open the following IPFS content in your default browser?\n")
-                                                        + ipfsurl.toString()
-                                                    ))
-        QDesktopServices::openUrl(ipfsurl);
+        if (QMessageBox::Yes == QMessageBox::question(this,
+                                    tr("Open IPFS content?"),
+                                    tr("Open the following IPFS content in your default browser?\n") + ipfsurl.toString()))
+            QDesktopServices::openUrl(ipfsurl);
     }
 }
 
@@ -892,13 +884,15 @@ void ReissueAssetDialog::onAddressNameChanged(QString address)
         hideMessage();
         ui->addressText->setStyleSheet("");
         CheckFormState();
-    }
-    else if (!IsValidDestination(dest)) // Invalid address
+    } else if (!IsValidDestination(dest)) // Invalid address
     {
         ui->addressText->setStyleSheet("border: 1px solid red");
         CheckFormState();
-    }
-    else // Valid address
+    } else if (std::get_if<PKHash>(&dest) == nullptr) // Valid but not legacy P2PKH
+    {
+        ui->addressText->setStyleSheet("border: 1px solid red");
+        CheckFormState();
+    } else // Valid P2PKH address
     {
         hideMessage();
         ui->addressText->setStyleSheet("");
@@ -913,15 +907,14 @@ void ReissueAssetDialog::onReissueAssetClicked()
     }
 
     WalletModel::UnlockContext ctx(model->requestUnlock());
-    if(!ctx.isValid())
-    {
+    if (!ctx.isValid()) {
         // Unlock wallet was cancelled
         return;
     }
 
     QString address;
     if (ui->addressText->text().isEmpty()) {
-        address = model->getAddressTableModel()->addRow(AddressTableModel::Receive, "", "");
+        address = model->getAddressTableModel()->addRow(AddressTableModel::Receive, "", "", OutputType::LEGACY);
     } else {
         address = ui->addressText->text();
     }
@@ -930,26 +923,41 @@ void ReissueAssetDialog::onReissueAssetClicked()
     CAmount quantity = ui->quantitySpinBox->value() * COIN;
     bool reissuable = ui->reissuableBox->isChecked();
     bool hasIPFS = ui->ipfsBox->isChecked() && !ui->ipfsText->text().isEmpty();
+    bool hasANS = ui->ansBox->isChecked() && !ui->ansText->text().isEmpty();
 
     int unit = ui->unitSpinBox->value();
     if (unit == asset->units)
         unit = -1;
 
     // Always use a CCoinControl instance, use the CoinControlDialog instance if CoinControl has been enabled
-    CCoinControl ctrl;
+    wallet::CCoinControl ctrl;
     if (model->getOptionsModel()->getCoinControlFeatures())
-        ctrl = *CoinControlDialog::coinControl;
+        ctrl = s_coinControl();
 
     updateCoinControlState(ctrl);
 
     std::string ipfsDecoded = "";
-    if (hasIPFS)
+    if (hasIPFS) {
         ipfsDecoded = DecodeAssetData(ui->ipfsText->text().toStdString());
+    }
 
-    CReissueAsset reissueAsset(name.toStdString(), quantity, unit, reissuable ? 1 : 0, ipfsDecoded);
+    std::string ansDecoded = "";
+    if (hasANS) {
+        std::string error;
+        std::string formattedTypeData;
+        CMeowcoinNameSystemID::Type type = static_cast<CMeowcoinNameSystemID::Type>(ui->ansType->currentIndex());
+        formattedTypeData = CMeowcoinNameSystemID::FormatTypeData(type, ui->ansText->text().toStdString(), error);
 
-    CWalletTx tx;
-    CReserveKey reservekey(model->getWallet());
+        CMeowcoinNameSystemID ansID(type, formattedTypeData);
+        ansDecoded = ansID.to_string();
+
+        // Warn user
+        QMessageBox::critical(this, "ANS Warning", tr("Storing data using the Meowcoin Name System will forever stay in the blockchain. You can edit the ANS ID only if the asset is reissueable.") + QString("\n\nANS ID: ") + QString::fromStdString(ansDecoded), QMessageBox::Ok, QMessageBox::Ok);
+    }
+
+    CReissueAsset reissueAsset(name.toStdString(), quantity, unit, reissuable ? 1 : 0, ipfsDecoded, ansDecoded);
+
+    CTransactionRef txRef;
     std::pair<int, std::string> error;
     CAmount nFeeRequired;
 
@@ -960,21 +968,23 @@ void ReissueAssetDialog::onReissueAssetClicked()
         verifier_string = stripped;
     }
 
-    if (IsInitialBlockDownload()) {
-        GUIUtil::SyncWarningMessage syncWarning(this);
-        bool sendTransaction = syncWarning.showTransactionSyncWarningMessage();
-        if (!sendTransaction)
-            return;
-    }
-
-    // Create the transaction
-    if (!CreateReissueAssetTransaction(model->getWallet(), ctrl, reissueAsset, address.toStdString(), error, tx, reservekey, nFeeRequired, verifier_string.empty() ? nullptr : &verifier_string)) {
-        showMessage("Invalid: " + QString::fromStdString(error.second));
+    wallet::CWallet* pwallet = model->wallet().wallet();
+    if (!pwallet) {
+        showMessage(tr("Wallet not available."));
         return;
     }
 
+    // Create the transaction
+    {
+        LOCK(pwallet->cs_wallet);
+        if (!wallet::CreateReissueAssetTransaction(*pwallet, ctrl, reissueAsset, address.toStdString(), error, txRef, nFeeRequired, verifier_string.empty() ? nullptr : &verifier_string)) {
+            showMessage("Invalid: " + QString::fromStdString(error.second));
+            return;
+        }
+    }
+
     std::string strError = "";
-    if (!ContextualCheckReissueAsset(passets, reissueAsset, strError, *tx.tx.get())) {
+    if (!ContextualCheckReissueAsset(passets, reissueAsset, strError, *txRef)) {
         showMessage("Invalid: " + QString::fromStdString(strError));
         return;
     }
@@ -983,18 +993,18 @@ void ReissueAssetDialog::onReissueAssetClicked()
     QStringList formatted;
 
     // generate bold amount string
-    QString amount = "<b>" + QString::fromStdString(ValueFromAmountString(GetReissueAssetBurnAmount(), 8)) + " MEWC";
-    amount.append("</b>");
+    QString burnAmt = "<b>" + QString::fromStdString(FormatMoney(GetReissueAssetBurnAmount())) + " MEWC";
+    burnAmt.append("</b>");
     // generate monospace address string
-    QString addressburn = "<span style='font-family: monospace;'>" + QString::fromStdString(GetParams().ReissueAssetBurnAddress());
+    QString addressburn = "<span style='font-family: monospace;'>" + QString::fromStdString(GetBurnAddress(AssetType::REISSUE));
     addressburn.append("</span>");
 
     QString recipientElement1;
-    recipientElement1 = tr("%1 to %2").arg(amount, addressburn);
+    recipientElement1 = tr("%1 to %2").arg(burnAmt, addressburn);
     formatted.append(recipientElement1);
 
     // generate the bold asset amount
-    QString assetAmount = "<b>" + QString::fromStdString(ValueFromAmountString(reissueAsset.nAmount, 8)) + " " + QString::fromStdString(reissueAsset.strName);
+    QString assetAmount = "<b>" + QString::fromStdString(FormatMoney(reissueAsset.nAmount)) + " " + QString::fromStdString(reissueAsset.strName);
     assetAmount.append("</b>");
 
     // generate the monospace address string
@@ -1008,69 +1018,66 @@ void ReissueAssetDialog::onReissueAssetClicked()
     QString questionString = tr("Are you sure you want to send?");
     questionString.append("<br /><br />%1");
 
-    if(nFeeRequired > 0)
-    {
+    if (nFeeRequired > 0) {
         // append fee string if a fee is required
-        questionString.append("<hr /><span style='color:#e82121;'>");
-        questionString.append(MeowcoinUnits::formatHtmlWithUnit(model->getOptionsModel()->getDisplayUnit(), nFeeRequired));
+        questionString.append("<hr /><span style='color:#aa0000;'>");
+        questionString.append(BitcoinUnits::formatHtmlWithUnit(model->getOptionsModel()->getDisplayUnit(), nFeeRequired));
         questionString.append("</span> ");
         questionString.append(tr("added as transaction fee"));
-
-        // append transaction size
-        questionString.append(" (" + QString::number((double)GetVirtualTransactionSize(tx) / 1000) + " kB)");
     }
 
     // add total amount in all subdivision units
     questionString.append("<hr />");
     CAmount totalAmount = GetReissueAssetBurnAmount() + nFeeRequired;
     QStringList alternativeUnits;
-    for (MeowcoinUnits::Unit u : MeowcoinUnits::availableUnits())
-    {
-        if(u != model->getOptionsModel()->getDisplayUnit())
-            alternativeUnits.append(MeowcoinUnits::formatHtmlWithUnit(u, totalAmount));
+    for (const BitcoinUnit& u : BitcoinUnits::availableUnits()) {
+        if (u != model->getOptionsModel()->getDisplayUnit())
+            alternativeUnits.append(BitcoinUnits::formatHtmlWithUnit(u, totalAmount));
     }
     questionString.append(tr("Total Amount %1")
-                                  .arg(MeowcoinUnits::formatHtmlWithUnit(model->getOptionsModel()->getDisplayUnit(), totalAmount)));
+            .arg(BitcoinUnits::formatHtmlWithUnit(model->getOptionsModel()->getDisplayUnit(), totalAmount)));
     questionString.append(QString("<span style='font-size:10pt;font-weight:normal;'><br />(=%2)</span>")
-                                  .arg(alternativeUnits.join(" " + tr("or") + "<br />")));
+            .arg(alternativeUnits.join(" " + tr("or") + "<br />")));
 
     SendConfirmationDialog confirmationDialog(tr("Confirm reissue assets"),
-                                              questionString.arg(formatted.join("<br />")), SEND_CONFIRM_DELAY, this);
+        questionString.arg(formatted.join("<br />")), "", "", SEND_CONFIRM_DELAY, true, true, this);
     confirmationDialog.exec();
     QMessageBox::StandardButton retval = (QMessageBox::StandardButton)confirmationDialog.result();
 
-    if(retval != QMessageBox::Yes)
-    {
+    if (retval != QMessageBox::Yes) {
         return;
     }
 
     // Create the transaction and broadcast it
     std::string txid;
-    if (!SendAssetTransaction(model->getWallet(), tx, reservekey, error, txid)) {
-        showMessage("Invalid: " + QString::fromStdString(error.second));
-    } else {
-        QMessageBox msgBox;
-        QPushButton *copyButton = msgBox.addButton(tr("Copy"), QMessageBox::ActionRole);
-        copyButton->disconnect();
-        connect(copyButton, &QPushButton::clicked, this, [=](){
-            QClipboard *p_Clipboard = QApplication::clipboard();
-            p_Clipboard->setText(QString::fromStdString(txid), QClipboard::Mode::Clipboard);
+    {
+        LOCK(pwallet->cs_wallet);
+        if (!wallet::SendAssetTransaction(*pwallet, txRef, error, txid)) {
+            showMessage("Invalid: " + QString::fromStdString(error.second));
+        } else {
+            QMessageBox msgBox;
+            QPushButton* copyButton = msgBox.addButton(tr("Copy"), QMessageBox::ActionRole);
+            copyButton->disconnect();
+            connect(copyButton, &QPushButton::clicked, this, [=]() {
+                QClipboard* p_Clipboard = QApplication::clipboard();
+                p_Clipboard->setText(QString::fromStdString(txid), QClipboard::Mode::Clipboard);
 
-            QMessageBox copiedBox;
-            copiedBox.setText(tr("Transaction ID Copied"));
-            copiedBox.exec();
-        });
+                QMessageBox copiedBox;
+                copiedBox.setText(tr("Transaction ID Copied"));
+                copiedBox.exec();
+            });
 
-        QPushButton *okayButton = msgBox.addButton(QMessageBox::Ok);
-        msgBox.setText(tr("Asset transaction sent to network:"));
-        msgBox.setInformativeText(QString::fromStdString(txid));
-        msgBox.exec();
+            QPushButton* okayButton = msgBox.addButton(QMessageBox::Ok);
+            msgBox.setText(tr("Asset transaction sent to network:"));
+            msgBox.setInformativeText(QString::fromStdString(txid));
+            msgBox.exec();
 
-        if (msgBox.clickedButton() == okayButton) {
-            clear();
+            if (msgBox.clickedButton() == okayButton) {
+                clear();
 
-            CoinControlDialog::coinControl->UnSelectAll();
-            coinControlUpdateLabels();
+                s_coinControl().UnSelectAll();
+                coinControlUpdateLabels();
+            }
         }
     }
 }
@@ -1090,7 +1097,7 @@ void ReissueAssetDialog::onReissueBoxChanged()
     CheckFormState();
 }
 
-void ReissueAssetDialog::updateCoinControlState(CCoinControl& ctrl)
+void ReissueAssetDialog::updateCoinControlState(wallet::CCoinControl& ctrl)
 {
     if (ui->radioCustomFee->isChecked()) {
         ctrl.m_feerate = CFeeRate(ui->customFee->value());
@@ -1100,39 +1107,34 @@ void ReissueAssetDialog::updateCoinControlState(CCoinControl& ctrl)
     // Avoid using global defaults when sending money from the GUI
     // Either custom fee will be used or if not selected, the confirmation target from dropdown box
     ctrl.m_confirm_target = getConfTargetForIndex(ui->confTargetSelector->currentIndex());
-//    ctrl.signalRbf = ui->optInRBF->isChecked();
+    //    ctrl.signalRbf = ui->optInRBF->isChecked();
 }
 
 void ReissueAssetDialog::updateSmartFeeLabel()
 {
-    if(!model || !model->getOptionsModel())
+    if (!model || !model->getOptionsModel())
         return;
-    CCoinControl coin_control;
+
+    wallet::CCoinControl coin_control;
     updateCoinControlState(coin_control);
     coin_control.m_feerate.reset(); // Explicitly use only fee estimation rate for smart fee labels
-    FeeCalculation feeCalc;
-    CFeeRate feeRate = CFeeRate(GetMinimumFee(1000, coin_control, ::mempool, ::feeEstimator, &feeCalc));
+    int returned_target;
+    FeeReason reason;
+    CFeeRate feeRate = CFeeRate(model->wallet().getMinimumFee(1000, coin_control, &returned_target, &reason));
 
-    ui->labelSmartFee->setText(MeowcoinUnits::formatWithUnit(model->getOptionsModel()->getDisplayUnit(), feeRate.GetFeePerK()) + "/kB");
+    ui->labelSmartFee->setText(BitcoinUnits::formatWithUnit(model->getOptionsModel()->getDisplayUnit(), feeRate.GetFeePerK()) + "/kB");
 
-    if (feeCalc.reason == FeeReason::FALLBACK) {
-        ui->labelSmartFee2->show(); // (Smart fee not initialized yet. This usually takes a few blocks...)
+    if (reason == FeeReason::FALLBACK) {
+        ui->labelSmartFee2->show();
         ui->labelFeeEstimation->setText("");
         ui->fallbackFeeWarningLabel->setVisible(true);
         int lightness = ui->fallbackFeeWarningLabel->palette().color(QPalette::WindowText).lightness();
         QColor warning_colour(255 - (lightness / 5), 176 - (lightness / 3), 48 - (lightness / 14));
         ui->fallbackFeeWarningLabel->setStyleSheet("QLabel { color: " + warning_colour.name() + "; }");
-        #ifndef QTversionPreFiveEleven
-    		ui->fallbackFeeWarningLabel->setIndent(QFontMetrics(ui->fallbackFeeWarningLabel->font()).horizontalAdvance("x"));
-    	#else
-    		ui->fallbackFeeWarningLabel->setIndent(QFontMetrics(ui->fallbackFeeWarningLabel->font()).width("x"));
-    	#endif
-        
-    }
-    else
-    {
+        ui->fallbackFeeWarningLabel->setIndent(QFontMetrics(ui->fallbackFeeWarningLabel->font()).horizontalAdvance("x"));
+    } else {
         ui->labelSmartFee2->hide();
-        ui->labelFeeEstimation->setText(tr("Estimated to begin confirmation within %n block(s).", "", feeCalc.returnedTarget));
+        ui->labelFeeEstimation->setText(tr("Estimated to begin confirmation within %n block(s).", "", returned_target));
         ui->fallbackFeeWarningLabel->setVisible(false);
     }
 
@@ -1189,7 +1191,7 @@ void ReissueAssetDialog::coinControlFeatureChanged(bool checked)
     ui->addressLabel->setVisible(checked);
 
     if (!checked && model) // coin control features disabled
-        CoinControlDialog::coinControl->SetNull();
+        s_coinControl() = wallet::CCoinControl(); // reset coin control
 
     coinControlUpdateLabels();
 }
@@ -1203,8 +1205,7 @@ void ReissueAssetDialog::feeControlFeatureChanged(bool checked)
 // Coin Control: button inputs -> show actual coin control dialog
 void ReissueAssetDialog::coinControlButtonClicked()
 {
-    CoinControlDialog dlg(platformStyle);
-    dlg.setModel(model);
+    CoinControlDialog dlg(s_coinControl(), model, platformStyle);
     dlg.exec();
     coinControlUpdateLabels();
 }
@@ -1212,12 +1213,10 @@ void ReissueAssetDialog::coinControlButtonClicked()
 // Coin Control: checkbox custom change address
 void ReissueAssetDialog::coinControlChangeChecked(int state)
 {
-    if (state == Qt::Unchecked)
-    {
-        CoinControlDialog::coinControl->destChange = CNoDestination();
+    if (state == Qt::Unchecked) {
+        s_coinControl().destChange = CNoDestination();
         ui->labelCoinControlChangeLabel->clear();
-    }
-    else
+    } else
         // use this to re-validate an already entered address
         coinControlChangeEdited(ui->lineEditCoinControlChange->text());
 
@@ -1227,10 +1226,9 @@ void ReissueAssetDialog::coinControlChangeChecked(int state)
 // Coin Control: custom change address changed
 void ReissueAssetDialog::coinControlChangeEdited(const QString& text)
 {
-    if (model && model->getAddressTableModel())
-    {
+    if (model && model->getAddressTableModel()) {
         // Default to no change address until verified
-        CoinControlDialog::coinControl->destChange = CNoDestination();
+        s_coinControl().destChange = CNoDestination();
         ui->labelCoinControlChangeLabel->setStyleSheet("QLabel{color:red;}");
 
         const CTxDestination dest = DecodeDestination(text.toStdString());
@@ -1238,30 +1236,29 @@ void ReissueAssetDialog::coinControlChangeEdited(const QString& text)
         if (text.isEmpty()) // Nothing entered
         {
             ui->labelCoinControlChangeLabel->setText("");
-        }
-        else if (!IsValidDestination(dest)) // Invalid address
+        } else if (!IsValidDestination(dest)) // Invalid address
         {
             ui->labelCoinControlChangeLabel->setText(tr("Warning: Invalid Meowcoin address"));
-        }
-        else // Valid address
+        } else if (std::get_if<PKHash>(&dest) == nullptr)
         {
-            if (!model->IsSpendable(dest)) {
+            ui->labelCoinControlChangeLabel->setText(tr("Change address must use legacy (P2PKH) format for asset transactions."));
+        } else // Valid address
+        {
+            if (!model->wallet().isSpendable(dest)) {
                 ui->labelCoinControlChangeLabel->setText(tr("Warning: Unknown change address"));
 
                 // confirmation dialog
                 QMessageBox::StandardButton btnRetVal = QMessageBox::question(this, tr("Confirm custom change address"), tr("The address you selected for change is not part of this wallet. Any or all funds in your wallet may be sent to this address. Are you sure?"),
-                                                                              QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Cancel);
+                    QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Cancel);
 
-                if(btnRetVal == QMessageBox::Yes)
-                    CoinControlDialog::coinControl->destChange = dest;
-                else
-                {
+                if (btnRetVal == QMessageBox::Yes)
+                    s_coinControl().destChange = dest;
+                else {
                     ui->lineEditCoinControlChange->setText("");
                     ui->labelCoinControlChangeLabel->setStyleSheet("QLabel{color:black;}");
                     ui->labelCoinControlChangeLabel->setText("");
                 }
-            }
-            else // Known change address
+            } else // Known change address
             {
                 ui->labelCoinControlChangeLabel->setStyleSheet("QLabel{color:black;}");
 
@@ -1272,7 +1269,7 @@ void ReissueAssetDialog::coinControlChangeEdited(const QString& text)
                 else
                     ui->labelCoinControlChangeLabel->setText(tr("(no label)"));
 
-                CoinControlDialog::coinControl->destChange = dest;
+                s_coinControl().destChange = dest;
             }
         }
     }
@@ -1284,7 +1281,7 @@ void ReissueAssetDialog::coinControlUpdateLabels()
     if (!model || !model->getOptionsModel())
         return;
 
-    updateCoinControlState(*CoinControlDialog::coinControl);
+    updateCoinControlState(s_coinControl());
 
     // set pay amounts
     CoinControlDialog::payAmounts.clear();
@@ -1292,17 +1289,14 @@ void ReissueAssetDialog::coinControlUpdateLabels()
 
     CoinControlDialog::payAmounts.append(GetBurnAmount(AssetType::REISSUE));
 
-    if (CoinControlDialog::coinControl->HasSelected())
-    {
+    if (s_coinControl().HasSelected()) {
         // actual coin control calculation
-        CoinControlDialog::updateLabels(model, this);
+        CoinControlDialog::updateLabels(s_coinControl(), model, this);
 
         // show coin control stats
         ui->labelCoinControlAutomaticallySelected->hide();
         ui->widgetCoinControl->show();
-    }
-    else
-    {
+    } else {
         // hide coin control stats
         ui->labelCoinControlAutomaticallySelected->show();
         ui->widgetCoinControl->hide();
@@ -1313,7 +1307,7 @@ void ReissueAssetDialog::coinControlUpdateLabels()
 void ReissueAssetDialog::minimizeFeeSection(bool fMinimize)
 {
     ui->labelFeeMinimized->setVisible(fMinimize);
-    ui->buttonChooseFee  ->setVisible(fMinimize);
+    ui->buttonChooseFee->setVisible(fMinimize);
     ui->buttonMinimizeFee->setVisible(!fMinimize);
     ui->frameFeeSelection->setVisible(!fMinimize);
     ui->horizontalLayoutSmartFee->setContentsMargins(0, (fMinimize ? 0 : 6), 0, 0);
@@ -1333,40 +1327,38 @@ void ReissueAssetDialog::on_buttonMinimizeFee_clicked()
 
 void ReissueAssetDialog::setMinimumFee()
 {
-    ui->customFee->setValue(GetRequiredFee(1000));
+    ui->customFee->setValue(model->wallet().getRequiredFee(1000));
 }
 
 void ReissueAssetDialog::updateFeeSectionControls()
 {
-    ui->confTargetSelector      ->setEnabled(ui->radioSmartFee->isChecked());
-    ui->labelSmartFee           ->setEnabled(ui->radioSmartFee->isChecked());
-    ui->labelSmartFee2          ->setEnabled(ui->radioSmartFee->isChecked());
-    ui->labelSmartFee3          ->setEnabled(ui->radioSmartFee->isChecked());
-    ui->labelFeeEstimation      ->setEnabled(ui->radioSmartFee->isChecked());
-    ui->checkBoxMinimumFee      ->setEnabled(ui->radioCustomFee->isChecked());
-    ui->labelMinFeeWarning      ->setEnabled(ui->radioCustomFee->isChecked());
-    ui->labelCustomPerKilobyte  ->setEnabled(ui->radioCustomFee->isChecked() && !ui->checkBoxMinimumFee->isChecked());
-    ui->customFee               ->setEnabled(ui->radioCustomFee->isChecked() && !ui->checkBoxMinimumFee->isChecked());
+    ui->confTargetSelector->setEnabled(ui->radioSmartFee->isChecked());
+    ui->labelSmartFee->setEnabled(ui->radioSmartFee->isChecked());
+    ui->labelSmartFee2->setEnabled(ui->radioSmartFee->isChecked());
+    ui->labelSmartFee3->setEnabled(ui->radioSmartFee->isChecked());
+    ui->labelFeeEstimation->setEnabled(ui->radioSmartFee->isChecked());
+    ui->checkBoxMinimumFee->setEnabled(ui->radioCustomFee->isChecked());
+    ui->labelMinFeeWarning->setEnabled(ui->radioCustomFee->isChecked());
+    ui->labelCustomPerKilobyte->setEnabled(ui->radioCustomFee->isChecked() && !ui->checkBoxMinimumFee->isChecked());
+    ui->customFee->setEnabled(ui->radioCustomFee->isChecked() && !ui->checkBoxMinimumFee->isChecked());
 }
 
 void ReissueAssetDialog::updateFeeMinimizedLabel()
 {
-    if(!model || !model->getOptionsModel())
+    if (!model || !model->getOptionsModel())
         return;
 
     if (ui->radioSmartFee->isChecked())
         ui->labelFeeMinimized->setText(ui->labelSmartFee->text());
     else {
-        ui->labelFeeMinimized->setText(MeowcoinUnits::formatWithUnit(model->getOptionsModel()->getDisplayUnit(), ui->customFee->value()) + "/kB");
+        ui->labelFeeMinimized->setText(BitcoinUnits::formatWithUnit(model->getOptionsModel()->getDisplayUnit(), ui->customFee->value()) + "/kB");
     }
 }
 
 void ReissueAssetDialog::updateMinFeeLabel()
 {
     if (model && model->getOptionsModel())
-        ui->checkBoxMinimumFee->setText(tr("Pay only the required fee of %1").arg(
-                MeowcoinUnits::formatWithUnit(model->getOptionsModel()->getDisplayUnit(), GetRequiredFee(1000)) + "/kB")
-        );
+        ui->checkBoxMinimumFee->setText(tr("Pay only the required fee of %1").arg(BitcoinUnits::formatWithUnit(model->getOptionsModel()->getDisplayUnit(), model->wallet().getRequiredFee(1000)) + "/kB"));
 }
 
 void ReissueAssetDialog::onUnitChanged(int value)
@@ -1386,34 +1378,56 @@ void ReissueAssetDialog::onUnitChanged(int value)
 
     buildUpdatedData();
     CheckFormState();
-
 }
 
 void ReissueAssetDialog::updateAssetsList()
 {
-    LOCK(cs_main);
-    std::vector<std::string> assets;
-    GetAllAdministrativeAssets(model->getWallet(), assets, 0);
+    updateAssetsListAsync();
+}
 
-    QStringList list;
-    list << "";
+void ReissueAssetDialog::updateAssetsListAsync()
+{
+    // Clear and show loading state without disabling the combo box
+    // Keep it visible so the placeholder text is shown
+    ui->comboBox->setCurrentIndex(0);
 
-    // Load the assets that are reissuable
-    for (auto item : assets) {
-        std::string name = QString::fromStdString(item).split("!").first().toStdString();
-        CNewAsset asset;
-        if (passets->GetAssetMetaDataIfExists(name, asset)) {
-            if (asset.nReissuable)
-                list << QString::fromStdString(asset.strName);
+    // Run asset loading in background thread to avoid blocking UI
+    std::thread([this]() {
+        try {
+            QStringList list;
+            list << "";
+
+            wallet::CWallet* pwallet = model ? model->wallet().wallet() : nullptr;
+            if (pwallet) {
+                LOCK(pwallet->cs_wallet);
+                wallet::CoinFilterParams params;
+                params.min_amount = 0;
+                wallet::CoinsResult available = wallet::AvailableCoinsWithAssets(*pwallet, nullptr, std::nullopt, params);
+                for (const auto& [assetName, assetOutputs] : available.mapAssetCoins) {
+                    // Only show assets for which we have the owner token (admin rights)
+                    if (IsAssetNameAnOwner(assetName)) {
+                        std::string baseName = assetName;
+                        baseName.pop_back(); // Remove '!' suffix
+                        list << QString::fromStdString(baseName);
+                    }
+                }
+            }
+
+            // Update UI on main thread
+            QMetaObject::invokeMethod(this, [this, list]() { onAssetsListLoaded(list); }, Qt::QueuedConnection);
+        } catch (const std::exception& e) {
+            qWarning() << "Error loading assets list:" << e.what();
+            QStringList emptyList;
+            emptyList << "";
+            QMetaObject::invokeMethod(this, [this, emptyList]() { onAssetsListLoaded(emptyList); }, Qt::QueuedConnection);
         }
+    }).detach();
+}
 
-        if (passets->CheckIfAssetExists(RESTRICTED_CHAR + name)) {
-            list << QString::fromStdString(RESTRICTED_CHAR + name);
-        }
-    }
-
-
-    stringModel->setStringList(list);
+void ReissueAssetDialog::onAssetsListLoaded(QStringList assetsList)
+{
+    // Update the string model with loaded assets
+    stringModel->setStringList(assetsList);
 }
 
 void ReissueAssetDialog::clear()
@@ -1442,7 +1456,7 @@ void ReissueAssetDialog::onClearButtonClicked()
     clear();
 }
 
-void ReissueAssetDialog::focusReissueAsset(const QModelIndex &index)
+void ReissueAssetDialog::focusReissueAsset(const QModelIndex& index)
 {
     clear();
 
@@ -1490,5 +1504,3 @@ void ReissueAssetDialog::hideInvalidVerifierStringMessage()
     ui->labelReissueVerifierStringErrorMessage->clear();
     ui->labelReissueVerifierStringErrorMessage->hide();
 }
-
-

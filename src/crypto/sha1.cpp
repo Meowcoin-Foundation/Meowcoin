@@ -1,13 +1,12 @@
-// Copyright (c) 2014 The Bitcoin Core developers
-// Copyright (c) 2017-2019 The Meowcoin Core developers
+// Copyright (c) 2014-present The Meowcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include "crypto/sha1.h"
+#include <crypto/sha1.h>
 
-#include "crypto/common.h"
+#include <crypto/common.h>
 
-#include <string.h>
+#include <cstring>
 
 // Internal implementation code.
 namespace
@@ -147,7 +146,7 @@ void Transform(uint32_t* s, const unsigned char* chunk)
 
 ////// SHA1
 
-CSHA1::CSHA1() : bytes(0)
+CSHA1::CSHA1()
 {
     sha1::Initialize(s);
 }
@@ -164,7 +163,7 @@ CSHA1& CSHA1::Write(const unsigned char* data, size_t len)
         sha1::Transform(s, buf);
         bufsize = 0;
     }
-    while (end >= data + 64) {
+    while (end - data >= 64) {
         // Process full chunks directly from the source.
         sha1::Transform(s, data);
         bytes += 64;

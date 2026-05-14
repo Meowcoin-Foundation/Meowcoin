@@ -1,12 +1,12 @@
-// Copyright (c) 2011-2015 The Bitcoin Core developers
-// Copyright (c) 2017-2021 The Meowcoin Core developers
+// Copyright (c) 2011-2021 The Meowcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef MEOWCOIN_QT_MEOWCOINAMOUNTFIELD_H
-#define MEOWCOIN_QT_MEOWCOINAMOUNTFIELD_H
+#ifndef BITCOIN_QT_BITCOINAMOUNTFIELD_H
+#define BITCOIN_QT_BITCOINAMOUNTFIELD_H
 
-#include "amount.h"
+#include <consensus/amount.h>
+#include <qt/meowcoinunits.h>
 
 #include <QWidget>
 
@@ -18,19 +18,28 @@ QT_END_NAMESPACE
 
 /** Widget for entering meowcoin amounts.
   */
-class MeowcoinAmountField: public QWidget
+class BitcoinAmountField: public QWidget
 {
     Q_OBJECT
 
     // ugly hack: for some unknown reason CAmount (instead of qint64) does not work here as expected
-    // discussion: https://github.com/bitcoin/bitcoin/pull/5117
+    // discussion: https://github.com/meowcoin/meowcoin/pull/5117
     Q_PROPERTY(qint64 value READ value WRITE setValue NOTIFY valueChanged USER true)
 
 public:
-    explicit MeowcoinAmountField(QWidget *parent = 0);
+    explicit BitcoinAmountField(QWidget *parent = nullptr);
 
-    CAmount value(bool *value=0) const;
+    CAmount value(bool *value=nullptr) const;
     void setValue(const CAmount& value);
+
+    /** If allow empty is set to false the field will be set to the minimum allowed value if left empty. **/
+    void SetAllowEmpty(bool allow);
+
+    /** Set the minimum value in satoshis **/
+    void SetMinValue(const CAmount& value);
+
+    /** Set the maximum value in satoshis **/
+    void SetMaxValue(const CAmount& value);
 
     /** Set single step in satoshis **/
     void setSingleStep(const CAmount& step);
@@ -44,7 +53,7 @@ public:
     bool validate();
 
     /** Change unit used to display amount. */
-    void setDisplayUnit(int unit);
+    void setDisplayUnit(BitcoinUnit new_unit);
 
     /** Make field empty and ready for new input. */
     void clear();
@@ -62,10 +71,10 @@ Q_SIGNALS:
 
 protected:
     /** Intercept focus-in event and ',' key presses */
-    bool eventFilter(QObject *object, QEvent *event);
+    bool eventFilter(QObject *object, QEvent *event) override;
 
 private:
-    AmountSpinBox *amount;
+    AmountSpinBox* amount{nullptr};
     QValueComboBox *unit;
 
 private Q_SLOTS:
@@ -73,58 +82,38 @@ private Q_SLOTS:
 
 };
 
-
-
-
-class AssetAmountField: public QWidget
+class AssetAmountField : public QWidget
 {
-Q_OBJECT
-
-    // ugly hack: for some unknown reason CAmount (instead of qint64) does not work here as expected
-    // discussion: https://github.com/bitcoin/bitcoin/pull/5117
+    Q_OBJECT
     Q_PROPERTY(qint64 value READ value WRITE setValue NOTIFY valueChanged USER true)
 
 public:
-    explicit AssetAmountField(QWidget *parent = 0);
+    explicit AssetAmountField(QWidget *parent = nullptr);
 
-    CAmount value(bool *value=0) const;
+    CAmount value(bool *value=nullptr) const;
     void setValue(const CAmount& value);
-
-    /** Set single step in satoshis **/
-    void setSingleStep(const CAmount& step);
-
-    /** Make read-only **/
-    void setReadOnly(bool fReadOnly);
-
-    /** Mark current value as invalid in UI. */
-    void setValid(bool valid);
-    /** Perform input validation, mark field as invalid if entered value is not valid. */
-    bool validate();
-
-    /** Change unit used to display amount. */
-    void setDisplayUnit(int unit);
-
-    /** Make field empty and ready for new input. */
-    void clear();
-
-    /** Enable/Disable. */
-    void setEnabled(bool fEnabled);
-
     void setUnit(int unit);
-    void setMaxAmount(CAmount& max);
+    void setMaxAmount(CAmount maxAmount);
+    void SetAllowEmpty(bool allow);
+    void SetMinValue(const CAmount& value);
+    void SetMaxValue(const CAmount& value);
+    void setSingleStep(const CAmount& step);
+    void setReadOnly(bool fReadOnly);
+    void setValid(bool valid);
+    bool validate();
+    void clear();
+    void setEnabled(bool fEnabled);
+    QWidget *setupTabChain(QWidget *prev);
 
 Q_SIGNALS:
     void valueChanged();
 
 protected:
-    /** Intercept focus-in event and ',' key presses */
-    bool eventFilter(QObject *object, QEvent *event);
+    bool eventFilter(QObject *object, QEvent *event) override;
 
 private:
-    AmountSpinBox *amount;
-    int assetUnit;
-
+    AmountSpinBox* amount{nullptr};
+    int assetUnit{0};
 };
 
-
-#endif // MEOWCOIN_QT_MEOWCOINAMOUNTFIELD_H
+#endif // BITCOIN_QT_BITCOINAMOUNTFIELD_H

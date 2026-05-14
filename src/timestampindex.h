@@ -1,12 +1,14 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2015 The Bitcoin Core developers
+// Copyright (c) 2020-2024 The Avian developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef MEOWCOIN_TIMESTAMPINDEX_H
-#define MEOWCOIN_TIMESTAMPINDEX_H
+#ifndef BITCOIN_TIMESTAMPINDEX_H
+#define BITCOIN_TIMESTAMPINDEX_H
 
-#include "uint256.h"
+#include <serialize.h>
+#include <uint256.h>
 
 struct CTimestampIndexIteratorKey {
     unsigned int timestamp;
@@ -115,7 +117,7 @@ struct CTimestampBlockIndexValue {
         ltimestamp = ser_readdata32be(s);
     }
 
-    CTimestampBlockIndexValue (unsigned int time) {
+    CTimestampBlockIndexValue(unsigned int time) {
         ltimestamp = time;
     }
 
@@ -128,4 +130,4 @@ struct CTimestampBlockIndexValue {
     }
 };
 
-#endif // MEOWCOIN_TIMESTAMPINDEX_H
+#endif // BITCOIN_TIMESTAMPINDEX_H

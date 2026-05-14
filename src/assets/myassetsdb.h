@@ -2,18 +2,24 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef MEOWCOINCOIN_MYASSETSDB_H
-#define MEOWCOINCOIN_MYASSETSDB_H
+#ifndef BITCOIN_ASSETS_MYASSETSDB_H
+#define BITCOIN_ASSETS_MYASSETSDB_H
 
 #include <dbwrapper.h>
+#include <primitives/transaction.h>
+#include <util/fs.h>
+
+#include <set>
+#include <string>
+#include <tuple>
+#include <vector>
 
 class CMessage;
-class COutPoint;
 
 class CMessageDB  : public CDBWrapper {
 
 public:
-    explicit CMessageDB(size_t nCacheSize, bool fMemory = false, bool fWipe = false);
+    explicit CMessageDB(const fs::path& datadir, size_t nCacheSize, bool fMemory = false, bool fWipe = false);
 
     CMessageDB(const CMessageDB&) = delete;
     CMessageDB& operator=(const CMessageDB&) = delete;
@@ -34,7 +40,7 @@ public:
 
 class CMessageChannelDB  : public CDBWrapper {
 public:
-    explicit CMessageChannelDB(size_t nCacheSize, bool fMemory = false, bool fWipe = false);
+    explicit CMessageChannelDB(const fs::path& datadir, size_t nCacheSize, bool fMemory = false, bool fWipe = false);
 
     CMessageChannelDB(const CMessageChannelDB&) = delete;
     CMessageChannelDB& operator=(const CMessageChannelDB&) = delete;
@@ -58,7 +64,7 @@ public:
 
 class CMyRestrictedDB : public CDBWrapper {
 public:
-    explicit CMyRestrictedDB(size_t nCacheSize, bool fMemory = false, bool fWipe = false);
+    explicit CMyRestrictedDB(const fs::path& datadir, size_t nCacheSize, bool fMemory = false, bool fWipe = false);
 
     CMyRestrictedDB(const CMyRestrictedDB&) = delete;
     CMyRestrictedDB& operator=(const CMyRestrictedDB&) = delete;
@@ -79,4 +85,4 @@ public:
 };
 
 
-#endif //MEOWCOINCOIN_MYASSETSDB_H
+#endif // BITCOIN_ASSETS_MYASSETSDB_H

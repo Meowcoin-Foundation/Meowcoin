@@ -1,124 +1,107 @@
-// Copyright (c) 2011-2016 The Bitcoin Core developers
-// Copyright (c) 2017-2019 The Meowcoin Core developers
+// Copyright (c) 2011-2021 The Meowcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include "meowcoinunits.h"
+#include <qt/meowcoinunits.h>
 
-#include "primitives/transaction.h"
+#include <consensus/amount.h>
 
 #include <QStringList>
 
-MeowcoinUnits::MeowcoinUnits(QObject *parent):
+#include <cassert>
+
+static constexpr auto MAX_DIGITS_BTC = 16;
+
+BitcoinUnits::BitcoinUnits(QObject *parent):
         QAbstractListModel(parent),
         unitlist(availableUnits())
 {
 }
 
-QList<MeowcoinUnits::Unit> MeowcoinUnits::availableUnits()
+QList<BitcoinUnit> BitcoinUnits::availableUnits()
 {
-    QList<MeowcoinUnits::Unit> unitlist;
-    unitlist.append(MEWC);
-    unitlist.append(mMEWC);
-    unitlist.append(uMEWC);
+    QList<BitcoinUnit> unitlist;
+    unitlist.append(Unit::MEWC);
+    unitlist.append(Unit::mMEWC);
+    unitlist.append(Unit::uMEWC);
+    unitlist.append(Unit::MEW);
     return unitlist;
 }
 
-bool MeowcoinUnits::valid(int unit)
+QString BitcoinUnits::longName(Unit unit)
 {
-    switch(unit)
-    {
-    case MEWC:
-    case mMEWC:
-    case uMEWC:
-        return true;
-    default:
-        return false;
-    }
+    switch (unit) {
+    case Unit::MEWC: return QString("MEWC");
+    case Unit::mMEWC: return QString("mMEWC");
+    case Unit::uMEWC: return QString::fromUtf8("µMEWC (paw)");
+    case Unit::MEW: return QString("Mew (mewc)");
+    } // no default case, so the compiler can warn about missing cases
+    assert(false);
 }
 
-QString MeowcoinUnits::name(int unit)
+QString BitcoinUnits::shortName(Unit unit)
 {
-    switch(unit)
-    {
-    case MEWC: return QString("MEWC");
-    case mMEWC: return QString("mMEWC");
-    case uMEWC: return QString::fromUtf8("μMEWC");
-    default: return QString("???");
-    }
+    switch (unit) {
+    case Unit::MEWC: return longName(unit);
+    case Unit::mMEWC: return longName(unit);
+    case Unit::uMEWC: return QString("paw");
+    case Unit::MEW: return QString("mewc");
+    } // no default case, so the compiler can warn about missing cases
+    assert(false);
 }
 
-QString MeowcoinUnits::description(int unit)
+QString BitcoinUnits::description(Unit unit)
 {
-    switch(unit)
-    {
-    case MEWC: return QString("Meowcoins");
-    case mMEWC: return QString("Milli-Meowcoins (1 / 1" THIN_SP_UTF8 "000)");
-    case uMEWC: return QString("Micro-Meowcoins (1 / 1" THIN_SP_UTF8 "000" THIN_SP_UTF8 "000)");
-    default: return QString("???");
-    }
+    switch (unit) {
+    case Unit::MEWC: return QString("Mewcoins");
+    case Unit::mMEWC: return QString("Milli-Mewcoins (1 / 1" THIN_SP_UTF8 "000)");
+    case Unit::uMEWC: return QString("Micro-Mewcoins (paw) (1 / 1" THIN_SP_UTF8 "000" THIN_SP_UTF8 "000)");
+    case Unit::MEW: return QString("Mew (mewc) (1 / 100" THIN_SP_UTF8 "000" THIN_SP_UTF8 "000)");
+    } // no default case, so the compiler can warn about missing cases
+    assert(false);
 }
 
-qint64 MeowcoinUnits::factor(int unit)
+qint64 BitcoinUnits::factor(Unit unit)
 {
-    switch(unit)
-    {
-    case MEWC:  return 100000000;
-    case mMEWC: return 100000;
-    case uMEWC: return 100;
-    default:   return 100000000;
-    }
+    switch (unit) {
+    case Unit::MEWC: return 100'000'000;
+    case Unit::mMEWC: return 100'000;
+    case Unit::uMEWC: return 100;
+    case Unit::MEW: return 1;
+    } // no default case, so the compiler can warn about missing cases
+    assert(false);
 }
 
-qint64 MeowcoinUnits::factorAsset(int unit)
+int BitcoinUnits::decimals(Unit unit)
 {
-    switch(unit)
-    {
-        case 0:  return 1;
-        case 1: return 10;
-        case 2: return 100;
-        case 3: return 1000;
-        case 4: return 10000;
-        case 5: return 100000;
-        case 6: return 1000000;
-        case 7: return 10000000;
-        case 8: return 100000000;
-        default:   return 100000000;
-    }
+    switch (unit) {
+    case Unit::MEWC: return 8;
+    case Unit::mMEWC: return 5;
+    case Unit::uMEWC: return 2;
+    case Unit::MEW: return 0;
+    } // no default case, so the compiler can warn about missing cases
+    assert(false);
 }
 
-int MeowcoinUnits::decimals(int unit)
-{
-    switch(unit)
-    {
-    case MEWC: return 8;
-    case mMEWC: return 5;
-    case uMEWC: return 2;
-    default: return 0;
-    }
-}
-
-QString MeowcoinUnits::format(int unit, const CAmount& nIn, bool fPlus, SeparatorStyle separators, const int nAssetUnit)
+QString BitcoinUnits::format(Unit unit, const CAmount& nIn, bool fPlus, SeparatorStyle separators, bool justify)
 {
     // Note: not using straight sprintf here because we do NOT want
     // localized number formatting.
-    if((nAssetUnit < 0 || nAssetUnit > 8) && !valid(unit))
-        return QString(); // Refuse to format invalid unit
     qint64 n = (qint64)nIn;
-    qint64 coin = nAssetUnit >= 0 ? factorAsset(nAssetUnit) : factor(unit);
-    int num_decimals = nAssetUnit >= 0 ? nAssetUnit : decimals(unit);
+    qint64 coin = factor(unit);
+    int num_decimals = decimals(unit);
     qint64 n_abs = (n > 0 ? n : -n);
     qint64 quotient = n_abs / coin;
-    qint64 remainder = n_abs % coin;
     QString quotient_str = QString::number(quotient);
-    QString remainder_str = QString::number(remainder).rightJustified(num_decimals, '0');
+    if (justify) {
+        quotient_str = quotient_str.rightJustified(MAX_DIGITS_BTC - num_decimals, ' ');
+    }
 
-    // Use SI-style thi
-    // n space separators as these are locale independent and can't be
+    // Use SI-style thin space separators as these are locale independent and can't be
     // confused with the decimal marker.
     QChar thin_sp(THIN_SP_CP);
     int q_size = quotient_str.size();
-    if (separators == separatorAlways || (separators == separatorStandard && q_size > 4))
+    if (separators == SeparatorStyle::ALWAYS || (separators == SeparatorStyle::STANDARD && q_size > 4))
         for (int i = 3; i < q_size; i += 3)
             quotient_str.insert(q_size - i, thin_sp);
 
@@ -127,11 +110,13 @@ QString MeowcoinUnits::format(int unit, const CAmount& nIn, bool fPlus, Separato
     else if (fPlus && n > 0)
         quotient_str.insert(0, '+');
 
-    if (nAssetUnit == MIN_ASSET_UNITS)
+    if (num_decimals > 0) {
+        qint64 remainder = n_abs % coin;
+        QString remainder_str = QString::number(remainder).rightJustified(num_decimals, '0');
+        return quotient_str + QString(".") + remainder_str;
+    } else {
         return quotient_str;
-
-
-    return quotient_str + QString(".") + remainder_str;
+    }
 }
 
 
@@ -143,28 +128,35 @@ QString MeowcoinUnits::format(int unit, const CAmount& nIn, bool fPlus, Separato
 // Please take care to use formatHtmlWithUnit instead, when
 // appropriate.
 
-QString MeowcoinUnits::formatWithUnit(int unit, const CAmount& amount, bool plussign, SeparatorStyle separators)
+QString BitcoinUnits::formatWithUnit(Unit unit, const CAmount& amount, bool plussign, SeparatorStyle separators)
 {
-    return format(unit, amount, plussign, separators) + QString(" ") + name(unit);
+    return format(unit, amount, plussign, separators) + QString(" ") + shortName(unit);
 }
 
-QString MeowcoinUnits::formatWithCustomName(QString customName, const CAmount& amount, int unit, bool plussign, SeparatorStyle separators)
-{
-    return format(MEWC, amount / factorAsset(MAX_ASSET_UNITS - unit), plussign, separators, unit) + QString(" ") + customName;
-}
-
-QString MeowcoinUnits::formatHtmlWithUnit(int unit, const CAmount& amount, bool plussign, SeparatorStyle separators)
+QString BitcoinUnits::formatHtmlWithUnit(Unit unit, const CAmount& amount, bool plussign, SeparatorStyle separators)
 {
     QString str(formatWithUnit(unit, amount, plussign, separators));
     str.replace(QChar(THIN_SP_CP), QString(THIN_SP_HTML));
     return QString("<span style='white-space: nowrap;'>%1</span>").arg(str);
 }
 
-
-bool MeowcoinUnits::parse(int unit, const QString &value, CAmount *val_out)
+QString BitcoinUnits::formatWithPrivacy(Unit unit, const CAmount& amount, SeparatorStyle separators, bool privacy)
 {
-    if(!valid(unit) || value.isEmpty())
+    assert(amount >= 0);
+    QString value;
+    if (privacy) {
+        value = format(unit, 0, false, separators, true).replace('0', '#');
+    } else {
+        value = format(unit, amount, false, separators, true);
+    }
+    return value + QString(" ") + shortName(unit);
+}
+
+bool BitcoinUnits::parse(Unit unit, const QString& value, CAmount* val_out)
+{
+    if (value.isEmpty()) {
         return false; // Refuse to parse invalid unit or empty string
+    }
     int num_decimals = decimals(unit);
 
     // Ignore spaces and thin spaces when parsing
@@ -174,7 +166,7 @@ bool MeowcoinUnits::parse(int unit, const QString &value, CAmount *val_out)
     {
         return false; // More than one dot
     }
-    QString whole = parts[0];
+    const QString& whole = parts[0];
     QString decimals;
 
     if(parts.size() > 1)
@@ -200,62 +192,18 @@ bool MeowcoinUnits::parse(int unit, const QString &value, CAmount *val_out)
     return ok;
 }
 
-bool MeowcoinUnits::assetParse(int assetUnit, const QString &value, CAmount *val_out)
+QString BitcoinUnits::getAmountColumnTitle(Unit unit)
 {
-    if(!(assetUnit >= 0 && assetUnit <= 8) || value.isEmpty())
-        return false; // Refuse to parse invalid unit or empty string
-    int num_decimals = assetUnit;
-
-    // Ignore spaces and thin spaces when parsing
-    QStringList parts = removeSpaces(value).split(".");
-
-    if(parts.size() > 2)
-    {
-        return false; // More than one dot
-    }
-    QString whole = parts[0];
-    QString decimals;
-
-    if(parts.size() > 1)
-    {
-        decimals = parts[1];
-    }
-    if(decimals.size() > num_decimals)
-    {
-        return false; // Exceeds max precision
-    }
-    bool ok = false;
-    QString str = whole + decimals.leftJustified(num_decimals, '0');
-
-    if(str.size() > 18)
-    {
-        return false; // Longer numbers will exceed 63 bits
-    }
-    CAmount retvalue(str.toLongLong(&ok));
-    if(val_out)
-    {
-        *val_out = retvalue;
-    }
-    return ok;
+    return QObject::tr("Amount") + " (" + shortName(unit) + ")";
 }
 
-QString MeowcoinUnits::getAmountColumnTitle(int unit)
-{
-    QString amountTitle = QObject::tr("Amount");
-    if (MeowcoinUnits::valid(unit))
-    {
-        amountTitle += " ("+MeowcoinUnits::name(unit) + ")";
-    }
-    return amountTitle;
-}
-
-int MeowcoinUnits::rowCount(const QModelIndex &parent) const
+int BitcoinUnits::rowCount(const QModelIndex &parent) const
 {
     Q_UNUSED(parent);
     return unitlist.size();
 }
 
-QVariant MeowcoinUnits::data(const QModelIndex &index, int role) const
+QVariant BitcoinUnits::data(const QModelIndex &index, int role) const
 {
     int row = index.row();
     if(row >= 0 && row < unitlist.size())
@@ -265,17 +213,54 @@ QVariant MeowcoinUnits::data(const QModelIndex &index, int role) const
         {
         case Qt::EditRole:
         case Qt::DisplayRole:
-            return QVariant(name(unit));
+            return QVariant(longName(unit));
         case Qt::ToolTipRole:
             return QVariant(description(unit));
         case UnitRole:
-            return QVariant(static_cast<int>(unit));
+            return QVariant::fromValue(unit);
         }
     }
     return QVariant();
 }
 
-CAmount MeowcoinUnits::maxMoney()
+CAmount BitcoinUnits::maxMoney()
 {
     return MAX_MONEY;
+}
+
+namespace {
+qint8 ToQint8(BitcoinUnit unit)
+{
+    switch (unit) {
+    case BitcoinUnit::MEWC: return 0;
+    case BitcoinUnit::mMEWC: return 1;
+    case BitcoinUnit::uMEWC: return 2;
+    case BitcoinUnit::MEW: return 3;
+    } // no default case, so the compiler can warn about missing cases
+    assert(false);
+}
+
+BitcoinUnit FromQint8(qint8 num)
+{
+    switch (num) {
+    case 0: return BitcoinUnit::MEWC;
+    case 1: return BitcoinUnit::mMEWC;
+    case 2: return BitcoinUnit::uMEWC;
+    case 3: return BitcoinUnit::MEW;
+    }
+    assert(false);
+}
+} // namespace
+
+QDataStream& operator<<(QDataStream& out, const BitcoinUnit& unit)
+{
+    return out << ToQint8(unit);
+}
+
+QDataStream& operator>>(QDataStream& in, BitcoinUnit& unit)
+{
+    qint8 input;
+    in >> input;
+    unit = FromQint8(input);
+    return in;
 }

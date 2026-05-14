@@ -1,191 +1,120 @@
-OpenBSD build guide
-======================
-(updated for OpenBSD 6.7)
+# OpenBSD Build Guide
 
-This guide describes how to build meowcoind and command-line utilities on OpenBSD.
+**Updated for OpenBSD [7.8](https://www.openbsd.org/78.html)**
 
-As OpenBSD is most common as a server OS, we will not bother with the GUI.
+This guide describes how to build meowcoind, command-line utilities, and GUI on OpenBSD.
 
-Preparation
--------------
+## Preparation
 
-Run the following as root to install the base dependencies for building:
+### 1. Install Required Dependencies
+Run the following as root to install the base dependencies for building.
 
 ```bash
-pkg_add git gmake libevent libtool boost
-pkg_add qt5 # (optional for enabling the GUI)
-pkg_add autoconf # (select highest version, e.g. 2.69)
-pkg_add automake # (select highest version, e.g. 1.16)
-pkg_add python # (select highest version, e.g. 3.8)
-
-git clone https://github.com/JustAResearcher/Meowcoin.git
+pkg_add git cmake boost libevent
 ```
+
+SQLite is required for the wallet:
+
+```bash
+pkg_add sqlite3
+```
+
+To build Meowcoin Core without the wallet, use `-DENABLE_WALLET=OFF`.
+
+Cap'n Proto is needed for IPC functionality (see [multiprocess.md](multiprocess.md)):
+
+```bash
+pkg_add capnproto
+```
+
+Compile with `-DENABLE_IPC=OFF` if you do not need IPC functionality.
 
 See [dependencies.md](dependencies.md) for a complete overview.
 
-**Important**: From OpenBSD 6.2 onwards a C++11-supporting clang compiler is
-part of the base image, and while building it is necessary to make sure that
-this compiler is used and not ancient g++ 4.2.1. This is done by appending
-`CC=cc CC_FOR_BUILD=cc CXX=c++` to configuration commands. Mixing different
-compilers within the same executable will result in errors.
+### 2. Clone Meowcoin Repo
+Clone the Meowcoin Core repository to a directory. All build scripts and commands will run from this directory.
+``` bash
+git clone https://github.com/meowcoin/meowcoin.git
+```
 
-### Building BerkeleyDB
+### 3. Install Optional Dependencies
 
-BerkeleyDB is only necessary for the wallet functionality. To skip this, pass
-`--disable-wallet` to `./configure` and skip to the next section.
+#### GUI Dependencies
+###### Qt6
 
-It is recommended to use Berkeley DB 4.8. You cannot use the BerkeleyDB library
-from ports, for the same reason as boost above (g++/libstd++ incompatibility).
-If you have to build it yourself, you can use [the installation script included
-in contrib/](/contrib/install_db4.sh) like so:
+Meowcoin Core includes a GUI built with the cross-platform Qt Framework. To compile the GUI, we need to install
+the necessary parts of Qt, the libqrencode and pass `-DBUILD_GUI=ON`. Skip if you don't intend to use the GUI.
 
 ```bash
-./contrib/install_db4.sh `pwd` CC=cc CXX=c++
+pkg_add qt6-qtbase qt6-qttools
 ```
 
-This compiler will not overwrite the system compiler, it will be installed as `egcc` and `eg++` in `/usr/local/bin`.
+###### libqrencode
 
-### Building boost
-
-Do not use `pkg_add boost`! The boost version installed thus is compiled using the `g++` compiler not `eg++`, which will result in a conflict between `/usr/local/lib/libestdc++.so.XX.0` and `/usr/lib/libstdc++.so.XX.0`, resulting in a test crash:
-
-    test_meowcoin:/usr/lib/libstdc++.so.57.0: /usr/local/lib/libestdc++.so.17.0 : WARNING: symbol(_ZN11__gnu_debug17_S_debug_me ssagesE) size mismatch, relink your program
-    ...
-    Segmentation fault (core dumped)
-
-This makes it necessary to build boost, or at least the parts used by Meowcoin Core, manually:
-
-```
-# Pick some path to install boost to, here we create a directory within the meowcoin directory
-MEOWCOIN_ROOT=$(pwd)
-BOOST_PREFIX="${MEOWCOIN_ROOT}/boost"
-mkdir -p $BOOST_PREFIX
-
-# Fetch the source and verify that it is not tampered with
-curl -o boost_1_64_0.tar.bz2 https://netcologne.dl.sourceforge.net/project/boost/boost/1.64.0/boost_1_64_0.tar.bz2
-echo '7bcc5caace97baa948931d712ea5f37038dbb1c5d89b43ad4def4ed7cb683332 boost_1_64_0.tar.bz2' | sha256 -c
-# MUST output: (SHA256) boost_1_64_0.tar.bz2: OK
-tar -xjf boost_1_64_0.tar.bz2
-
-# Boost 1.64 needs one small patch for OpenBSD
-cd boost_1_64_0
-# Also here: https://gist.githubusercontent.com/laanwj/bf359281dc319b8ff2e1/raw/92250de8404b97bb99d72ab898f4a8cb35ae1ea3/patch-boost_test_impl_execution_monitor_ipp.patch
-patch -p0 < /usr/ports/devel/boost/patches/patch-boost_test_impl_execution_monitor_ipp
-
-# Build w/ minimum configuration necessary for meowcoin
-echo 'using gcc : : eg++ : <cxxflags>"-fvisibility=hidden -fPIC" <linkflags>"" <archiver>"ar" <striper>"strip"  <ranlib>"ranlib" <rc>"" : ;' > user-config.jam
-config_opts="runtime-link=shared threadapi=pthread threading=multi link=static variant=release --layout=tagged --build-type=complete --user-config=user-config.jam -sNO_BZIP2=1"
-./bootstrap.sh --without-icu --with-libraries=chrono,filesystem,program_options,system,thread,test
-./b2 -d2 -j2 -d1 ${config_opts} --prefix=${BOOST_PREFIX} stage
-./b2 -d0 -j4 ${config_opts} --prefix=${BOOST_PREFIX} install
-```
-
-### Building BerkeleyDB
-
-BerkeleyDB is only necessary for the wallet functionality. To skip this, pass `--disable-wallet` to `./configure`.
-
-See "Berkeley DB" in [build_unix.md](build_unix.md) for instructions on how to build BerkeleyDB 4.8.
-You cannot use the BerkeleyDB library from ports, for the same reason as boost above (g++/libstd++ incompatibility).
+The GUI will be able to encode addresses in QR codes unless this feature is explicitly disabled. To install libqrencode, run:
 
 ```bash
-# Pick some path to install BDB to, here we create a directory within the meowcoin directory
-MEOWCOIN_ROOT=$(pwd)
-BDB_PREFIX="${MEOWCOIN_ROOT}/db4"
-mkdir -p $BDB_PREFIX
-
-# Fetch the source and verify that it is not tampered with
-curl -o db-4.8.30.NC.tar.gz 'http://download.oracle.com/berkeley-db/db-4.8.30.NC.tar.gz'
-echo '12edc0df75bf9abd7f82f821795bcee50f42cb2e5f76a6a281b85732798364ef  db-4.8.30.NC.tar.gz' | sha256 -c
-# MUST output: (SHA256) db-4.8.30.NC.tar.gz: OK
-tar -xzf db-4.8.30.NC.tar.gz
-
-# Build the library and install to specified prefix
-cd db-4.8.30.NC/build_unix/
-#  Note: Do a static build so that it can be embedded into the executable, instead of having to find a .so at runtime
-../dist/configure --enable-cxx --disable-shared --with-pic --prefix=$BDB_PREFIX CC=egcc CXX=eg++ CPP=ecpp
-make install # do NOT use -jX, this is broken
+pkg_add libqrencode
 ```
 
-### Resource limits
+Otherwise, if you don't need QR encoding support, use the `-DWITH_QRENCODE=OFF` option to disable this feature in order to compile the GUI.
+
+---
+
+#### Notifications
+###### ZeroMQ
+
+Meowcoin Core can provide notifications via ZeroMQ. If the package is installed, support will be compiled in.
+```bash
+pkg_add zeromq
+```
+
+#### Test Suite Dependencies
+There is an included test suite that is useful for testing code changes when developing.
+To run the test suite (recommended), you will need to have Python 3 installed:
+
+```bash
+pkg_add python py3-zmq  # Select the newest version of the python package if necessary.
+```
+
+## Building Meowcoin Core
+
+### 1. Configuration
+
+There are many ways to configure Meowcoin Core, here are a few common examples:
+
+##### Wallet and GUI:
+This enables wallet support and the GUI, assuming SQLite and Qt 6 are installed.
+
+```bash
+cmake -B build -DBUILD_GUI=ON
+```
+
+Run `cmake -B build -LH` to see the full list of available options.
+
+### 2. Compile
+
+```bash
+cmake --build build     # Append "-j N" for N parallel jobs.
+ctest --test-dir build  # Append "-j N" for N parallel tests.
+```
+
+## Resource limits
+
+If the build runs into out-of-memory errors, the instructions in this section
+might help.
 
 The standard ulimit restrictions in OpenBSD are very strict:
+```bash
+data(kbytes)         1572864
+```
 
-    data(kbytes)         1572864
-
-This is, unfortunately, no longer enough to compile some `.cpp` files in the project,
-at least with gcc 4.9.3 (see issue https://github.com/bitcoin/bitcoin/issues/6658).
+This is, unfortunately, in some cases not enough to compile some `.cpp` files in the project,
+(see issue [#6658](https://github.com/meowcoin/meowcoin/issues/6658)).
 If your user is in the `staff` group the limit can be raised with:
-
-    ulimit -d 3000000
-
+```bash
+ulimit -d 3000000
+```
 The change will only affect the current shell and processes spawned by it. To
 make the change system-wide, change `datasize-cur` and `datasize-max` in
 `/etc/login.conf`, and reboot.
-
-### Building Meowcoin Core
-
-**Important**: use `gmake`, not `make`. The non-GNU `make` will exit with a horrible error.
-
-Preparation:
-```bash
-export AUTOCONF_VERSION=2.69 # replace this with the autoconf version that you installed
-export AUTOMAKE_VERSION=1.15 # replace this with the automake version that you installed
-./autogen.sh
-```
-Make sure `BDB_PREFIX` and `BOOST_PREFIX` are set to the appropriate paths from the above steps.
-
-To configure with wallet:
-```bash
-./configure --with-gui=no --with-boost=$BOOST_PREFIX \
-    CC=egcc CXX=eg++ CPP=ecpp \
-    BDB_LIBS="-L${BDB_PREFIX}/lib -ldb_cxx-4.8" BDB_CFLAGS="-I${BDB_PREFIX}/include" \
-    --enable-sse2 --disable-tests
-```
-
-To configure without wallet:
-```bash
-./configure --disable-wallet --with-gui=no --with-boost=$BOOST_PREFIX \
-    CC=egcc CXX=eg++ CPP=ecpp --enable-sse2 --disable-tests
-```
-
-Build and run the tests:
-```bash
-gmake # can use -jX here for parallelism
-gmake check
-```
-
-Clang (not currently working)
-------------------------------
-
-WARNING: This is outdated, needs to be updated for OpenBSD 6.0 and re-tried.
-
-Using a newer g++ results in linking the new code to a new libstdc++.
-Libraries built with the old g++, will still import the old library.
-This gives conflicts, necessitating rebuild of all C++ dependencies of the application.
-
-With clang this can - at least theoretically - be avoided because it uses the
-base system's libstdc++.
-
-```bash
-pkg_add llvm boost
-```
-
-```bash
-./configure --disable-wallet --with-gui=no CC=clang CXX=clang++
-gmake
-```
-
-However, this does not appear to work. Compilation succeeds, but link fails
-with many 'local symbol discarded' errors:
-
-    local symbol 150: discarded in section `.text._ZN10tinyformat6detail14FormatIterator6finishEv' from libmeowcoin_util.a(libmeowcoin_util_a-random.o)
-    local symbol 151: discarded in section `.text._ZN10tinyformat6detail14FormatIterator21streamStateFromFormatERSoRjPKcii' from libmeowcoin_util.a(libmeowcoin_util_a-random.o)
-    local symbol 152: discarded in section `.text._ZN10tinyformat6detail12convertToIntIA13_cLb0EE6invokeERA13_Kc' from libmeowcoin_util.a(libmeowcoin_util_a-random.o)
-
-According to similar reported errors this is a binutils (ld) issue in 2.15, the
-version installed by OpenBSD 5.7:
-
-- http://openbsd-archive.7691.n7.nabble.com/UPDATE-cppcheck-1-65-td248900.html
-- https://llvm.org/bugs/show_bug.cgi?id=9758
-
-There is no known workaround for this.

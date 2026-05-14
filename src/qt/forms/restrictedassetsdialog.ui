@@ -17,19 +17,19 @@
    <item>
     <layout class="QHBoxLayout" name="horizontalLayout">
      <property name="spacing">
-      <number>20</number>
+      <number>34</number>
      </property>
      <property name="leftMargin">
-      <number>20</number>
+      <number>40</number>
      </property>
      <property name="topMargin">
-      <number>20</number>
+      <number>40</number>
      </property>
      <property name="rightMargin">
-      <number>20</number>
+      <number>40</number>
      </property>
      <property name="bottomMargin">
-      <number>20</number>
+      <number>40</number>
      </property>
      <item>
       <widget class="QFrame" name="frameAssetBalance">

@@ -1,6 +1,0 @@
-usr/local/bin/meowcoin-qt usr/bin
-share/pixmaps/meow32.xpm usr/share/pixmaps
-share/pixmaps/meow16.xpm usr/share/pixmaps
-share/pixmaps/meow128.png usr/share/pixmaps
-debian/meowcoin-qt.desktop usr/share/applications
-debian/meowcoin-qt.protocol usr/share/kde4/services/

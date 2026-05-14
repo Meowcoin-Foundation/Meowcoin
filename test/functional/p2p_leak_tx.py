@@ -1,58 +1,107 @@
 #!/usr/bin/env python3
-# Copyright (c) 2017-2018 The Bitcoin Core developers
-# Copyright (c) 2017-2020 The Meowcoin Core developers
+# Copyright (c) 2017-2021 The Meowcoin Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
+"""Test transaction upload"""
 
-"""Test that we don't leak txs to inbound peers that we haven't yet announced to"""
+from test_framework.messages import msg_getdata, CInv, MSG_TX, MSG_WTX
+from test_framework.p2p import p2p_lock, P2PDataStore, P2PTxInvStore
+from test_framework.test_framework import BitcoinTestFramework
+from test_framework.util import (
+    assert_equal,
+)
+from test_framework.wallet import MiniWallet
 
-from test_framework.mininode import MsgGetdata, CInv, NetworkThread, NodeConn, NodeConnCB
-from test_framework.test_framework import MeowcoinTestFramework
-from test_framework.util import assert_equal, p2p_port
 
-class TestNode(NodeConnCB):
-    def on_inv(self, conn, message):
+class P2PNode(P2PDataStore):
+    def on_inv(self, msg):
         pass
 
 
-class P2PLeakTxTest(MeowcoinTestFramework):
+class P2PLeakTxTest(BitcoinTestFramework):
     def set_test_params(self):
         self.num_nodes = 1
 
-
     def run_test(self):
-        gen_node = self.nodes[0]  # The block and tx generating node
-        gen_node.generate(1)
+        self.gen_node = self.nodes[0]  # The block and tx generating node
+        self.miniwallet = MiniWallet(self.gen_node)
 
-        # Setup the attacking p2p connection and start up the network thread.
-        self.inbound_peer = TestNode()
-        connections = [NodeConn('127.0.0.1', p2p_port(0), self.nodes[0], self.inbound_peer)]
-        self.inbound_peer.add_connection(connections[0])
-        NetworkThread().start() # Start up network handling in another thread
+        self.test_tx_in_block()
+        self.test_notfound_on_replaced_tx()
+        self.test_notfound_on_unannounced_tx()
 
+    def test_tx_in_block(self):
+        self.log.info("Check that a transaction in the last block is uploaded (beneficial for compact block relay)")
+        inbound_peer = self.gen_node.add_p2p_connection(P2PNode())
 
-        max_repeats = 48
-        self.log.info("Running test up to {} times.".format(max_repeats))
-        for i in range(max_repeats):
+        self.log.debug("Generate transaction and block")
+        inbound_peer.last_message.pop("inv", None)
+        wtxid = self.miniwallet.send_self_transfer(from_node=self.gen_node)["wtxid"]
+        inbound_peer.wait_until(lambda: "inv" in inbound_peer.last_message and inbound_peer.last_message.get("inv").inv[0].hash == int(wtxid, 16))
+        want_tx = msg_getdata(inv=inbound_peer.last_message.get("inv").inv)
+        self.generate(self.gen_node, 1)
+
+        self.log.debug("Request transaction")
+        inbound_peer.last_message.pop("tx", None)
+        inbound_peer.send_and_ping(want_tx)
+        assert_equal(inbound_peer.last_message.get("tx").tx.wtxid_hex, wtxid)
+
+    def test_notfound_on_replaced_tx(self):
+        self.gen_node.disconnect_p2ps()
+        inbound_peer = self.gen_node.add_p2p_connection(P2PTxInvStore())
+
+        self.log.info("Transaction tx_a is broadcast")
+        tx_a = self.miniwallet.send_self_transfer(from_node=self.gen_node)
+        inbound_peer.wait_for_broadcast(txns=[tx_a["wtxid"]])
+
+        tx_b = tx_a["tx"]
+        tx_b.vout[0].nValue -= 9000
+        self.gen_node.sendrawtransaction(tx_b.serialize().hex())
+        inbound_peer.wait_until(lambda: "tx" in inbound_peer.last_message and inbound_peer.last_message.get("tx").tx.wtxid_hex == tx_b.wtxid_hex)
+
+        self.log.info("Re-request of tx_a after replacement is answered with notfound")
+        req_vec = [
+            CInv(t=MSG_TX, h=int(tx_a["txid"], 16)),
+            CInv(t=MSG_WTX, h=int(tx_a["wtxid"], 16)),
+        ]
+        want_tx = msg_getdata()
+        want_tx.inv = req_vec
+        with p2p_lock:
+            inbound_peer.last_message.pop("notfound", None)
+            inbound_peer.last_message.pop("tx", None)
+        inbound_peer.send_and_ping(want_tx)
+
+        assert_equal(inbound_peer.last_message.get("notfound").vec, req_vec)
+        assert "tx" not in inbound_peer.last_message
+
+    def test_notfound_on_unannounced_tx(self):
+        self.log.info("Check that we don't leak txs to inbound peers that we haven't yet announced to")
+        self.gen_node.disconnect_p2ps()
+        inbound_peer = self.gen_node.add_p2p_connection(P2PNode())  # An "attacking" inbound peer
+
+        MAX_REPEATS = 100
+        self.log.info("Running test up to {} times.".format(MAX_REPEATS))
+        for i in range(MAX_REPEATS):
             self.log.info('Run repeat {}'.format(i + 1))
-            txid = gen_node.sendtoaddress(gen_node.getnewaddress(), 0.01)
+            txid = self.miniwallet.send_self_transfer(from_node=self.gen_node)["wtxid"]
 
-            want_tx = MsgGetdata()
-            want_tx.inv.append(CInv(t=1, h=int(txid, 16)))
-            self.inbound_peer.last_message.pop('notfound', None)
-            connections[0].send_message(want_tx)
-            self.inbound_peer.sync_with_ping()
+            want_tx = msg_getdata()
+            want_tx.inv.append(CInv(t=MSG_TX, h=int(txid, 16)))
+            with p2p_lock:
+                inbound_peer.last_message.pop('notfound', None)
+            inbound_peer.send_and_ping(want_tx)
 
-            if self.inbound_peer.last_message.get('notfound'):
+            if inbound_peer.last_message.get('notfound'):
                 self.log.debug('tx {} was not yet announced to us.'.format(txid))
                 self.log.debug("node has responded with a notfound message. End test.")
-                assert_equal(self.inbound_peer.last_message['notfound'].vec[0].hash, int(txid, 16))
-                self.inbound_peer.last_message.pop('notfound')
+                assert_equal(inbound_peer.last_message['notfound'].vec[0].hash, int(txid, 16))
+                with p2p_lock:
+                    inbound_peer.last_message.pop('notfound')
                 break
             else:
                 self.log.debug('tx {} was already announced to us. Try test again.'.format(txid))
-                assert int(txid, 16) in [inv.hash for inv in self.inbound_peer.last_message['inv'].inv]
+                assert int(txid, 16) in [inv.hash for inv in inbound_peer.last_message['inv'].inv]
 
 
 if __name__ == '__main__':
-    P2PLeakTxTest().main()
+    P2PLeakTxTest(__file__).main()

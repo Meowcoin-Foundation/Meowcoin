@@ -1,52 +1,62 @@
 #!/bin/sh
-# Copyright (c) 2014-2015 The Bitcoin Core developers
-# Copyright (c) 2017-2019 The Meowcoin Core developers
+# Copyright (c) 2014-2022 The Meowcoin Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+export LC_ALL=C
 set -e
 
-ROOTDIR=dist
-BUNDLE="${ROOTDIR}/Meowcoin-Qt.app"
-CODESIGN=codesign
+SIGNAPPLE=signapple
 TEMPDIR=sign.temp
-TEMPLIST=${TEMPDIR}/signatures.txt
-OUT=signature-osx.tar.gz
-OUTROOT=osx
 
-if [ ! -n "$1" ]; then
-  echo "usage: $0 <codesign args>"
-  echo "example: $0 -s MyIdentity"
+BUNDLE_ROOT=dist
+BUNDLE_NAME="Meowcoin-Qt.app"
+UNSIGNED_BUNDLE="${BUNDLE_ROOT}/${BUNDLE_NAME}"
+UNSIGNED_BINARY="${UNSIGNED_BUNDLE}/Contents/MacOS/Meowcoin-Qt"
+
+ARCH=$(${SIGNAPPLE} info ${UNSIGNED_BINARY} | head -n 1 | cut -d " " -f 1)
+
+OUTDIR="osx/${ARCH}-apple-darwin"
+OUTROOT="${TEMPDIR}/${OUTDIR}"
+
+OUT="signature-osx-${ARCH}.tar.gz"
+
+if [ "$#" -ne 3 ]; then
+  echo "usage: $0 <path to key> <path to app store connect key> <apple developer team uuid>"
   exit 1
 fi
 
-rm -rf ${TEMPDIR} ${TEMPLIST}
+rm -rf ${TEMPDIR}
 mkdir -p ${TEMPDIR}
 
-${CODESIGN} -f --file-list ${TEMPLIST} "$@" "${BUNDLE}"
+stty -echo
+printf "Enter the passphrase for %s: " "$1"
+read cs_key_pass
+printf "\n"
+printf "Enter the passphrase for %s: " "$2"
+read api_key_pass
+printf "\n"
+stty echo
 
-grep -v CodeResources < "${TEMPLIST}" | while read i; do
-  TARGETFILE="${BUNDLE}/`echo "${i}" | sed "s|.*${BUNDLE}/||"`"
-  SIZE=`pagestuff "$i" -p | tail -2 | grep size | sed 's/[^0-9]*//g'`
-  OFFSET=`pagestuff "$i" -p | tail -2 | grep offset | sed 's/[^0-9]*//g'`
-  SIGNFILE="${TEMPDIR}/${OUTROOT}/${TARGETFILE}.sign"
-  DIRNAME="`dirname "${SIGNFILE}"`"
-  mkdir -p "${DIRNAME}"
-  echo "Adding detached signature for: ${TARGETFILE}. Size: ${SIZE}. Offset: ${OFFSET}"
-  dd if="$i" of="${SIGNFILE}" bs=1 skip=${OFFSET} count=${SIZE} 2>/dev/null
+# Sign and notarize app bundle
+${SIGNAPPLE} sign -f --hardened-runtime --detach "${OUTROOT}/${BUNDLE_ROOT}" --passphrase "${cs_key_pass}" "$1" "${UNSIGNED_BUNDLE}"
+${SIGNAPPLE} apply "${UNSIGNED_BUNDLE}" "${OUTROOT}/${BUNDLE_ROOT}/${BUNDLE_NAME}"
+${SIGNAPPLE} notarize --detach "${OUTROOT}/${BUNDLE_ROOT}" --passphrase "${api_key_pass}" "$2" "$3" "${UNSIGNED_BUNDLE}"
+
+# Sign each binary
+find . -maxdepth 3 \( -wholename "*/bin/*" -o -wholename "*/libexec/*" \) -type f -exec realpath --relative-to=. {} \; | while read -r bin
+do
+    bin_dir=$(dirname "${bin}")
+    bin_name=$(basename "${bin}")
+    ${SIGNAPPLE} sign -f --hardened-runtime --detach "${OUTROOT}/${bin_dir}" --passphrase "${cs_key_pass}" "$1" "${bin}"
+    ${SIGNAPPLE} apply "${bin}" "${OUTROOT}/${bin_dir}/${bin_name}.${ARCH}sign"
 done
 
-grep CodeResources < "${TEMPLIST}" | while read i; do
-  TARGETFILE="${BUNDLE}/`echo "${i}" | sed "s|.*${BUNDLE}/||"`"
-  RESOURCE="${TEMPDIR}/${OUTROOT}/${TARGETFILE}"
-  DIRNAME="`dirname "${RESOURCE}"`"
-  mkdir -p "${DIRNAME}"
-  echo "Adding resource for: "${TARGETFILE}""
-  cp "${i}" "${RESOURCE}"
-done
+# Notarize the binaries
+# Binaries cannot have stapled notarizations so this does not actually generate any output
+binaries_dir=$(dirname "$(find . -maxdepth 2 -wholename '*/bin' -type d -exec realpath --relative-to=. {} \;)")
+${SIGNAPPLE} notarize --passphrase "${api_key_pass}" "$2" "$3" "${binaries_dir}"
 
-rm ${TEMPLIST}
-
-tar -C "${TEMPDIR}" -czf "${OUT}" .
+tar -C "${TEMPDIR}" -czf "${OUT}" "${OUTDIR}"
 rm -rf "${TEMPDIR}"
 echo "Created ${OUT}"

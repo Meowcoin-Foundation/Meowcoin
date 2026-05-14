@@ -1,10 +1,9 @@
-// Copyright (c) 2011-2015 The Bitcoin Core developers
-// Copyright (c) 2017-2019 The Meowcoin Core developers
+// Copyright (c) 2011-2022 The Meowcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef MEOWCOIN_QT_QVALIDATEDLINEEDIT_H
-#define MEOWCOIN_QT_QVALIDATEDLINEEDIT_H
+#ifndef BITCOIN_QT_QVALIDATEDLINEEDIT_H
+#define BITCOIN_QT_QVALIDATEDLINEEDIT_H
 
 #include <QLineEdit>
 
@@ -22,23 +21,24 @@ public:
     bool isValid();
 
 protected:
-    void focusInEvent(QFocusEvent *evt);
-    void focusOutEvent(QFocusEvent *evt);
+    void focusInEvent(QFocusEvent *evt) override;
+    void focusOutEvent(QFocusEvent *evt) override;
 
 private:
-    bool valid;
-    const QValidator *checkValidator;
+    bool valid{true};
+    const QValidator* checkValidator{nullptr};
 
 public Q_SLOTS:
+    void setText(const QString&);
     void setValid(bool valid);
     void setEnabled(bool enabled);
 
 Q_SIGNALS:
     void validationDidChange(QValidatedLineEdit *validatedLineEdit);
-    
+
 private Q_SLOTS:
     void markValid();
     void checkValidity();
 };
 
-#endif // MEOWCOIN_QT_QVALIDATEDLINEEDIT_H
+#endif // BITCOIN_QT_QVALIDATEDLINEEDIT_H

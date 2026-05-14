@@ -1,13 +1,12 @@
-// Copyright (c) 2014-2016 The Bitcoin Core developers
-// Copyright (c) 2017-2019 The Meowcoin Core developers
+// Copyright (c) 2014-present The Meowcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#ifndef MEOWCOIN_CRYPTO_SHA1_H
-#define MEOWCOIN_CRYPTO_SHA1_H
+#ifndef BITCOIN_CRYPTO_SHA1_H
+#define BITCOIN_CRYPTO_SHA1_H
 
-#include <stdint.h>
-#include <stdlib.h>
+#include <cstdint>
+#include <cstdlib>
 
 /** A hasher class for SHA1. */
 class CSHA1
@@ -15,7 +14,7 @@ class CSHA1
 private:
     uint32_t s[5];
     unsigned char buf[64];
-    uint64_t bytes;
+    uint64_t bytes{0};
 
 public:
     static const size_t OUTPUT_SIZE = 20;
@@ -26,4 +25,4 @@ public:
     CSHA1& Reset();
 };
 
-#endif // MEOWCOIN_CRYPTO_SHA1_H
+#endif // BITCOIN_CRYPTO_SHA1_H

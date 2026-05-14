@@ -1,86 +1,104 @@
 #!/usr/bin/env python3
-# Copyright (c) 2016 The Bitcoin Core developers
-# Copyright (c) 2017-2020 The Meowcoin Core developers
+# Copyright (c) 2016-2021 The Meowcoin Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
+"""Test processing of feefilter messages."""
 
-"""
-Test processing of feefilter messages.
+from decimal import Decimal
 
-(Wallet now has DEFAULT_TRANSACTION_MINFEE = 0.01000000
-"""
+from test_framework.messages import MSG_TX, MSG_WTX, msg_feefilter
+from test_framework.p2p import P2PInterface, p2p_lock
+from test_framework.test_framework import BitcoinTestFramework
+from test_framework.util import assert_equal
+from test_framework.wallet import MiniWallet
 
-import time
-from test_framework.mininode import mininode_lock, NodeConnCB, NodeConn, NetworkThread, MsgFeeFilter
-from test_framework.test_framework import MeowcoinTestFramework
-from test_framework.util import sync_blocks, p2p_port, Decimal, sync_mempools
 
-def hash_to_hex(hash_data):
-    return format(hash_data, '064x')
+class FeefilterConn(P2PInterface):
+    feefilter_received = False
 
-# Wait up to 60 secs to see if the testnode has received all the expected invs
-def all_invs_match(invs_expected, testnode):
-    for _ in range(60):
-        with mininode_lock:
-            if sorted(invs_expected) == sorted(testnode.txinvs):
-                return True
-        time.sleep(1)
-    return False
+    def on_feefilter(self, message):
+        self.feefilter_received = True
 
-class TestNode(NodeConnCB):
+    def assert_feefilter_received(self, recv: bool):
+        with p2p_lock:
+            assert_equal(self.feefilter_received, recv)
+
+
+class TestP2PConn(P2PInterface):
     def __init__(self):
         super().__init__()
         self.txinvs = []
 
-    def on_inv(self, conn, message):
+    def on_inv(self, message):
         for i in message.inv:
-            if i.type == 1:
-                self.txinvs.append(hash_to_hex(i.hash))
+            if (i.type == MSG_TX) or (i.type == MSG_WTX):
+                self.txinvs.append('{:064x}'.format(i.hash))
+
+    def wait_for_invs_to_match(self, invs_expected):
+        invs_expected.sort()
+        self.wait_until(lambda: invs_expected == sorted(self.txinvs))
 
     def clear_invs(self):
-        with mininode_lock:
+        with p2p_lock:
             self.txinvs = []
 
-class FeeFilterTest(MeowcoinTestFramework):
+
+class FeeFilterTest(BitcoinTestFramework):
     def set_test_params(self):
         self.num_nodes = 2
+        # whitelist peers to speed up tx relay / mempool sync
+        self.noban_tx_relay = True
+        # We lower the various required feerates for this test
+        # to catch a corner-case where feefilter used to slightly undercut
+        # mempool and wallet feerate calculation based on GetFee
+        # rounding down 3 places, leading to stranded transactions.
+        # See issue #16499
+        self.extra_args = [[
+            "-minrelaytxfee=0.00000100",
+            "-mintxfee=0.00000100"
+        ]] * self.num_nodes
 
     def run_test(self):
+        self.test_feefilter_forcerelay()
+        self.test_feefilter()
+        self.test_feefilter_blocksonly()
+
+    def test_feefilter_forcerelay(self):
+        self.log.info('Check that peers without forcerelay permission (default) get a feefilter message')
+        self.nodes[0].add_p2p_connection(FeefilterConn()).assert_feefilter_received(True)
+
+        self.log.info('Check that peers with forcerelay permission do not get a feefilter message')
+        self.restart_node(0, extra_args=['-whitelist=forcerelay@127.0.0.1'])
+        self.nodes[0].add_p2p_connection(FeefilterConn()).assert_feefilter_received(False)
+
+        # Restart to disconnect peers and load default extra_args
+        self.restart_node(0)
+        self.connect_nodes(1, 0)
+
+    def test_feefilter(self):
         node1 = self.nodes[1]
         node0 = self.nodes[0]
-        # Get out of IBD
-        node1.generate(1)
-        sync_blocks(self.nodes)
+        miniwallet = MiniWallet(node1)
 
-        # Setup the p2p connections and start up the network thread.
-        test_node = TestNode()
-        connection = NodeConn('127.0.0.1', p2p_port(0), self.nodes[0], test_node)
-        test_node.add_connection(connection)
-        NetworkThread().start()
-        test_node.wait_for_verack()
+        conn = self.nodes[0].add_p2p_connection(TestP2PConn())
 
-        # Test that invs are received for all txs at feerate of 2,000,000 corbies
-        node1.settxfee(Decimal("0.02000000"))
-        txids = [node1.sendtoaddress(node1.getnewaddress(), 1) for _ in range(3)]
-        assert(all_invs_match(txids, test_node))
-        test_node.clear_invs()
+        self.log.info("Test txs paying 0.2 mewc/byte are received by test connection")
+        txids = [miniwallet.send_self_transfer(fee_rate=Decimal('0.00000200'), from_node=node1)['wtxid'] for _ in range(3)]
+        conn.wait_for_invs_to_match(txids)
+        conn.clear_invs()
 
-        # Set a filter of 1,500,000 corbies (must be above 1,000,000 corbies (min fee is enforced)
-        test_node.send_and_ping(MsgFeeFilter(1500000))
+        # Set a fee filter of 0.15 mewc/byte on test connection
+        conn.send_and_ping(msg_feefilter(150))
 
-        # Test that txs are still being received (paying 70 sat/byte)
-        txids = [node1.sendtoaddress(node1.getnewaddress(), 1) for _ in range(3)]
-        assert(all_invs_match(txids, test_node))
-        test_node.clear_invs()
+        self.log.info("Test txs paying 0.15 mewc/byte are received by test connection")
+        txids = [miniwallet.send_self_transfer(fee_rate=Decimal('0.00000150'), from_node=node1)['wtxid'] for _ in range(3)]
+        conn.wait_for_invs_to_match(txids)
+        conn.clear_invs()
 
-        # Change tx fee rate to 1,350,000 corbies and test they are no longer received
-        node1.settxfee(Decimal("0.013500000"))
-        [node1.sendtoaddress(node1.getnewaddress(), 1) for _ in range(3)]
-        sync_mempools(self.nodes) # must be sure node 0 has received all txs 
+        self.log.info("Test txs paying 0.1 mewc/byte are no longer received by test connection")
+        txids = [miniwallet.send_self_transfer(fee_rate=Decimal('0.00000100'), from_node=node1)['wtxid'] for _ in range(3)]
+        self.sync_mempools()  # must be sure node 0 has received all txs
 
-        # Raise the tx fee back up above the mintxfee, submit 1 tx on node 0,
-        # then sync nodes 0 and 1 - we should only have 1 tx (this one below since
-        # the one above was below the min txfee).
         # Send one transaction from node0 that should be received, so that we
         # we can sync the test on receipt (if node1's txs were relayed, they'd
         # be received by the time this node0 tx is received). This is
@@ -88,16 +106,30 @@ class FeeFilterTest(MeowcoinTestFramework):
         # to 35 entries in an inv, which means that when this next transaction
         # is eligible for relay, the prior transactions from node1 are eligible
         # as well.
-        node0.settxfee(Decimal("0.01600000"))
-        txids = [node0.sendtoaddress(node0.getnewaddress(), 1)] #
-        assert(all_invs_match(txids, test_node))
-        test_node.clear_invs()
+        txids = [miniwallet.send_self_transfer(fee_rate=Decimal('0.00020000'), from_node=node0)['wtxid'] for _ in range(1)]
+        conn.wait_for_invs_to_match(txids)
+        conn.clear_invs()
+        self.sync_mempools()  # must be sure node 1 has received all txs
 
-        # Remove fee filter and check that txs are received again
-        test_node.send_and_ping(MsgFeeFilter(0))
-        txids = [node1.sendtoaddress(node1.getnewaddress(), 1) for _ in range(3)]
-        assert(all_invs_match(txids, test_node))
-        test_node.clear_invs()
+        self.log.info("Remove fee filter and check txs are received again")
+        conn.send_and_ping(msg_feefilter(0))
+        txids = [miniwallet.send_self_transfer(fee_rate=Decimal('0.00020000'), from_node=node1)['wtxid'] for _ in range(3)]
+        conn.wait_for_invs_to_match(txids)
+        conn.clear_invs()
+
+    def test_feefilter_blocksonly(self):
+        """Test that we don't send fee filters to block-relay-only peers and when we're in blocksonly mode."""
+        self.log.info("Check that we don't send fee filters to block-relay-only peers.")
+        feefilter_peer = self.nodes[0].add_outbound_p2p_connection(FeefilterConn(), p2p_idx=0, connection_type="block-relay-only")
+        feefilter_peer.sync_with_ping()
+        feefilter_peer.assert_feefilter_received(False)
+
+        self.log.info("Check that we don't send fee filters when in blocksonly mode.")
+        self.restart_node(0, ["-blocksonly"])
+        feefilter_peer = self.nodes[0].add_p2p_connection(FeefilterConn())
+        feefilter_peer.sync_with_ping()
+        feefilter_peer.assert_feefilter_received(False)
+
 
 if __name__ == '__main__':
-    FeeFilterTest().main()
+    FeeFilterTest(__file__).main()

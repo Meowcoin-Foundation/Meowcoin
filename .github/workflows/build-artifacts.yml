@@ -1,0 +1,206 @@
+name: Build Artifacts
+
+on:
+  push:
+    branches:
+      - main
+      - Meow_v30.2.0
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.event_name != 'pull_request' && github.run_id || github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  # ─────────────────────────────────────────────
+  # Linux x64 — GCC, system packages (Release)
+  # ─────────────────────────────────────────────
+  build-linux:
+    name: 'Linux x64 (GCC)'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake ninja-build pkgconf ccache \
+            libevent-dev libboost-dev libsqlite3-dev \
+            qt6-base-dev qt6-tools-dev qt6-l10n-tools libqrencode-dev
+
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/.ccache
+          key: linux-ccache-${{ github.sha }}
+          restore-keys: linux-ccache-
+
+      - name: Configure CMake
+        run: |
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DBUILD_GUI=ON \
+            -DBUILD_TESTS=OFF \
+            -DBUILD_BENCH=OFF \
+            -DBUILD_FUZZ_BINARY=OFF \
+            -DWITH_ZMQ=OFF \
+            -DENABLE_IPC=OFF \
+            -DENABLE_WALLET=ON
+
+      - name: Build
+        run: cmake --build build -j $(nproc)
+
+      - name: Collect binaries
+        run: |
+          mkdir -p artifact-linux
+          for bin in meowcoind meowcoin-cli meowcoin-tx meowcoin-util meowcoin-wallet meowcoin-qt meowcoin; do
+            cp "build/bin/${bin}" artifact-linux/ 2>/dev/null || true
+          done
+          strip artifact-linux/* 2>/dev/null || true
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: meowcoin-linux-x64
+          path: artifact-linux/
+          retention-days: 30
+
+  # ─────────────────────────────────────────────
+  # Windows x64 — MSVC + vcpkg (Release, DLL)
+  # ─────────────────────────────────────────────
+  build-windows:
+    name: 'Windows x64 (MSVC)'
+    runs-on: windows-2022
+    timeout-minutes: 120
+
+    env:
+      PYTHONUTF8: 1
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Configure Developer Command Prompt for MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Patch vcpkg triplet for release-only builds
+        run: |
+          echo "set(VCPKG_BUILD_TYPE release)" >> "${VCPKG_INSTALLATION_ROOT}/triplets/x64-windows.cmake"
+          # Workaround for libevent CMake compatibility
+          sed -i '1s/^/set(ENV{CMAKE_POLICY_VERSION_MINIMUM} 3.5)\n/' "${VCPKG_INSTALLATION_ROOT}/scripts/ports.cmake"
+
+      - name: Cache vcpkg tools
+        uses: actions/cache@v4
+        with:
+          path: C:/vcpkg/downloads/tools
+          key: win-vcpkg-tools
+
+      - name: Cache vcpkg binaries
+        uses: actions/cache@v4
+        with:
+          path: ~/AppData/Local/vcpkg/archives
+          key: win-vcpkg-binary-${{ hashFiles('vcpkg.json') }}
+          restore-keys: win-vcpkg-binary-
+
+      - name: Configure CMake
+        run: |
+          cmake -B build --preset vs2022 \
+            -DCMAKE_TOOLCHAIN_FILE="${VCPKG_INSTALLATION_ROOT}/scripts/buildsystems/vcpkg.cmake" \
+            -DBUILD_GUI=ON \
+            -DBUILD_TESTS=OFF \
+            -DBUILD_BENCH=OFF \
+            -DBUILD_FUZZ_BINARY=OFF \
+            -DWITH_ZMQ=OFF \
+            -DVCPKG_MANIFEST_NO_DEFAULT_FEATURES=ON \
+            '-DVCPKG_MANIFEST_FEATURES=wallet;qt'
+
+      - name: Build
+        working-directory: build
+        run: cmake --build . -j $NUMBER_OF_PROCESSORS --config Release
+
+      - name: Collect binaries
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path artifact-win
+          Copy-Item build/bin/Release/*.exe artifact-win/
+          # Also grab any required DLLs from vcpkg
+          $dllDir = "build/vcpkg_installed/x64-windows/bin"
+          if (Test-Path $dllDir) {
+            Copy-Item "$dllDir/*.dll" artifact-win/ -ErrorAction SilentlyContinue
+          }
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: meowcoin-windows-x64
+          path: artifact-win/
+          retention-days: 30
+
+  # ─────────────────────────────────────────────
+  # macOS ARM64 — Clang, Homebrew (Release)
+  # ─────────────────────────────────────────────
+  build-macos:
+    name: 'macOS ARM64 (Clang)'
+    runs-on: macos-14
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install Homebrew packages
+        env:
+          HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: 1
+        run: |
+          brew install --quiet coreutils ninja pkgconf ccache boost libevent qt@6 qrencode
+
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/ccache
+          key: macos-ccache-${{ github.sha }}
+          restore-keys: macos-ccache-
+
+      - name: Configure CMake
+        run: |
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DBUILD_GUI=ON \
+            -DBUILD_TESTS=OFF \
+            -DBUILD_BENCH=OFF \
+            -DBUILD_FUZZ_BINARY=OFF \
+            -DWITH_ZMQ=OFF \
+            -DENABLE_IPC=OFF \
+            -DENABLE_WALLET=ON
+
+      - name: Build
+        run: cmake --build build -j $(sysctl -n hw.logicalcpu)
+
+      - name: Collect binaries
+        run: |
+          mkdir -p artifact-macos
+          for bin in meowcoind meowcoin-cli meowcoin-tx meowcoin-util meowcoin-wallet meowcoin-qt meowcoin; do
+            cp "build/bin/${bin}" artifact-macos/ 2>/dev/null || true
+          done
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: meowcoin-macos-arm64
+          path: artifact-macos/
+          retention-days: 30

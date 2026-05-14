@@ -1,179 +1,245 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-// Copyright (c) 2009-2016 The Bitcoin Core developers
-// Copyright (c) 2017-2021 The Meowcoin Core developers
+// Copyright (c) 2009-2022 The Meowcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#if defined(HAVE_CONFIG_H)
-#include "config/meowcoin-config.h"
+#include <meowcoin-build-config.h> // IWYU pragma: keep
+
+#include <chainparams.h>
+#include <clientversion.h>
+#include <common/args.h>
+#include <common/init.h>
+#include <common/system.h>
+#include <compat/compat.h>
+#include <init.h>
+#include <interfaces/chain.h>
+#include <interfaces/init.h>
+#include <kernel/context.h>
+#include <node/context.h>
+#include <node/interface_ui.h>
+#include <node/warnings.h>
+#include <noui.h>
+#include <util/check.h>
+#include <util/exception.h>
+#include <util/signalinterrupt.h>
+#include <util/strencodings.h>
+#include <util/syserror.h>
+#include <util/threadnames.h>
+#include <util/tokenpipe.h>
+#include <util/translation.h>
+
+#include <any>
+#include <functional>
+#include <optional>
+
+using node::NodeContext;
+
+const TranslateFn G_TRANSLATION_FUN{nullptr};
+
+#if HAVE_DECL_FORK
+
+/** Custom implementation of daemon(). This implements the same order of operations as glibc.
+ * Opens a pipe to the child process to be able to wait for an event to occur.
+ *
+ * @returns 0 if successful, and in child process.
+ *          >0 if successful, and in parent process.
+ *          -1 in case of error (in parent process).
+ *
+ *          In case of success, endpoint will be one end of a pipe from the child to parent process,
+ *          which can be used with TokenWrite (in the child) or TokenRead (in the parent).
+ */
+int fork_daemon(bool nochdir, bool noclose, TokenPipeEnd& endpoint)
+{
+    // communication pipe with child process
+    std::optional<TokenPipe> umbilical = TokenPipe::Make();
+    if (!umbilical) {
+        return -1; // pipe or pipe2 failed.
+    }
+
+    int pid = fork();
+    if (pid < 0) {
+        return -1; // fork failed.
+    }
+    if (pid != 0) {
+        // Parent process gets read end, closes write end.
+        endpoint = umbilical->TakeReadEnd();
+        umbilical->TakeWriteEnd().Close();
+
+        int status = endpoint.TokenRead();
+        if (status != 0) { // Something went wrong while setting up child process.
+            endpoint.Close();
+            return -1;
+        }
+
+        return pid;
+    }
+    // Child process gets write end, closes read end.
+    endpoint = umbilical->TakeWriteEnd();
+    umbilical->TakeReadEnd().Close();
+
+#if HAVE_DECL_SETSID
+    if (setsid() < 0) {
+        exit(1); // setsid failed.
+    }
 #endif
 
-#include "chainparams.h"
-#include "clientversion.h"
-#include "compat.h"
-#include "fs.h"
-#include "rpc/server.h"
-#include "init.h"
-#include "noui.h"
-#include "scheduler.h"
-#include "util.h"
-#include "httpserver.h"
-#include "httprpc.h"
-#include "utilstrencodings.h"
-
-#include <boost/thread.hpp>
-
-#include <stdio.h>
-
-/* Introduction text for doxygen: */
-
-/*! \mainpage Developer documentation
- *
- * \section intro_sec Introduction
- *
- * This is the developer documentation of the reference client for an experimental new digital currency called Meowcoin (https://mewccrypto.com/),
- * which enables instant payments to anyone, anywhere in the world. Meowcoin uses peer-to-peer technology to operate
- * with no central authority: managing transactions and issuing money are carried out collectively by the network.
- *
- * The software is a community-driven open source project, released under the MIT license.
- *
- * \section Navigation
- * Use the buttons <code>Namespaces</code>, <code>Classes</code> or <code>Files</code> at the top of the page to start navigating the code.
- */
-
-void WaitForShutdown(boost::thread_group* threadGroup)
-{
-    bool fShutdown = ShutdownRequested();
-    // Tell the main threads to shutdown.
-    while (!fShutdown)
-    {
-        MilliSleep(200);
-        fShutdown = ShutdownRequested();
+    if (!nochdir) {
+        if (chdir("/") != 0) {
+            exit(1); // chdir failed.
+        }
     }
-    if (threadGroup)
-    {
-        Interrupt(*threadGroup);
-        threadGroup->join_all();
+    if (!noclose) {
+        // Open /dev/null, and clone it into STDIN, STDOUT and STDERR to detach
+        // from terminal.
+        int fd = open("/dev/null", O_RDWR);
+        if (fd >= 0) {
+            bool err = dup2(fd, STDIN_FILENO) < 0 || dup2(fd, STDOUT_FILENO) < 0 || dup2(fd, STDERR_FILENO) < 0;
+            // Don't close if fd<=2 to try to handle the case where the program was invoked without any file descriptors open.
+            if (fd > 2) close(fd);
+            if (err) {
+                exit(1); // dup2 failed.
+            }
+        } else {
+            exit(1); // open /dev/null failed.
+        }
     }
+    endpoint.TokenWrite(0); // Success
+    return 0;
 }
 
-//////////////////////////////////////////////////////////////////////////////
-//
-// Start
-//
-bool AppInit(int argc, char* argv[])
+#endif
+
+static bool ParseArgs(NodeContext& node, int argc, char* argv[])
 {
-    boost::thread_group threadGroup;
-    CScheduler scheduler;
-
-    bool fRet = false;
-
-    //
-    // Parameters
-    //
+    ArgsManager& args{*Assert(node.args)};
     // If Qt is used, parameters/meowcoin.conf are parsed in qt/meowcoin.cpp's main()
-    gArgs.ParseParameters(argc, argv);
+    SetupServerArgs(args, node.init->canListenIpc());
+    std::string error;
+    if (!args.ParseParameters(argc, argv, error)) {
+        return InitError(Untranslated(strprintf("Error parsing command line arguments: %s", error)));
+    }
 
+    if (auto error = common::InitConfig(args)) {
+        return InitError(error->message, error->details);
+    }
+
+    // Error out when loose non-argument tokens are encountered on command line
+    for (int i = 1; i < argc; i++) {
+        if (!IsSwitchChar(argv[i][0])) {
+            return InitError(Untranslated(strprintf("Command line contains unexpected token '%s', see meowcoind -h for a list of options.", argv[i])));
+        }
+    }
+    return true;
+}
+
+static bool ProcessInitCommands(interfaces::Init& init, ArgsManager& args)
+{
     // Process help and version before taking care about datadir
-    if (gArgs.IsArgSet("-?") || gArgs.IsArgSet("-h") ||  gArgs.IsArgSet("-help") || gArgs.IsArgSet("-version"))
-    {
-        std::string strUsage = strprintf(_("%s Daemon"), _(PACKAGE_NAME)) + " " + _("version") + " " + FormatFullVersion() + "\n";
+    if (HelpRequested(args) || args.GetBoolArg("-version", false)) {
+        std::string strUsage = CLIENT_NAME " daemon version " + FormatFullVersion();
+        if (const char* exe_name{init.exeName()}) {
+            strUsage += " ";
+            strUsage += exe_name;
+        }
+        strUsage += "\n";
 
-        if (gArgs.IsArgSet("-version"))
-        {
+        if (args.GetBoolArg("-version", false)) {
             strUsage += FormatParagraph(LicenseInfo());
+        } else {
+            strUsage += "\n"
+                "The " CLIENT_NAME " daemon (meowcoind) is a headless program that connects to the Meowcoin network to validate and relay transactions and blocks, as well as relaying addresses.\n\n"
+                "It provides the backbone of the Meowcoin network and its RPC, REST and ZMQ services can provide various transaction, block and address-related services.\n\n"
+                "There is an optional wallet component which provides transaction services.\n\n"
+                "It can be used in a headless environment or as part of a server setup.\n"
+                "\n"
+                "Usage: meowcoind [options]\n"
+                "\n";
+            strUsage += args.GetHelpMessage();
         }
-        else
-        {
-            strUsage += "\n" + _("Usage:") + "\n" +
-                  "  meowcoind [options]                     " + strprintf(_("Start %s Daemon"), _(PACKAGE_NAME)) + "\n";
 
-            strUsage += "\n" + HelpMessage(HMM_MEOWCOIND);
-        }
-
-        fprintf(stdout, "%s", strUsage.c_str());
+        tfm::format(std::cout, "%s", strUsage);
         return true;
     }
 
+    return false;
+}
+
+static bool AppInit(NodeContext& node)
+{
+    bool fRet = false;
+    ArgsManager& args = *Assert(node.args);
+
+#if HAVE_DECL_FORK
+    // Communication with parent after daemonizing. This is used for signalling in the following ways:
+    // - a boolean token is sent when the initialization process (all the Init* functions) have finished to indicate
+    // that the parent process can quit, and whether it was successful/unsuccessful.
+    // - an unexpected shutdown of the child process creates an unexpected end of stream at the parent
+    // end, which is interpreted as failure to start.
+    TokenPipeEnd daemon_ep;
+#endif
+    std::any context{&node};
     try
     {
-        if (!fs::is_directory(GetDataDir(false)))
-        {
-            fprintf(stderr, "Error: Specified data directory \"%s\" does not exist.\n", gArgs.GetArg("-datadir", "").c_str());
-            return false;
-        }
-        try
-        {
-            gArgs.ReadConfigFile(gArgs.GetArg("-conf", MEOWCOIN_CONF_FILENAME));
-        } catch (const std::exception& e) {
-            fprintf(stderr,"Error reading configuration file: %s\n", e.what());
-            return false;
-        }
-        // Check for -testnet or -regtest parameter (GetParams() calls are only valid after this clause)
-        try {
-            SelectParams(ChainNameFromCommandLine(), true);
-        } catch (const std::exception& e) {
-            fprintf(stderr, "Error: %s\n", e.what());
-            return false;
-        }
-
-        // Error out when loose non-argument tokens are encountered on command line
-        for (int i = 1; i < argc; i++) {
-            if (!IsSwitchChar(argv[i][0])) {
-                fprintf(stderr, "Error: Command line contains unexpected token '%s', see meowcoind -h for a list of options.\n", argv[i]);
-                exit(EXIT_FAILURE);
-            }
-        }
-
         // -server defaults to true for meowcoind but not for the GUI so do this here
-        gArgs.SoftSetBoolArg("-server", true);
+        args.SoftSetBoolArg("-server", true);
         // Set this early so that parameter interactions go to console
-        InitLogging();
-        InitParameterInteraction();
-        if (!AppInitBasicSetup())
+        InitLogging(args);
+        InitParameterInteraction(args);
+        if (!AppInitBasicSetup(args, node.exit_status)) {
+            // InitError will have been called with detailed error, which ends up on console
+            return false;
+        }
+        if (!AppInitParameterInteraction(args)) {
+            // InitError will have been called with detailed error, which ends up on console
+            return false;
+        }
+
+        node.warnings = std::make_unique<node::Warnings>();
+
+        node.kernel = std::make_unique<kernel::Context>();
+        node.ecc_context = std::make_unique<ECC_Context>();
+        if (!AppInitSanityChecks(*node.kernel))
         {
             // InitError will have been called with detailed error, which ends up on console
-            exit(EXIT_FAILURE);
+            return false;
         }
-        if (!AppInitParameterInteraction())
-        {
-            // InitError will have been called with detailed error, which ends up on console
-            exit(EXIT_FAILURE);
-        }
-        if (!AppInitSanityChecks())
-        {
-            // InitError will have been called with detailed error, which ends up on console
-            exit(EXIT_FAILURE);
-        }
-        if (gArgs.GetBoolArg("-daemon", false))
-        {
-#if HAVE_DECL_DAEMON
-#if defined(MAC_OSX)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-#endif
-            fprintf(stdout, "Meowcoin server starting\n");
+
+        if (args.GetBoolArg("-daemon", DEFAULT_DAEMON) || args.GetBoolArg("-daemonwait", DEFAULT_DAEMONWAIT)) {
+#if HAVE_DECL_FORK
+            tfm::format(std::cout, CLIENT_NAME " starting\n");
 
             // Daemonize
-            if (daemon(1, 0)) { // don't chdir (1), do close FDs (0)
-                fprintf(stderr, "Error: daemon() failed: %s\n", strerror(errno));
-                return false;
+            switch (fork_daemon(1, 0, daemon_ep)) { // don't chdir (1), do close FDs (0)
+            case 0: // Child: continue.
+                // If -daemonwait is not enabled, immediately send a success token the parent.
+                if (!args.GetBoolArg("-daemonwait", DEFAULT_DAEMONWAIT)) {
+                    daemon_ep.TokenWrite(1);
+                    daemon_ep.Close();
+                }
+                break;
+            case -1: // Error happened.
+                return InitError(Untranslated(strprintf("fork_daemon() failed: %s", SysErrorString(errno))));
+            default: { // Parent: wait and exit.
+                int token = daemon_ep.TokenRead();
+                if (token) { // Success
+                    exit(EXIT_SUCCESS);
+                } else { // fRet = false or token read error (premature exit).
+                    tfm::format(std::cerr, "Error during initialization - check debug.log for details\n");
+                    exit(EXIT_FAILURE);
+                }
             }
-#if defined(MAC_OSX)
-#pragma GCC diagnostic pop
-#endif
+            }
 #else
-            fprintf(stderr, "Error: -daemon is not supported on this operating system\n");
-            return false;
-#endif // HAVE_DECL_DAEMON
+            return InitError(Untranslated("-daemon is not supported on this operating system"));
+#endif // HAVE_DECL_FORK
         }
-        // Lock data directory after daemonization
-        if (!AppInitLockDataDirectory())
+        // Lock critical directories after daemonization
+        if (!AppInitLockDirectories())
         {
-            // If locking the data directory failed, exit immediately
-            exit(EXIT_FAILURE);
+            // If locking a directory failed, exit immediately
+            return false;
         }
-        fRet = AppInitMain(threadGroup, scheduler);
+        fRet = AppInitInterfaces(node) && AppInitMain(node);
     }
     catch (const std::exception& e) {
         PrintExceptionContinue(&e, "AppInit()");
@@ -181,24 +247,49 @@ bool AppInit(int argc, char* argv[])
         PrintExceptionContinue(nullptr, "AppInit()");
     }
 
-    if (!fRet)
-    {
-        Interrupt(threadGroup);
-        threadGroup.join_all();
-    } else {
-        WaitForShutdown(&threadGroup);
+#if HAVE_DECL_FORK
+    if (daemon_ep.IsOpen()) {
+        // Signal initialization status to parent, then close pipe.
+        daemon_ep.TokenWrite(fRet);
+        daemon_ep.Close();
     }
-    Shutdown();
-
+#endif
     return fRet;
 }
 
-int main(int argc, char* argv[])
+MAIN_FUNCTION
 {
+#ifdef WIN32
+    common::WinCmdLineArgs winArgs;
+    std::tie(argc, argv) = winArgs.get();
+#endif
+
+    NodeContext node;
+    int exit_status;
+    std::unique_ptr<interfaces::Init> init = interfaces::MakeNodeInit(node, argc, argv, exit_status);
+    if (!init) {
+        return exit_status;
+    }
+
     SetupEnvironment();
 
     // Connect meowcoind signal handlers
     noui_connect();
 
-    return (AppInit(argc, argv) ? EXIT_SUCCESS : EXIT_FAILURE);
+    util::ThreadSetInternalName("init");
+
+    // Interpret command line arguments
+    ArgsManager& args = *Assert(node.args);
+    if (!ParseArgs(node, argc, argv)) return EXIT_FAILURE;
+    // Process early info return commands such as -help or -version
+    if (ProcessInitCommands(*init, args)) return EXIT_SUCCESS;
+
+    // Start application
+    if (!AppInit(node) || !Assert(node.shutdown_signal)->wait()) {
+        node.exit_status = EXIT_FAILURE;
+    }
+    Interrupt(node);
+    Shutdown(node);
+
+    return node.exit_status;
 }

@@ -1,8 +1,8 @@
-/**********************************************************************
- * Copyright (c) 2015 Pieter Wuille                                   *
- * Distributed under the MIT software license, see the accompanying   *
- * file COPYING or http://www.opensource.org/licenses/mit-license.php.*
- **********************************************************************/
+/***********************************************************************
+ * Copyright (c) 2015 Pieter Wuille                                    *
+ * Distributed under the MIT software license, see the accompanying    *
+ * file COPYING or https://www.opensource.org/licenses/mit-license.php.*
+ ***********************************************************************/
 
 /****
  * Please do not link this file directly. It is not part of the libsecp256k1
@@ -51,7 +51,13 @@
 #ifndef SECP256K1_CONTRIB_LAX_DER_PARSING_H
 #define SECP256K1_CONTRIB_LAX_DER_PARSING_H
 
+/* #include secp256k1.h only when it hasn't been included yet.
+   This enables this file to be #included directly in other project
+   files (such as tests.c) without the need to set an explicit -I flag,
+   which would be necessary to locate secp256k1.h. */
+#ifndef SECP256K1_H
 #include <secp256k1.h>
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -61,14 +67,14 @@ extern "C" {
  *
  *  Returns: 1 when the signature could be parsed, 0 otherwise.
  *  Args: ctx:      a secp256k1 context object
- *  Out:  sig:      a pointer to a signature object
- *  In:   input:    a pointer to the signature to be parsed
+ *  Out:  sig:      pointer to a signature object
+ *  In:   input:    pointer to the signature to be parsed
  *        inputlen: the length of the array pointed to be input
  *
  *  This function will accept any valid DER encoded signature, even if the
  *  encoded numbers are out of range. In addition, it will accept signatures
  *  which violate the DER spec in various ways. Its purpose is to allow
- *  validation of the Bitcoin blockchain, which includes non-DER signatures
+ *  validation of the Meowcoin blockchain, which includes non-DER signatures
  *  from before the network rules were updated to enforce DER. Note that
  *  the set of supported violations is a strict subset of what OpenSSL will
  *  accept.

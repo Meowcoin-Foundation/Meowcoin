@@ -3,47 +3,43 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-#include "restrictedassetsdialog.h"
+#include <qt/restrictedassetsdialog.h>
 #include "ui_restrictedassetsdialog.h"
 
-#include "meowcoinunits.h"
-#include "clientmodel.h"
-#include "guiutil.h"
-#include "optionsmodel.h"
-#include "platformstyle.h"
-#include "walletmodel.h"
-#include "assettablemodel.h"
-#include "assetfilterproxy.h"
+#include <qt/bitcoinunits.h>
+#include <qt/clientmodel.h>
+#include <qt/guiutil.h>
+#include <qt/optionsmodel.h>
+#include <qt/platformstyle.h>
+#include <qt/walletmodel.h>
+#include <qt/assettablemodel.h>
+#include <qt/assetfilterproxy.h>
 
-#include "base58.h"
-#include "chainparams.h"
-#include "validation.h" // mempool and minRelayTxFee
-#include "ui_interface.h"
-#include "txmempool.h"
-#include "policy/fees.h"
-#include "wallet/fees.h"
-#include "guiconstants.h"
-#include "restrictedassignqualifier.h"
+#include <assets/assets.h>
+#include <assets/assettypes.h>
+#include <addresstype.h>
+#include <key_io.h>
+#include <validation.h>
+#include <qt/guiconstants.h>
+#include <qt/restrictedassignqualifier.h>
 #include "ui_restrictedassignqualifier.h"
-#include "restrictedfreezeaddress.h"
+#include <qt/restrictedfreezeaddress.h>
 #include "ui_restrictedfreezeaddress.h"
-#include "sendcoinsdialog.h"
-#include "myrestrictedassettablemodel.h"
+#include <qt/sendcoinsdialog.h>
+#include <qt/myrestrictedassettablemodel.h>
+#include <wallet/asset_tx.h>
+#include <wallet/wallet.h>
 
-#include <QGraphicsDropShadowEffect>
 #include <QFontMetrics>
 #include <QMessageBox>
 #include <QScrollBar>
 #include <QSettings>
 #include <QTextDocument>
 #include <QTimer>
-#include <QDebug>
-#include <QMessageBox>
+#include <QSortFilterProxyModel>
 
 #include <policy/policy.h>
 #include <core_io.h>
-#include <rpc/mining.h>
-#include <wallet/wallet.h>
 #include <wallet/coincontrol.h>
 
 RestrictedAssetsDialog::RestrictedAssetsDialog(const PlatformStyle *_platformStyle, QWidget *parent) :
@@ -53,7 +49,6 @@ RestrictedAssetsDialog::RestrictedAssetsDialog(const PlatformStyle *_platformSty
         model(0),
         platformStyle(_platformStyle)
 {
-
     ui->setupUi(this);
     setWindowTitle("Manage Restricted Assets");
     setupStyling(_platformStyle);
@@ -69,13 +64,10 @@ void RestrictedAssetsDialog::setModel(WalletModel *_model)
     this->model = _model;
 
     if(_model && _model->getOptionsModel()) {
-        setBalance(_model->getBalance(), _model->getUnconfirmedBalance(), _model->getImmatureBalance(),
-                   _model->getWatchBalance(), _model->getWatchUnconfirmedBalance(), _model->getWatchImmatureBalance());
-        connect(_model, SIGNAL(balanceChanged(CAmount, CAmount, CAmount, CAmount, CAmount, CAmount)), this,
-                SLOT(setBalance(CAmount, CAmount, CAmount, CAmount, CAmount, CAmount)));
-        connect(_model->getOptionsModel(), SIGNAL(displayUnitChanged(int)), this, SLOT(updateDisplayUnit()));
+        setBalance(_model->getCachedBalance());
+        connect(_model, &WalletModel::balanceChanged, this, &RestrictedAssetsDialog::setBalance);
+        connect(_model->getOptionsModel(), &OptionsModel::displayUnitChanged, this, &RestrictedAssetsDialog::updateDisplayUnit);
         updateDisplayUnit();
-
 
         assetFilterProxy = new AssetFilterProxy(this);
         assetFilterProxy->setSourceModel(_model->getAssetTableModel());
@@ -123,222 +115,160 @@ void RestrictedAssetsDialog::setModel(WalletModel *_model)
 
 RestrictedAssetsDialog::~RestrictedAssetsDialog()
 {
-    QSettings settings;
     delete ui;
 }
 
 void RestrictedAssetsDialog::setupStyling(const PlatformStyle *platformStyle)
 {
-    /** Update the restrictedassets frame */
-    ui->frameAssetBalance->setStyleSheet(QString(".QFrame {background-color: %1; padding-top: 10px; padding-right: 5px; border: none;}").arg(platformStyle->WidgetBackGroundColor().name()));
-    ui->frameAddressList->setStyleSheet(QString(".QFrame {background-color: %1; padding-top: 10px; padding-right: 5px; border: none;}").arg(platformStyle->WidgetBackGroundColor().name()));
-
-    ui->tabFrame->setStyleSheet(QString(".QFrame {background-color: %1; padding-top: 10px; padding-right: 5px; border: none;}").arg(platformStyle->WidgetBackGroundColor().name()));
-
-    /** Create the shadow effects on the frames */
-    ui->frameAssetBalance->setGraphicsEffect(GUIUtil::getShadowEffect());
-    ui->frameAddressList->setGraphicsEffect(GUIUtil::getShadowEffect());
-    ui->tabFrame->setGraphicsEffect(GUIUtil::getShadowEffect());
-
-    /** Add label color and font */
-    ui->labelAssetBalance->setStyleSheet(STRING_LABEL_COLOR);
-    ui->labelAssetBalance->setFont(GUIUtil::getTopLabelFont());
-
-    ui->labelAddressList->setStyleSheet(STRING_LABEL_COLOR);
-    ui->labelAddressList->setFont(GUIUtil::getTopLabelFont());
+    Q_UNUSED(platformStyle);
+    // Avoid QGraphicsDropShadowEffect on large frames (expensive blur on every repaint).
 }
-
-
 
 QWidget *RestrictedAssetsDialog::setupTabChain(QWidget *prev)
 {
-//    QWidget::setTabOrder(prev, ui->sendButton);
-//    QWidget::setTabOrder(ui->sendButton, ui->clearButton);
-//    QWidget::setTabOrder(ui->clearButton, ui->addButton);
     return prev;
 }
 
-void RestrictedAssetsDialog::setBalance(const CAmount& balance, const CAmount& unconfirmedBalance, const CAmount& immatureBalance,
-                                 const CAmount& watchBalance, const CAmount& watchUnconfirmedBalance, const CAmount& watchImmatureBalance)
+void RestrictedAssetsDialog::setBalance(const interfaces::WalletBalances& balances)
 {
-    Q_UNUSED(unconfirmedBalance);
-    Q_UNUSED(immatureBalance);
-    Q_UNUSED(watchBalance);
-    Q_UNUSED(watchUnconfirmedBalance);
-    Q_UNUSED(watchImmatureBalance);
-
-    ui->labelBalance->setFont(GUIUtil::getSubLabelFont());
-    ui->label->setFont(GUIUtil::getSubLabelFont());
-
     if(model && model->getOptionsModel())
     {
-        ui->labelBalance->setText(MeowcoinUnits::formatWithUnit(model->getOptionsModel()->getDisplayUnit(), balance));
+        ui->labelBalance->setText(BitcoinUnits::formatWithUnit(model->getOptionsModel()->getDisplayUnit(), balances.balance));
     }
 }
 
 void RestrictedAssetsDialog::updateDisplayUnit()
 {
-    setBalance(model->getBalance(), 0, 0, 0, 0, 0);
+    setBalance(model->getCachedBalance());
 }
 
 void RestrictedAssetsDialog::freezeAddressClicked()
 {
-    // Check wallet unlock status
     WalletModel::UnlockContext ctx(model->requestUnlock());
     if(!ctx.isValid())
     {
-        // Unlock wallet was cancelled
         return;
     }
 
-    // Get the widget belonging to the freeze address tab
-    FreezeAddress* widget = ui->tabWidget->findChild<FreezeAddress *>("tab_freeze_address");
+    wallet::CWallet* pwallet = model->wallet().wallet();
+    if (!pwallet) {
+        QMessageBox::critical(this, tr("Error"), tr("Wallet not available."));
+        return;
+    }
 
-    std::string asset_name = widget->getUI()->assetComboBox->currentData(AssetTableModel::RoleIndex::AssetNameRole).toString().toStdString();
-    std::string address = widget->getUI()->lineEditAddress->text().toStdString();
-    std::string change_address = widget->getUI()->checkBoxChangeAddress->isChecked() ? widget->getUI()->lineEditChangeAddress->text().toStdString(): "";
-    std::string decodedAssetData = DecodeAssetData(widget->getUI()->lineEditAssetData->text().toStdString());
+    // Get the freeze tab widget
+    FreezeAddress *freezeTab = findChild<FreezeAddress*>("tab_freeze_address");
+    if (!freezeTab) return;
+    Ui::FreezeAddress *fui = freezeTab->getUI();
 
-    // Get the single address options
-    bool fFreezeAddress = widget->getUI()->radioButtonFreezeAddress->isChecked();
-    bool fUnfreezeAddress = widget->getUI()->radioButtonUnfreezeAddress->isChecked();
+    // Get the restricted asset name from combo box
+    QString assetName = fui->assetComboBox->currentText();
+    if (assetName.isEmpty()) {
+        QMessageBox::warning(this, tr("Error"), tr("Please select a restricted asset."));
+        return;
+    }
+    std::string asset_name = assetName.toStdString();
+    if (asset_name[0] != RESTRICTED_CHAR)
+        asset_name = std::string(1, RESTRICTED_CHAR) + asset_name;
 
-    // Get the global options
-    bool fFreezeGlobal = widget->getUI()->radioButtonGlobalFreeze->isChecked();
-    bool fUnfreezeGlobal = widget->getUI()->radioButtonGlobalUnfreeze->isChecked();
+    // Determine the operation from radio buttons
+    bool isGlobal = fui->radioButtonGlobalFreeze->isChecked() || fui->radioButtonGlobalUnfreeze->isChecked();
+    bool isFreeze = fui->radioButtonFreezeAddress->isChecked() || fui->radioButtonGlobalFreeze->isChecked();
+    int8_t flag = isFreeze ? 1 : 0;
 
-    // Create parameters for transaction construction
-    CReserveKey reservekey(model->getWallet());
-    CWalletTx transaction;
-    CAmount nRequiredFee;
-    CCoinControl ctrl;
+    if (!fui->radioButtonFreezeAddress->isChecked() && !fui->radioButtonUnfreezeAddress->isChecked() &&
+        !fui->radioButtonGlobalFreeze->isChecked() && !fui->radioButtonGlobalUnfreeze->isChecked()) {
+        QMessageBox::warning(this, tr("Error"), tr("Please select a freeze/unfreeze option."));
+        return;
+    }
 
-    // If the optional change address wasn't given create a new change address for this wallet
-    if (change_address == "") {
-        CKeyID keyID;
-        std::string strFailReason;
-        if (!model->getWallet()->CreateNewChangeAddress(reservekey, keyID, strFailReason)) {
-            QMessageBox changeAddressBox;
-            changeAddressBox.setText(tr("Failed to create a change address"));
-            changeAddressBox.exec();
+    // Get optional asset data
+    std::string asset_data = fui->lineEditAssetData->text().trimmed().toStdString();
+
+    // Get change address
+    std::string change_address;
+    if (fui->checkBoxChangeAddress->isChecked() && !fui->lineEditChangeAddress->text().isEmpty()) {
+        change_address = fui->lineEditChangeAddress->text().trimmed().toStdString();
+        CTxDestination dest = DecodeDestination(change_address);
+        if (!IsValidDestination(dest)) {
+            QMessageBox::warning(this, tr("Error"), tr("Invalid change address."));
+            return;
+        }
+        if (std::get_if<PKHash>(&dest) == nullptr) {
+            QMessageBox::warning(this, tr("Error"), tr("Change address must use legacy (P2PKH) format."));
+            return;
+        }
+    }
+
+    // Build the transaction
+    LOCK(pwallet->cs_wallet);
+
+    if (change_address.empty()) {
+        auto op_dest = pwallet->GetNewDestination(OutputType::LEGACY, "");
+        if (!op_dest) {
+            QMessageBox::critical(this, tr("Error"), tr("Failed to generate change address."));
+            return;
+        }
+        change_address = EncodeDestination(*op_dest);
+    }
+
+    std::string ownerName = RestrictedNameToOwnerName(asset_name);
+    std::vector<std::pair<CAssetTransfer, std::string>> vTransfers;
+    CAssetTransfer assetTransfer(ownerName, OWNER_ASSET_AMOUNT, DecodeAssetData(asset_data), 0);
+    vTransfers.emplace_back(std::make_pair(assetTransfer, change_address));
+
+    wallet::CCoinControl ctrl;
+    ctrl.destChange = DecodeDestination(change_address);
+
+    CTransactionRef tx;
+    CAmount nFeeRequired;
+    std::pair<int, std::string> error;
+
+    if (isGlobal) {
+        // Global freeze/unfreeze
+        std::vector<CNullAssetTxData> nullGlobalRestrictionData;
+        CNullAssetTxData nullData(asset_name, flag);
+        nullGlobalRestrictionData.push_back(nullData);
+
+        if (!wallet::CreateTransferAssetTransaction(*pwallet, ctrl, vTransfers, "", error, tx, nFeeRequired, nullptr, &nullGlobalRestrictionData)) {
+            QMessageBox::critical(this, tr("Error"), QString::fromStdString(error.second));
+            return;
+        }
+    } else {
+        // Per-address freeze/unfreeze
+        std::string address = fui->lineEditAddress->text().trimmed().toStdString();
+        if (address.empty()) {
+            QMessageBox::warning(this, tr("Error"), tr("Please enter an address to freeze/unfreeze."));
+            return;
+        }
+        CTxDestination addr_dest = DecodeDestination(address);
+        if (!IsValidDestination(addr_dest)) {
+            QMessageBox::warning(this, tr("Error"), tr("Invalid address."));
+            return;
+        }
+        if (std::get_if<PKHash>(&addr_dest) == nullptr) {
+            QMessageBox::warning(this, tr("Error"), tr("Address must use legacy (P2PKH) format. SegWit and bech32 addresses are not supported."));
             return;
         }
 
-        change_address = EncodeDestination(keyID);
-    }
+        std::vector<std::pair<CNullAssetTxData, std::string>> nullAssetTxData;
+        CNullAssetTxData nullData(asset_name, flag);
+        nullAssetTxData.emplace_back(std::make_pair(nullData, address));
 
-    ctrl.destChange = DecodeDestination(change_address);
-
-    std::pair<int, std::string> error;
-    std::vector< std::pair<CAssetTransfer, std::string> >vTransfers;
-
-    // Create the pointers which is passed to the CreateTransferAssetTransaction function
-    std::vector< std::pair<CNullAssetTxData, std::string> > vecFreezeAddressTxData;
-    std::vector<CNullAssetTxData> vecFreezeGlobalTxData;
-
-    // We have to send the owner token for the asset in order to perform a restriction
-    std::string asset_owner_token = RestrictedNameToOwnerName(asset_name);
-
-    vTransfers.emplace_back(std::make_pair(CAssetTransfer(asset_owner_token, 1 * COIN, decodedAssetData), change_address));
-
-    int flag = -1;
-    if (fFreezeAddress || fUnfreezeAddress) {
-        flag = fFreezeAddress ? 1 : 0;
-        vecFreezeAddressTxData.push_back(std::make_pair(CNullAssetTxData(asset_name, flag), address));
-    } else if (fFreezeGlobal || fUnfreezeGlobal) {
-        flag = fFreezeGlobal ? 1 : 0;
-        vecFreezeGlobalTxData.push_back(CNullAssetTxData(asset_name, flag));
-    }
-
-    if (flag == -1) {
-        QMessageBox failMsgBox;
-        failMsgBox.setText(tr("Failed to generate the correct transaction. Please try again"));
-        failMsgBox.exec();
-        return;
-    }
-
-    if (IsInitialBlockDownload()) {
-        GUIUtil::SyncWarningMessage syncWarning(this);
-        bool sendTransaction = syncWarning.showTransactionSyncWarningMessage();
-        if (!sendTransaction)
+        if (!wallet::CreateTransferAssetTransaction(*pwallet, ctrl, vTransfers, "", error, tx, nFeeRequired, &nullAssetTxData)) {
+            QMessageBox::critical(this, tr("Error"), QString::fromStdString(error.second));
             return;
+        }
     }
 
-    // Create the Transaction
-    if (!CreateTransferAssetTransaction(model->getWallet(), ctrl, vTransfers, "", error, transaction, reservekey, nRequiredFee, &vecFreezeAddressTxData, &vecFreezeGlobalTxData)) {
-        QMessageBox createTransactionBox;
-        createTransactionBox.setText(QString::fromStdString(error.second));
-        createTransactionBox.exec();
-        return;
-    }
-
-    QString freezingAddress = tr("Freezing all trading of the restricted asset <b>%1</b> from address <b>%2</b><br>").arg(QString::fromStdString(asset_name), QString::fromStdString(address));
-    QString unfreezingAddress = tr("Unfreezing trading of the restricted asset <b>%1</b> from address <b>%2</b><br>").arg(QString::fromStdString(asset_name), QString::fromStdString(address));
-    QString freezingGlobal = tr("Freezing all trading of the restricted asset <b>%1</b> from all addresses<br>").arg(QString::fromStdString(asset_name));
-    QString unfreezingGlobal = tr("Opening / Unfreezing all trading of the restricted asset <b>%1</b> from all addresses<br>").arg(QString::fromStdString(asset_name));
-
-    QString questionString;
-    // Format confirmation message
-
-    if (fFreezeAddress || fUnfreezeAddress) {
-        questionString.append(flag ? freezingAddress : unfreezingAddress);
-    } else if (fFreezeGlobal || fUnfreezeGlobal) {
-        questionString.append(flag ? freezingGlobal : unfreezingGlobal);
-    }
-
-    if(nRequiredFee > 0)
-    {
-        // append fee string if a fee is required
-        questionString.append("<hr /><span style='color:#e82121;'>");
-        questionString.append(MeowcoinUnits::formatHtmlWithUnit(model->getOptionsModel()->getDisplayUnit(), nRequiredFee));
-        questionString.append("</span> ");
-        questionString.append(tr("added as transaction fee"));
-
-        // append transaction size
-        questionString.append(" (" + QString::number((double)GetVirtualTransactionSize(transaction) / 1000) + " kB)");
-    }
-
-    // add total amount in all subdivision units
-    questionString.append("<hr />");
-    CAmount totalAmount =  nRequiredFee;
-    QStringList alternativeUnits;
-    for (MeowcoinUnits::Unit u : MeowcoinUnits::availableUnits())
-    {
-        if(u != model->getOptionsModel()->getDisplayUnit())
-            alternativeUnits.append(MeowcoinUnits::formatHtmlWithUnit(u, totalAmount));
-    }
-    questionString.append(tr("Total Amount %1")
-                                  .arg(MeowcoinUnits::formatHtmlWithUnit(model->getOptionsModel()->getDisplayUnit(), totalAmount)));
-    questionString.append(QString("<span style='font-size:10pt;font-weight:normal;'><br />(=%2)</span>")
-                                  .arg(alternativeUnits.join(" " + tr("or") + "<br />")));
-
-    QString addString = tr("Confirm adding restriction");
-    QString removingString = tr("Confirm removing resetricton");
-    SendConfirmationDialog confirmationDialog(flag ? addString : removingString,
-                                              questionString, SEND_CONFIRM_DELAY, this);
-    confirmationDialog.exec();
-    QMessageBox::StandardButton retval = (QMessageBox::StandardButton)confirmationDialog.result();
-
-    if(retval != QMessageBox::Yes)
-    {
-        return;
-    }
-
-    // Send the Transaction to the network
     std::string txid;
-    if (!SendAssetTransaction(model->getWallet(), transaction, reservekey, error, txid)) {
-        QMessageBox sendTransactionBox;
-        sendTransactionBox.setText(QString::fromStdString(error.second));
-        sendTransactionBox.exec();
+    if (!wallet::SendAssetTransaction(*pwallet, tx, error, txid)) {
+        QMessageBox::critical(this, tr("Error"), QString::fromStdString(error.second));
+        return;
     }
 
-    QMessageBox txidMsgBox;
-    std::string sentMsg = _("Sent new transaction to the network");
-    std::string totalMsg = strprintf("%s: %s",sentMsg, txid);
-    txidMsgBox.setText(QString::fromStdString(totalMsg));
-    txidMsgBox.exec();
-
-    widget->clear();
+    QMessageBox::information(this, tr("Success"),
+        tr("Transaction sent successfully.\nTxID: %1").arg(QString::fromStdString(txid)));
 }
 
 void RestrictedAssetsDialog::assignQualifierClicked()
@@ -346,122 +276,108 @@ void RestrictedAssetsDialog::assignQualifierClicked()
     WalletModel::UnlockContext ctx(model->requestUnlock());
     if(!ctx.isValid())
     {
-        // Unlock wallet was cancelled
         return;
     }
 
-    AssignQualifier* widget = ui->tabWidget->findChild<AssignQualifier *>("tab_assign_qualifier");
+    wallet::CWallet* pwallet = model->wallet().wallet();
+    if (!pwallet) {
+        QMessageBox::critical(this, tr("Error"), tr("Wallet not available."));
+        return;
+    }
 
-    std::string address = widget->getUI()->lineEditAddress->text().toStdString();
-    std::string asset_name = widget->getUI()->assetComboBox->currentData(AssetTableModel::RoleIndex::AssetNameRole).toString().toStdString();
-    std::string change_address = widget->getUI()->checkBoxChangeAddress->isChecked() ? widget->getUI()->lineEditChangeAddress->text().toStdString(): "";
-    std::string decodedAssetData = DecodeAssetData(widget->getUI()->lineEditAssetData->text().toStdString());
+    // Get the qualifier tab widget
+    AssignQualifier *qualifierTab = findChild<AssignQualifier*>("tab_assign_qualifier");
+    if (!qualifierTab) return;
+    Ui::AssignQualifier *qui = qualifierTab->getUI();
 
-    int flag = widget->getUI()->assignTypeComboBox->currentIndex() ? 0 : 1;
+    // Get qualifier name from combo box
+    QString qualifierName = qui->assetComboBox->currentText();
+    if (qualifierName.isEmpty()) {
+        QMessageBox::warning(this, tr("Error"), tr("Please select a qualifier asset."));
+        return;
+    }
+    std::string tag_name = qualifierName.toStdString();
+    if (tag_name[0] != QUALIFIER_CHAR)
+        tag_name = std::string(1, QUALIFIER_CHAR) + tag_name;
 
-    CReserveKey reservekey(model->getWallet());
-    CWalletTx transaction;
-    CAmount nRequiredFee;
-    CCoinControl ctrl;
+    // Determine assign (1) or remove (0) from the type combo box
+    int assignTypeIndex = qui->assignTypeComboBox->currentIndex();
+    int8_t flag = (assignTypeIndex == 0) ? 1 : 0;
 
-    // If the optional change address wasn't given create a new change address for this wallet
-    if (change_address == "") {
-        CKeyID keyID;
-        std::string strFailReason;
-        if (!model->getWallet()->CreateNewChangeAddress(reservekey, keyID, strFailReason)) {
-            QMessageBox changeAddressBox;
-            changeAddressBox.setText(tr("Failed to create a change address"));
-            changeAddressBox.exec();
+    // Get the target address
+    std::string to_address = qui->lineEditAddress->text().trimmed().toStdString();
+    if (to_address.empty()) {
+        QMessageBox::warning(this, tr("Error"), tr("Please enter an address."));
+        return;
+    }
+    CTxDestination to_dest = DecodeDestination(to_address);
+    if (!IsValidDestination(to_dest)) {
+        QMessageBox::warning(this, tr("Error"), tr("Invalid address."));
+        return;
+    }
+    if (std::get_if<PKHash>(&to_dest) == nullptr) {
+        QMessageBox::warning(this, tr("Error"), tr("Address must use legacy (P2PKH) format. SegWit and bech32 addresses are not supported."));
+        return;
+    }
+
+    // Get optional asset data
+    std::string asset_data = qui->lineEditAssetData->text().trimmed().toStdString();
+
+    // Get change address
+    std::string change_address;
+    if (qui->checkBoxChangeAddress->isChecked() && !qui->lineEditChangeAddress->text().isEmpty()) {
+        change_address = qui->lineEditChangeAddress->text().trimmed().toStdString();
+        CTxDestination dest = DecodeDestination(change_address);
+        if (!IsValidDestination(dest)) {
+            QMessageBox::warning(this, tr("Error"), tr("Invalid change address."));
             return;
         }
-
-        change_address = EncodeDestination(keyID);
+        if (std::get_if<PKHash>(&dest) == nullptr) {
+            QMessageBox::warning(this, tr("Error"), tr("Change address must use legacy (P2PKH) format."));
+            return;
+        }
     }
 
+    // Build the transaction
+    LOCK(pwallet->cs_wallet);
+
+    if (change_address.empty()) {
+        auto op_dest = pwallet->GetNewDestination(OutputType::LEGACY, "");
+        if (!op_dest) {
+            QMessageBox::critical(this, tr("Error"), tr("Failed to generate change address."));
+            return;
+        }
+        change_address = EncodeDestination(*op_dest);
+    }
+
+    // Transfer qualifier token to self (change address) to prove ownership
+    std::vector<std::pair<CAssetTransfer, std::string>> vTransfers;
+    CAssetTransfer assetTransfer(tag_name, QUALIFIER_ASSET_MIN_AMOUNT, DecodeAssetData(asset_data), 0);
+    vTransfers.emplace_back(std::make_pair(assetTransfer, change_address));
+
+    // Attach null asset tx data to tag/untag the address
+    std::vector<std::pair<CNullAssetTxData, std::string>> nullAssetTxData;
+    CNullAssetTxData nullData(tag_name, flag);
+    nullAssetTxData.emplace_back(std::make_pair(nullData, to_address));
+
+    wallet::CCoinControl ctrl;
     ctrl.destChange = DecodeDestination(change_address);
 
+    CTransactionRef tx;
+    CAmount nFeeRequired;
     std::pair<int, std::string> error;
-    std::vector< std::pair<CAssetTransfer, std::string> >vTransfers;
 
-    // Always transfer 1 of the qualifier tokens to the change address
-    vTransfers.emplace_back(std::make_pair(CAssetTransfer(asset_name, 1 * COIN, decodedAssetData), change_address));
-
-    // Add the asset data with the flag to remove or add the tag 1 = Add, 0 = Remove
-    std::vector< std::pair<CNullAssetTxData, std::string> > vecAssetData;
-    vecAssetData.push_back(std::make_pair(CNullAssetTxData(asset_name, flag), address));
-
-    // Create the Transaction
-    if (!CreateTransferAssetTransaction(model->getWallet(), ctrl, vTransfers, "", error, transaction, reservekey, nRequiredFee, &vecAssetData)) {
-        QMessageBox createTransactionBox;
-        createTransactionBox.setText(QString::fromStdString(error.second));
-        createTransactionBox.exec();
+    if (!wallet::CreateTransferAssetTransaction(*pwallet, ctrl, vTransfers, "", error, tx, nFeeRequired, &nullAssetTxData)) {
+        QMessageBox::critical(this, tr("Error"), QString::fromStdString(error.second));
         return;
     }
 
-    QString addingQualifier = tr("Adding qualifier <b>%1</b> to address <b>%2</b><br>").arg(QString::fromStdString(asset_name), QString::fromStdString(address));
-    QString removingQualifier = tr("Removing qualifier <b>%1</b> from address <b>%2</b><br>").arg(QString::fromStdString(asset_name), QString::fromStdString(address));
-
-    QString questionString;
-    // Format confirmation message
-
-    questionString.append(flag ? addingQualifier : removingQualifier);
-    if(nRequiredFee > 0)
-    {
-        // append fee string if a fee is required
-        questionString.append("<hr /><span style='color:#e82121;'>");
-        questionString.append(MeowcoinUnits::formatHtmlWithUnit(model->getOptionsModel()->getDisplayUnit(), nRequiredFee));
-        questionString.append("</span> ");
-        questionString.append(tr("added as transaction fee"));
-
-        // append transaction size
-        questionString.append(" (" + QString::number((double)GetVirtualTransactionSize(transaction) / 1000) + " kB)");
-    }
-
-    // add total amount in all subdivision units
-    questionString.append("<hr />");
-    CAmount totalAmount =  nRequiredFee;
-    QStringList alternativeUnits;
-    for (MeowcoinUnits::Unit u : MeowcoinUnits::availableUnits())
-    {
-        if(u != model->getOptionsModel()->getDisplayUnit())
-            alternativeUnits.append(MeowcoinUnits::formatHtmlWithUnit(u, totalAmount));
-    }
-    questionString.append(tr("Total Amount %1")
-                                  .arg(MeowcoinUnits::formatHtmlWithUnit(model->getOptionsModel()->getDisplayUnit(), totalAmount)));
-    questionString.append(QString("<span style='font-size:10pt;font-weight:normal;'><br />(=%2)</span>")
-                                  .arg(alternativeUnits.join(" " + tr("or") + "<br />")));
-
-    QString addString = tr("Confirm adding qualifier");
-    QString removingString = tr("Confirm removing qualifier");
-    SendConfirmationDialog confirmationDialog(flag ? addString : removingString,
-                                              questionString, SEND_CONFIRM_DELAY, this);
-    confirmationDialog.exec();
-    QMessageBox::StandardButton retval = (QMessageBox::StandardButton)confirmationDialog.result();
-
-    if(retval != QMessageBox::Yes)
-    {
-        return;
-    }
-
-    // Send the Transaction to the network
     std::string txid;
-    if (!SendAssetTransaction(model->getWallet(), transaction, reservekey, error, txid)) {
-        QMessageBox sendTransactionBox;
-        sendTransactionBox.setText(QString::fromStdString(error.second));
-        sendTransactionBox.exec();
+    if (!wallet::SendAssetTransaction(*pwallet, tx, error, txid)) {
+        QMessageBox::critical(this, tr("Error"), QString::fromStdString(error.second));
+        return;
     }
 
-    QMessageBox txidMsgBox;
-    std::string sentMsg = _("Sent new transaction to the network");
-    std::string totalMsg = strprintf("%s: %s",sentMsg, txid);
-    txidMsgBox.setText(QString::fromStdString(totalMsg));
-    txidMsgBox.exec();
-
-    widget->clear();
+    QMessageBox::information(this, tr("Success"),
+        tr("Transaction sent successfully.\nTxID: %1").arg(QString::fromStdString(txid)));
 }
-
-
-
-
-
-
