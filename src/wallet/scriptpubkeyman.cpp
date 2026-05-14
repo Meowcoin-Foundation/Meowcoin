@@ -1682,6 +1682,13 @@ void DescriptorScriptPubKeyMan::UpgradeDescriptorCache()
         return;
     }
 
+    // PQ descriptors use a witness-program cache rather than hardened xpub cache;
+    // there are no xpubs to upgrade here, so skip them entirely.
+    auto output_type = m_wallet_descriptor.descriptor->GetOutputType();
+    if (output_type.has_value() && *output_type == OutputType::PQ) {
+        return;
+    }
+
     // Expand the descriptor
     FlatSigningProvider provider;
     provider.keys = GetKeys();
