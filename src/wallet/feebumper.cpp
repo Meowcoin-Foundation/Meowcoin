@@ -182,6 +182,15 @@ Result CreateRateBumpTransaction(CWallet& wallet, const Txid& txid, const CCoinC
         return Result::INVALID_PARAMETER;
     }
 
+    // Asset transactions cannot be fee-bumped: output reconstruction here strips
+    // asset script data, producing an invalid replacement transaction.
+    for (const CTxOut& txout : wtx.tx->vout) {
+        if (txout.scriptPubKey.IsAssetScript()) {
+            errors.emplace_back(Untranslated("bumpfee is not supported for transactions containing asset outputs"));
+            return Result::WALLET_ERROR;
+        }
+    }
+
     // Retrieve all of the UTXOs and add them to coin control
     // While we're here, calculate the input amount
     std::map<COutPoint, Coin> coins;
