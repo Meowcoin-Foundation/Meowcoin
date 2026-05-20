@@ -74,8 +74,10 @@ public:
 
     void SetChainId(int32_t chainId)
     {
-        nVersion %= VERSION_CHAIN_START;
-        nVersion |= chainId * VERSION_CHAIN_START;
+        // Use a bitmask to replace only the chain ID field (bits 16-20), preserving
+        // top bits such as VERSIONBITS_TOP_BITS_ASSETS.  The old modulo approach
+        // (nVersion %= VERSION_CHAIN_START) silently zeroed all bits >= 16.
+        nVersion = (nVersion & ~MASK_AUXPOW_CHAINID_SHIFTED) | (chainId << VERSION_START_BIT);
     }
 
     int32_t GetBaseVersion() const
