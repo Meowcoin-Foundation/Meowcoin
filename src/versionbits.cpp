@@ -2,6 +2,7 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <assets/assets.h>
 #include <consensus/params.h>
 #include <deploymentinfo.h>
 #include <kernel/chainparams.h>
@@ -264,7 +265,9 @@ bool VersionBitsCache::IsActiveAfter(const CBlockIndex* pindexPrev, const Consen
 
 static int32_t ComputeBlockVersion(const CBlockIndex* pindexPrev, const Consensus::Params& params, std::array<ThresholdConditionCache, Consensus::MAX_VERSION_BITS_DEPLOYMENTS>& caches)
 {
-    int32_t nVersion = VERSIONBITS_TOP_BITS;
+    // Once assets are deployed the block version must carry the assets-era marker
+    // (bit 28 set) so that legacy nodes accept the block.
+    int32_t nVersion = AreAssetsDeployed() ? VERSIONBITS_TOP_BITS_ASSETS : VERSIONBITS_TOP_BITS;
 
     for (int i = 0; i < (int)Consensus::MAX_VERSION_BITS_DEPLOYMENTS; i++) {
         Consensus::DeploymentPos pos = static_cast<Consensus::DeploymentPos>(i);
