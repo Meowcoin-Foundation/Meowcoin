@@ -277,19 +277,24 @@ bool CreateAssetTransaction(
     // 5) Owner token then new asset output(s) — must be the last two vouts (in that order). Legacy
     // consensus (VerifyNewAsset / IsNewAsset) requires vout[size-1] = issue data and vout[size-2] = owner.
     // Change is inserted at a fixed index (below) so random wallet placement cannot sit between them.
+    // Restricted assets ($TOKEN) must NOT have an explicit $TOKEN! creation output — the protocol
+    // transfers the existing root TOKEN! owner token (section 4 above) rather than creating a new one.
     CTxDestination assetDest = DecodeDestination(address);
     for (const auto& asset : assets) {
-        CScript scriptOwnerNew = GetScriptForDestination(assetDest);
-        asset.ConstructOwnerTransaction(scriptOwnerNew);
-        if (!RequireLegacyAssetScriptLayout(scriptOwnerNew, error))
-            return false;
+        if (assetType != AssetType::RESTRICTED) {
+            // Owner token output (second-to-last) — not used for restricted assets.
+            CScript scriptOwnerNew = GetScriptForDestination(assetDest);
+            asset.ConstructOwnerTransaction(scriptOwnerNew);
+            if (!RequireLegacyAssetScriptLayout(scriptOwnerNew, error))
+                return false;
 
-        CRecipient ownerRec;
-        ownerRec.dest = CNoDestination();
-        ownerRec.nAmount = 0;
-        ownerRec.fSubtractFeeFromAmount = false;
-        ownerRec.scriptOverride = scriptOwnerNew;
-        vecSend.push_back(ownerRec);
+            CRecipient ownerRec;
+            ownerRec.dest = CNoDestination();
+            ownerRec.nAmount = 0;
+            ownerRec.fSubtractFeeFromAmount = false;
+            ownerRec.scriptOverride = scriptOwnerNew;
+            vecSend.push_back(ownerRec);
+        }
 
         CScript scriptAssetNew = GetScriptForDestination(assetDest);
         asset.ConstructTransaction(scriptAssetNew);
