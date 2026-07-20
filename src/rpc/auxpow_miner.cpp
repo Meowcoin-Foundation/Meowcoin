@@ -46,7 +46,14 @@ uint256 TemplateCache::createBlock(const CScript& scriptPubKey,
         pblock->nVersion.SetChainId(consensus.nAuxpowChainId);
 
         // Recalculate nBits for the scrypt difficulty (AuxPoW uses scrypt).
-        CBlockIndex* pindexPrev = chainman.ActiveTip();
+        //
+        // Must use the same parent that createNewBlock() already baked into
+        // hashPrevBlock, not a fresh ActiveTip() read: createNewBlock() locks
+        // and releases cs_main internally, so by the time we get here the active
+        // tip may have advanced past hashPrevBlock. Recomputing against the new
+        // tip would desync nBits from hashPrevBlock, producing a header every
+        // validator rejects with bad-diffbits despite a perfectly valid AuxPoW.
+        CBlockIndex* pindexPrev = chainman.m_blockman.LookupBlockIndex(pblock->hashPrevBlock);
         if (pindexPrev) {
             pblock->nBits = GetNextWorkRequired(pindexPrev, pblock.get(),
                                                  chainman.GetConsensus(), true);
