@@ -500,6 +500,7 @@ public:
         base58Prefixes[EXT_SECRET_KEY] = {0x04, 0x35, 0x83, 0x94};
 
         bech32_hrp = "smewc";
+        nExtCoinType = 1;
 
         fDefaultConsistencyChecks = false;
         m_is_mockable_chain = false;
