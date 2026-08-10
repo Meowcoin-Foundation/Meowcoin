@@ -120,6 +120,29 @@ const std::vector<std::string> CHECKLEVEL_DOC {
  * */
 static constexpr int PRUNE_LOCK_BUFFER{10};
 
+/**
+ * Check the height committed to native KAWPOW/MEOWPOW headers.
+ *
+ * AuxPoW and pre-KAWPOW headers do not serialize nHeight. This check is kept
+ * separate from the expensive proof-of-work check so an untrusted height
+ * cannot select an arbitrary Ethash epoch before the header is rejected.
+ */
+static bool HasSerializedHeaderHeight(const CBlockHeader& block)
+{
+    return block.nTime >= nKAWPOWActivationTime && !block.nVersion.IsAuxpow();
+}
+
+static bool CheckSerializedHeaderHeight(const CBlockHeader& block, BlockValidationState& state, int expected_height)
+{
+    if (HasSerializedHeaderHeight(block) &&
+        block.nHeight != static_cast<uint32_t>(expected_height)) {
+        return state.Invalid(BlockValidationResult::BLOCK_INVALID_HEADER,
+                             "bad-blk-height",
+                             strprintf("block height field %u != expected %d", block.nHeight, expected_height));
+    }
+    return true;
+}
+
 TRACEPOINT_SEMAPHORE(validation, block_connected);
 TRACEPOINT_SEMAPHORE(utxocache, flush);
 TRACEPOINT_SEMAPHORE(mempool, replaced);
@@ -2445,6 +2468,12 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
     AssertLockHeld(cs_main);
     assert(pindex);
 
+    // Re-check this contextual header invariant for blocks loaded from disk.
+    // In particular, -reindex-chainstate does not call ContextualCheckBlockHeader().
+    if (!CheckSerializedHeaderHeight(block, state, pindex->nHeight)) {
+        return false;
+    }
+
     uint256 block_hash{block.GetHash()};
     assert(*pindex->phashBlock == block_hash);
 
@@ -4604,6 +4633,10 @@ static bool ContextualCheckBlockHeader(const CBlockHeader& block, BlockValidatio
 
     const Consensus::Params& consensusParams = chainman.GetConsensus();
 
+    if (!CheckSerializedHeaderHeight(block, state, nHeight)) {
+        return false;
+    }
+
     // Check proof of work
     const bool fIsAuxPowBlock = block.nVersion.IsAuxpow();
     if (block.nBits != GetNextWorkRequired(pindexPrev, &block, consensusParams, fIsAuxPowBlock))
@@ -4725,10 +4758,14 @@ bool ChainstateManager::AcceptBlockHeader(const CBlockHeader& block, BlockValida
                 LogDebug(BCLog::VALIDATION, "%s: block %s is marked invalid\n", __func__, hash.ToString());
                 return state.Invalid(BlockValidationResult::BLOCK_CACHED_INVALID, "duplicate-invalid");
             }
+            if (!CheckSerializedHeaderHeight(block, state, pindex->nHeight)) {
+                return false;
+            }
             return true;
         }
 
-        if (!CheckBlockHeader(block, state, GetConsensus())) {
+        const bool has_serialized_height{HasSerializedHeaderHeight(block)};
+        if (!has_serialized_height && !CheckBlockHeader(block, state, GetConsensus())) {
             LogDebug(BCLog::VALIDATION, "%s: Consensus::CheckBlockHeader: %s, %s\n", __func__, hash.ToString(), state.ToString());
             return false;
         }
@@ -4744,6 +4781,13 @@ bool ChainstateManager::AcceptBlockHeader(const CBlockHeader& block, BlockValida
         if (pindexPrev->nStatus & BLOCK_FAILED_MASK) {
             LogDebug(BCLog::VALIDATION, "header %s has prev block invalid: %s\n", hash.ToString(), block.hashPrevBlock.ToString());
             return state.Invalid(BlockValidationResult::BLOCK_INVALID_PREV, "bad-prevblk");
+        }
+        if (!CheckSerializedHeaderHeight(block, state, pindexPrev->nHeight + 1)) {
+            return false;
+        }
+        if (has_serialized_height && !CheckBlockHeader(block, state, GetConsensus())) {
+            LogDebug(BCLog::VALIDATION, "%s: Consensus::CheckBlockHeader: %s, %s\n", __func__, hash.ToString(), state.ToString());
+            return false;
         }
         if (!ContextualCheckBlockHeader(block, state, m_blockman, *this, pindexPrev)) {
             LogDebug(BCLog::VALIDATION, "%s: Consensus::ContextualCheckBlockHeader: %s, %s\n", __func__, hash.ToString(), state.ToString());
@@ -4937,7 +4981,20 @@ bool ChainstateManager::ProcessNewBlock(const std::shared_ptr<const CBlock>& blo
         // malleability that cause CheckBlock() to fail; see e.g. CVE-2012-2459 and
         // https://lists.linuxfoundation.org/pipermail/meowcoin-dev/2019-February/016697.html.  Because CheckBlock() is
         // not very expensive, the anti-DoS benefits of caching failure (of a definitely-invalid block) are not substantial.
-        bool ret = CheckBlock(*block, state, GetConsensus());
+        bool ret{true};
+        if (HasSerializedHeaderHeight(*block) && block->GetHash() != GetConsensus().hashGenesisBlock) {
+            const CBlockIndex* pindexPrev{m_blockman.LookupBlockIndex(block->hashPrevBlock)};
+            if (!pindexPrev) {
+                ret = state.Invalid(BlockValidationResult::BLOCK_MISSING_PREV, "prev-blk-not-found");
+            } else if (pindexPrev->nStatus & BLOCK_FAILED_MASK) {
+                ret = state.Invalid(BlockValidationResult::BLOCK_INVALID_PREV, "bad-prevblk");
+            } else {
+                ret = CheckSerializedHeaderHeight(*block, state, pindexPrev->nHeight + 1);
+            }
+        }
+        if (ret) {
+            ret = CheckBlock(*block, state, GetConsensus());
+        }
         if (ret) {
             // Store to disk
             ret = AcceptBlock(block, state, &pindex, force_processing, nullptr, new_block, min_pow_checked);
@@ -5000,6 +5057,10 @@ BlockValidationState TestBlockValidity(
 
     if (block.hashPrevBlock != *Assert(tip->phashBlock)) {
         state.Invalid({}, "inconclusive-not-best-prevblk");
+        return state;
+    }
+
+    if (!CheckSerializedHeaderHeight(block, state, tip->nHeight + 1)) {
         return state;
     }
 
@@ -5171,7 +5232,9 @@ VerifyDBResult CVerifyDB::VerifyDB(
             return VerifyDBResult::CORRUPTED_BLOCK_DB;
         }
         // check level 1: verify block validity
-        if (nCheckLevel >= 1 && !CheckBlock(block, state, consensus_params)) {
+        if (nCheckLevel >= 1 &&
+            (!CheckSerializedHeaderHeight(block, state, pindex->nHeight) ||
+             !CheckBlock(block, state, consensus_params))) {
             LogPrintf("Verification error: found bad block at %d, hash=%s (%s)\n",
                       pindex->nHeight, pindex->GetBlockHash().ToString(), state.ToString());
             return VerifyDBResult::CORRUPTED_BLOCK_DB;

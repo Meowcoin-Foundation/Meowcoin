@@ -7,6 +7,7 @@
 #include <chainparams.h>
 #include <consensus/merkle.h>
 #include <consensus/validation.h>
+#include <node/blockstorage.h>
 #include <node/miner.h>
 #include <pow.h>
 #include <random.h>
@@ -17,6 +18,7 @@
 #include <validation.h>
 #include <validationinterface.h>
 
+#include <optional>
 #include <thread>
 
 using node::BlockAssembler;
@@ -57,6 +59,18 @@ struct TestSubscriber final : public CValidationInterface {
         BOOST_CHECK_EQUAL(m_expected_tip, pindex->GetBlockHash());
 
         m_expected_tip = block->hashPrevBlock;
+    }
+};
+
+struct HeightValidationStateCatcher final : public CValidationInterface {
+    const uint256 m_hash;
+    std::optional<BlockValidationState> m_state;
+
+    explicit HeightValidationStateCatcher(const uint256& hash) : m_hash{hash} {}
+
+    void BlockChecked(const std::shared_ptr<const CBlock>& block, const BlockValidationState& state) override
+    {
+        if (block->GetHash() == m_hash) m_state = state;
     }
 };
 
@@ -148,6 +162,126 @@ void MinerTestingSetup::BuildChain(const uint256& root, int height, const unsign
     if (gen_fork) {
         blocks.push_back(GoodBlock(root));
         BuildChain(blocks.back()->GetHash(), height - 1, invalid_rate, branch_rate, max_size, blocks);
+    }
+}
+
+BOOST_FIXTURE_TEST_CASE(serialized_header_height_validation, ChainTestingSetup)
+{
+    ChainstateManager& chainman{*Assert(m_node.chainman)};
+    const CBlock& genesis{Params().GenesisBlock()};
+    const uint256 genesis_hash{Params().GetConsensus().hashGenesisBlock};
+
+    {
+        LOCK(cs_main);
+        chainman.InitializeChainstate(m_node.mempool.get());
+        CBlockIndex* genesis_index{chainman.m_blockman.AddToBlockIndex(genesis, chainman.m_best_header)};
+        BOOST_REQUIRE(genesis_index != nullptr);
+        BOOST_CHECK_EQUAL(genesis_index->nHeight, 0);
+    }
+
+    // Pre-KAWPOW headers do not serialize nHeight, so the in-memory value must
+    // not become a consensus rule for them. Give this header invalid PoW and
+    // verify it reaches the PoW check instead.
+    CBlockHeader pre_kawpow{genesis.GetBlockHeader()};
+    pre_kawpow.hashPrevBlock = genesis_hash;
+    pre_kawpow.nTime = genesis.nTime + 1;
+    pre_kawpow.nHeight = 123;
+    while (CheckProofOfWork(pre_kawpow.GetHash(), pre_kawpow.nBits, Params().GetConsensus())) {
+        ++pre_kawpow.nNonce;
+    }
+
+    BlockValidationState state;
+    const CBlockIndex* pindex{nullptr};
+    BOOST_CHECK(!chainman.ProcessNewBlockHeaders({{pre_kawpow}}, /*min_pow_checked=*/true, state, &pindex));
+    BOOST_CHECK_EQUAL(state.GetRejectReason(), "high-hash");
+    BOOST_CHECK(pindex == nullptr);
+
+    // A native post-KAWPOW header commits to nHeight. Reject a mismatch before
+    // attempting the expensive full proof-of-work/mix verification.
+    CBlockHeader native_header{genesis.GetBlockHeader()};
+    native_header.hashPrevBlock = genesis_hash;
+    native_header.nTime = Params().KAWPOWActivationTime();
+    native_header.nHeight = 2; // The genesis child must commit to height 1.
+
+    state = {};
+    pindex = nullptr;
+    BOOST_CHECK(!chainman.ProcessNewBlockHeaders({{native_header}}, /*min_pow_checked=*/true, state, &pindex));
+    BOOST_CHECK_EQUAL(state.GetRejectReason(), "bad-blk-height");
+    BOOST_CHECK(pindex == nullptr);
+
+    // A correctly bound native header must proceed to full mix verification.
+    CBlockHeader valid_height_header{native_header};
+    valid_height_header.nHeight = 1;
+    state = {};
+    BOOST_CHECK(!chainman.ProcessNewBlockHeaders({{valid_height_header}}, /*min_pow_checked=*/true, state));
+    BOOST_CHECK_EQUAL(state.GetRejectReason(), "bad-mix-hash");
+
+    // The full-block entry point must perform the same cheap contextual check
+    // before CheckBlock() can construct an arbitrary epoch.
+    auto native_block{std::make_shared<CBlock>(native_header)};
+    HeightValidationStateCatcher state_catcher{native_block->GetHash()};
+    m_node.validation_signals->RegisterValidationInterface(&state_catcher);
+    bool new_block{true};
+    const bool processed{chainman.ProcessNewBlock(native_block, /*force_processing=*/true, /*min_pow_checked=*/true, &new_block)};
+    m_node.validation_signals->UnregisterValidationInterface(&state_catcher);
+    m_node.validation_signals->SyncWithValidationInterfaceQueue();
+    BOOST_CHECK(!processed);
+    BOOST_CHECK(!new_block);
+    BOOST_REQUIRE(state_catcher.m_state.has_value());
+    BOOST_CHECK_EQUAL(state_catcher.m_state->GetRejectReason(), "bad-blk-height");
+
+    // AuxPoW headers do not serialize nHeight. Verify they continue to the
+    // AuxPoW checks instead of being rejected for the unused in-memory value.
+    CBlockHeader auxpow_header{native_header};
+    auxpow_header.nVersion.SetChainId(Params().GetConsensus().nAuxpowChainId);
+    auxpow_header.nVersion.SetAuxpow(true);
+    state = {};
+    BOOST_CHECK(!chainman.ProcessNewBlockHeaders({{auxpow_header}}, /*min_pow_checked=*/true, state));
+    BOOST_CHECK_EQUAL(state.GetRejectReason(), "bad-auxpow-missing");
+}
+
+BOOST_FIXTURE_TEST_CASE(block_index_native_header_consistency, BasicTestingSetup)
+{
+    const CBlock& genesis{Params().GenesisBlock()};
+    const uint256 genesis_hash{Params().GetConsensus().hashGenesisBlock};
+
+    for (const bool inconsistent_height : {false, true}) {
+        kernel::BlockTreeDB block_tree{DBParams{
+            .path = "",
+            .cache_bytes = 1 << 20,
+            .memory_only = true,
+        }};
+
+        CBlockHeader header{genesis.GetBlockHeader()};
+        header.hashPrevBlock = genesis_hash;
+        header.nTime = Params().KAWPOWActivationTime();
+        header.nHeight = inconsistent_height ? 2 : 1;
+        const uint256 header_hash{header.GetHash()};
+
+        CBlockIndex parent{genesis};
+        parent.nHeight = 0;
+        parent.phashBlock = &genesis_hash;
+
+        CBlockIndex stored{header};
+        stored.pprev = &parent;
+        stored.nHeight = 1;
+        stored.phashBlock = &header_hash;
+        BOOST_REQUIRE(block_tree.WriteBatchSync({}, 0, {&stored}));
+
+        node::BlockMap loaded;
+        const auto inserter = [&](const uint256& hash) -> CBlockIndex* {
+            if (hash.IsNull()) return nullptr;
+            const auto [it, inserted]{loaded.try_emplace(hash)};
+            if (inserted) it->second.phashBlock = &it->first;
+            return &it->second;
+        };
+
+        bool load_result;
+        {
+            LOCK(cs_main);
+            load_result = block_tree.LoadBlockIndexGuts(Params().GetConsensus(), inserter, m_interrupt);
+        }
+        BOOST_CHECK_EQUAL(load_result, !inconsistent_height);
     }
 }
 

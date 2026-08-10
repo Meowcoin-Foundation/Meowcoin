@@ -119,12 +119,21 @@ bool BlockTreeDB::LoadBlockIndexGuts(const Consensus::Params& consensusParams, s
         if (pcursor->GetKey(key) && key.first == DB_BLOCK_INDEX) {
             CDiskBlockIndex diskindex;
             if (pcursor->GetValue(diskindex)) {
-                // Meowcoin: Use the block hash from the LevelDB key directly.
-                // ConstructBlockHash() creates a minimal CBlockHeader and calls
-                // GetHash(), but it lacks KAWPOW fields (nHeight, nNonce64,
-                // mix_hash) so it computes the wrong hash for KAWPOW blocks.
-                // The correct hash was stored as the key when the entry was
-                // originally written (via bi->GetBlockHash() in WriteBatchSync).
+                // A pre-fix node could index a native KAWPOW/MEOWPOW header
+                // whose serialized height did not match its chain position.
+                // The disk index stores the contextual height, so reconstructing
+                // the header must reproduce the hash used as the database key.
+                if (key.second != consensusParams.hashGenesisBlock &&
+                    diskindex.nTime >= nKAWPOWActivationTime &&
+                    !diskindex.nVersion.IsAuxpow() &&
+                    diskindex.ConstructBlockHash() != key.second) {
+                    LogError("%s: block index entry %s has inconsistent native proof-of-work header data\n",
+                             __func__, key.second.ToString());
+                    return false;
+                }
+
+                // Use the block hash from the LevelDB key directly after the
+                // native serialized header fields have passed the consistency check.
                 CBlockIndex* pindexNew = insertBlockIndex(key.second);
                 pindexNew->pprev          = insertBlockIndex(diskindex.hashPrev);
                 pindexNew->nHeight        = diskindex.nHeight;
