@@ -3,6 +3,7 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <addresstype.h>
+#include <assets/assets.h>
 #include <coins.h>
 #include <common/system.h>
 #include <consensus/consensus.h>
@@ -63,6 +64,25 @@ struct MinerTestingSetup : public TestingSetup {
     std::unique_ptr<Mining> MakeMining()
     {
         return interfaces::MakeMining(m_node);
+    }
+};
+
+// ChainTestingSetup does not initialize the global asset cache.
+struct AssetsCacheGuard {
+    CAssetsCache cache;
+    CAssetsCache* const previous{passets};
+
+    AssetsCacheGuard() { passets = &cache; }
+    ~AssetsCacheGuard() { passets = previous; }
+};
+
+struct NativeHeaderHeightTestingSetup : public ChainTestingSetup {
+    AssetsCacheGuard assets;
+
+    NativeHeaderHeightTestingSetup()
+        : ChainTestingSetup{ChainType::REGTEST}
+    {
+        LoadVerifyActivateChainstate();
     }
 };
 } // namespace miner_tests
@@ -805,6 +825,26 @@ BOOST_AUTO_TEST_CASE(CreateNewBlock_validity)
     SetMockTime(0);
 
     TestPrioritisedMining(scriptPubKey, txFirst);
+}
+
+BOOST_AUTO_TEST_SUITE_END()
+
+BOOST_FIXTURE_TEST_SUITE(miner_native_header_tests, miner_tests::NativeHeaderHeightTestingSetup)
+
+BOOST_AUTO_TEST_CASE(CreateNewBlock_native_header_height)
+{
+    const uint32_t activation_time{Assert(m_node.chainman)->GetParams().KAWPOWActivationTime()};
+    SetMockTime(activation_time);
+
+    const int expected_height{WITH_LOCK(::cs_main, return m_node.chainman->ActiveChain().Height() + 1)};
+    auto block_template{
+        BlockAssembler{m_node.chainman->ActiveChainstate(), m_node.mempool.get(), {}}.CreateNewBlock()};
+    BOOST_REQUIRE(block_template);
+
+    const CBlock& block{block_template->block};
+    BOOST_REQUIRE(block.nTime >= activation_time);
+    BOOST_REQUIRE(!block.nVersion.IsAuxpow());
+    BOOST_CHECK_EQUAL(block.nHeight, static_cast<uint32_t>(expected_height));
 }
 
 BOOST_AUTO_TEST_SUITE_END()
