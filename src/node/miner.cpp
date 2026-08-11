@@ -136,6 +136,7 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock()
     CBlockIndex* pindexPrev = m_chainstate.m_chain.Tip();
     assert(pindexPrev != nullptr);
     nHeight = pindexPrev->nHeight + 1;
+    pblock->nHeight = static_cast<uint32_t>(nHeight);
 
     pblock->nVersion = m_chainstate.m_chainman.m_versionbitscache.ComputeBlockVersion(pindexPrev, chainparams.GetConsensus());
     // Set the Meowcoin chain ID in the version.
