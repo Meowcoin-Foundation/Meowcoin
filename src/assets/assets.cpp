@@ -1043,9 +1043,16 @@ bool IsNewAsset(const CTransaction& tx)
     if (!CheckOwnerDataTx(tx.vout[tx.vout.size() - 2]))
         return false;
 
-    // Don't overlap with IsNewUniqueAsset()
+    // Don't overlap with IsNewUniqueAsset() / IsNewMsgChannelAsset() / IsNewQualifierAsset().
+    // Per protocol (RIP2/RIP5/RIP7), unique, msgchannel, and qualifier assets never have an
+    // owner token of their own — only ROOT/SUB assets do. Without excluding msgchannel/qualifier
+    // script shapes here, a msgchannel or qualifier issuance carrying a forged owner-creation
+    // output was misclassified as an ordinary ROOT/SUB issuance and validated by VerifyNewAsset,
+    // which has no way to know the name is actually msgchannel/qualifier-shaped and so never
+    // rejects the extra owner token the way VerifyNewMsgChannelAsset/VerifyNewQualfierAsset do.
     CScript script = tx.vout[tx.vout.size() - 1].scriptPubKey;
-    if (IsScriptNewUniqueAsset(script)|| IsScriptNewRestrictedAsset(script))
+    if (IsScriptNewUniqueAsset(script) || IsScriptNewRestrictedAsset(script) ||
+        IsScriptNewMsgChannelAsset(script) || IsScriptNewQualifierAsset(script))
         return false;
 
     return true;
