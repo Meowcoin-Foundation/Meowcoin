@@ -8,6 +8,7 @@
 #include <assets/assettypes.h>
 #include <assets/messages.h>
 #include <chain.h>
+#include <chainparams.h>
 #include <coins.h>
 #include <consensus/amount.h>
 #include <consensus/consensus.h>
@@ -218,7 +219,8 @@ bool Consensus::CheckTxAssets(const CTransaction& tx, TxValidationState& state, 
                               std::vector<std::pair<std::string, uint256>>& vPairReissueAssets,
                               const bool fRunningUnitTests, std::set<CMessage>* setMessages,
                               int64_t nBlocktime,
-                              std::vector<std::pair<std::string, CNullAssetTxData>>* myNullAssetData)
+                              std::vector<std::pair<std::string, CNullAssetTxData>>* myNullAssetData,
+                              int nSpendHeight)
 {
     if (!inputs.HaveInputs(tx)) {
         return state.Invalid(TxValidationResult::TX_MISSING_INPUTS, "bad-txns-inputs-missing-or-spent",
@@ -238,10 +240,19 @@ bool Consensus::CheckTxAssets(const CTransaction& tx, TxValidationState& state, 
             if (!GetAssetData(coin.out.scriptPubKey, data))
                 return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-failed-to-get-asset-from-script");
 
-            if (totalInputs.count(data.assetName))
-                totalInputs.at(data.assetName) += data.nAmount;
-            else
-                totalInputs.insert(make_pair(data.assetName, data.nAmount));
+            if (nSpendHeight >= ::Params().GetConsensus().nAssetTransferOverflowFixHeight) {
+                if (!MoneyRange(data.nAmount))
+                    return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-asset-input-amount-out-of-range");
+                CAmount current = totalInputs[data.assetName];
+                if (data.nAmount > MAX_MONEY - current)
+                    return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-asset-inputs-amount-overflow");
+                totalInputs[data.assetName] = current + data.nAmount;
+            } else {
+                if (totalInputs.count(data.assetName))
+                    totalInputs.at(data.assetName) += data.nAmount;
+                else
+                    totalInputs.insert(make_pair(data.assetName, data.nAmount));
+            }
 
             if (AreMessagesDeployed()) {
                 mapAddresses.insert(make_pair(data.assetName, EncodeDestination(data.destination)));
@@ -299,10 +310,19 @@ bool Consensus::CheckTxAssets(const CTransaction& tx, TxValidationState& state, 
             if (!ContextualCheckTransferAsset(assetCache, transfer, address, strError))
                 return state.Invalid(TxValidationResult::TX_CONSENSUS, strError);
 
-            if (totalOutputs.count(transfer.strName))
-                totalOutputs.at(transfer.strName) += transfer.nAmount;
-            else
-                totalOutputs.insert(make_pair(transfer.strName, transfer.nAmount));
+            if (nSpendHeight >= ::Params().GetConsensus().nAssetTransferOverflowFixHeight) {
+                if (!MoneyRange(transfer.nAmount))
+                    return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-asset-transfer-amount-out-of-range");
+                CAmount current = totalOutputs[transfer.strName];
+                if (transfer.nAmount > MAX_MONEY - current)
+                    return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-asset-outputs-amount-overflow");
+                totalOutputs[transfer.strName] = current + transfer.nAmount;
+            } else {
+                if (totalOutputs.count(transfer.strName))
+                    totalOutputs.at(transfer.strName) += transfer.nAmount;
+                else
+                    totalOutputs.insert(make_pair(transfer.strName, transfer.nAmount));
+            }
 
             if (!fRunningUnitTests) {
                 if (IsAssetNameAnOwner(transfer.strName)) {

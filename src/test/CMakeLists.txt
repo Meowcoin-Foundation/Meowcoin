@@ -9,6 +9,7 @@ add_executable(test_meowcoin
   addrman_tests.cpp
   allocator_tests.cpp
   amount_tests.cpp
+  asset_transfer_overflow_tests.cpp
   assets_amount_tests.cpp
   argsman_tests.cpp
   arith_uint256_tests.cpp
