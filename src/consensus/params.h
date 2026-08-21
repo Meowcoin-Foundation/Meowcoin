@@ -167,6 +167,11 @@ struct Params {
     bool nSegwitEnabled{true};
     bool nCSVEnabled{true};
 
+    /** Meowcoin: block height at which the asset-transfer amount overflow fix
+     *  (unbounded CAmount accumulation in CheckTxAssets) becomes active.
+     *  Mirrors AvianNetwork/Avian's nAssetTransferOverflowFixHeight (PR #251). */
+    int nAssetTransferOverflowFixHeight{std::numeric_limits<int>::max()};
+
     /** Meowcoin: AuxPoW parameters */
     int32_t nAuxpowChainId{9};
     int nAuxpowStartHeight{0};

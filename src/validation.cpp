@@ -940,7 +940,8 @@ bool MemPoolAccept::PreChecks(ATMPArgs& args, Workspace& ws)
         CAssetsCache* currentAssetCache = GetCurrentAssetCache();
         if (currentAssetCache) {
             std::vector<std::pair<std::string, uint256>> vReissueAssets;
-            if (!Consensus::CheckTxAssets(tx, state, m_view, currentAssetCache, &m_pool, vReissueAssets)) {
+            if (!Consensus::CheckTxAssets(tx, state, m_view, currentAssetCache, &m_pool, vReissueAssets,
+                                          false, nullptr, 0, nullptr, m_active_chainstate.m_chain.Height() + 1)) {
                 return false; // state filled in by CheckTxAssets
             }
         }
@@ -2750,7 +2751,7 @@ bool Chainstate::ConnectBlock(const CBlock& block, BlockValidationState& state, 
         if (AreAssetsDeployed() && assetsCache && !tx.IsCoinBase()) {
             std::vector<std::pair<std::string, uint256>> vReissueAssets;
             TxValidationState asset_state;
-            if (!Consensus::CheckTxAssets(tx, asset_state, view, assetsCache, nullptr, vReissueAssets, false, &setMessages, block.nTime, &myNullAssetData)) {
+            if (!Consensus::CheckTxAssets(tx, asset_state, view, assetsCache, nullptr, vReissueAssets, false, &setMessages, block.nTime, &myNullAssetData, pindex->nHeight)) {
                 state.Invalid(BlockValidationResult::BLOCK_CONSENSUS,
                               asset_state.GetRejectReason(),
                               asset_state.GetDebugMessage() + " in transaction " + tx.GetHash().ToString());

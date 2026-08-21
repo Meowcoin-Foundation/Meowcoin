@@ -8,6 +8,7 @@
 #include <assets/assettypes.h>
 #include <assets/messages.h>
 #include <chain.h>
+#include <chainparams.h>
 #include <coins.h>
 #include <consensus/amount.h>
 #include <consensus/consensus.h>
@@ -218,7 +219,8 @@ bool Consensus::CheckTxAssets(const CTransaction& tx, TxValidationState& state, 
                               std::vector<std::pair<std::string, uint256>>& vPairReissueAssets,
                               const bool fRunningUnitTests, std::set<CMessage>* setMessages,
                               int64_t nBlocktime,
-                              std::vector<std::pair<std::string, CNullAssetTxData>>* myNullAssetData)
+                              std::vector<std::pair<std::string, CNullAssetTxData>>* myNullAssetData,
+                              int nSpendHeight)
 {
     if (!inputs.HaveInputs(tx)) {
         return state.Invalid(TxValidationResult::TX_MISSING_INPUTS, "bad-txns-inputs-missing-or-spent",
@@ -238,10 +240,19 @@ bool Consensus::CheckTxAssets(const CTransaction& tx, TxValidationState& state, 
             if (!GetAssetData(coin.out.scriptPubKey, data))
                 return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-failed-to-get-asset-from-script");
 
-            if (totalInputs.count(data.assetName))
-                totalInputs.at(data.assetName) += data.nAmount;
-            else
-                totalInputs.insert(make_pair(data.assetName, data.nAmount));
+            if (nSpendHeight >= ::Params().GetConsensus().nAssetTransferOverflowFixHeight) {
+                if (!MoneyRange(data.nAmount))
+                    return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-asset-input-amount-out-of-range");
+                CAmount current = totalInputs[data.assetName];
+                if (data.nAmount > MAX_MONEY - current)
+                    return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-asset-inputs-amount-overflow");
+                totalInputs[data.assetName] = current + data.nAmount;
+            } else {
+                if (totalInputs.count(data.assetName))
+                    totalInputs.at(data.assetName) += data.nAmount;
+                else
+                    totalInputs.insert(make_pair(data.assetName, data.nAmount));
+            }
 
             if (AreMessagesDeployed()) {
                 mapAddresses.insert(make_pair(data.assetName, EncodeDestination(data.destination)));
@@ -299,10 +310,19 @@ bool Consensus::CheckTxAssets(const CTransaction& tx, TxValidationState& state, 
             if (!ContextualCheckTransferAsset(assetCache, transfer, address, strError))
                 return state.Invalid(TxValidationResult::TX_CONSENSUS, strError);
 
-            if (totalOutputs.count(transfer.strName))
-                totalOutputs.at(transfer.strName) += transfer.nAmount;
-            else
-                totalOutputs.insert(make_pair(transfer.strName, transfer.nAmount));
+            if (nSpendHeight >= ::Params().GetConsensus().nAssetTransferOverflowFixHeight) {
+                if (!MoneyRange(transfer.nAmount))
+                    return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-asset-transfer-amount-out-of-range");
+                CAmount current = totalOutputs[transfer.strName];
+                if (transfer.nAmount > MAX_MONEY - current)
+                    return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-asset-outputs-amount-overflow");
+                totalOutputs[transfer.strName] = current + transfer.nAmount;
+            } else {
+                if (totalOutputs.count(transfer.strName))
+                    totalOutputs.at(transfer.strName) += transfer.nAmount;
+                else
+                    totalOutputs.insert(make_pair(transfer.strName, transfer.nAmount));
+            }
 
             if (!fRunningUnitTests) {
                 if (IsAssetNameAnOwner(transfer.strName)) {
@@ -355,6 +375,15 @@ bool Consensus::CheckTxAssets(const CTransaction& tx, TxValidationState& state, 
 
     if (assetCache) {
         if (IsNewAsset(tx)) {
+            // Structural validation layer (mirrors Avian PR #250 / Meowcoin-equivalent gap): enforces
+            // the issuance burn, that the owner-token name matches the asset, output counts, and —
+            // for sub-assets — that the parent ROOT! owner token is held. VerifyNewAsset has no call
+            // sites elsewhere in this tree, so without this it silently accepts issuances with no
+            // burn / a mismatched owner / no parent owner. Both a chain-split vector and free/
+            // unauthorized issuance.
+            if (!VerifyNewAsset(tx, strError))
+                return state.Invalid(TxValidationResult::TX_CONSENSUS, strError);
+
             CNewAsset asset;
             std::string address;
             if (!AssetFromScript(tx.vout[tx.vout.size() - 1].scriptPubKey, asset, address)) {
@@ -364,6 +393,13 @@ bool Consensus::CheckTxAssets(const CTransaction& tx, TxValidationState& state, 
                 return state.Invalid(TxValidationResult::TX_CONSENSUS, strError);
 
         } else if (IsReissueAsset(tx)) {
+            // Structural check: requires the NAME! owner-token transfer and the reissue burn output,
+            // and enforces the reissue output counts. VerifyReissueAsset has no call sites elsewhere
+            // in this tree, so without this anyone can reissue (mint more of) any reissuable asset
+            // they do NOT own, paying no burn — unauthorized inflation as well as a chain-split vector.
+            if (!VerifyReissueAsset(tx, strError))
+                return state.Invalid(TxValidationResult::TX_CONSENSUS, strError);
+
             CReissueAsset reissue_asset;
             std::string address;
             if (!ReissueAssetFromScript(tx.vout[tx.vout.size() - 1].scriptPubKey, reissue_asset, address)) {
@@ -372,11 +408,37 @@ bool Consensus::CheckTxAssets(const CTransaction& tx, TxValidationState& state, 
             if (!ContextualCheckReissueAsset(assetCache, reissue_asset, strError, tx))
                 return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-reissue-contextual-" + strError);
         } else if (IsNewUniqueAsset(tx)) {
+            // Structural check: requires the unique burn and that the parent ROOT! owner token is
+            // held, and rejects any owner-token creation output. VerifyNewUniqueAsset has no call
+            // sites elsewhere in this tree — its absence is the same defect that split the Avian
+            // chain (see AvianNetwork/Avian PR #249/#250): a unique-asset issuance carrying its own
+            // NAME#unique! owner-creation output was silently accepted instead of rejected. The
+            // explicit owner-output guard below is kept for defence in depth.
+            if (!VerifyNewUniqueAsset(tx, strError))
+                return state.Invalid(TxValidationResult::TX_CONSENSUS, strError);
+
+            for (const auto& vout : tx.vout) {
+                int nOutType = 0;
+                bool fOutIsOwner = false;
+                if (vout.scriptPubKey.IsAssetScript(nOutType, fOutIsOwner)) {
+                    if (nOutType == TX_NEW_ASSET && fOutIsOwner) {
+                        return state.Invalid(TxValidationResult::TX_CONSENSUS,
+                                             "bad-txns-issue-unique-has-owner-creation-output");
+                    }
+                }
+            }
+
             if (!ContextualCheckUniqueAssetTx(assetCache, strError, tx))
                 return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-issue-unique-contextual-" + strError);
         } else if (IsNewMsgChannelAsset(tx)) {
             if (!AreMessagesDeployed())
                 return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-issue-msgchannel-before-messaging-is-active");
+
+            // Structural check: burn output present and output counts. VerifyNewMsgChannelAsset has
+            // no call sites elsewhere in this tree.
+            if (!VerifyNewMsgChannelAsset(tx, strError))
+                return state.Invalid(TxValidationResult::TX_CONSENSUS, strError);
+
             CNewAsset asset;
             std::string strAddress;
             if (!MsgChannelAssetFromTransaction(tx, asset, strAddress))
@@ -386,6 +448,12 @@ bool Consensus::CheckTxAssets(const CTransaction& tx, TxValidationState& state, 
         } else if (IsNewQualifierAsset(tx)) {
             if (!AreRestrictedAssetsDeployed())
                 return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-issue-qualifier-before-it-is-active");
+
+            // Structural check: burn output present and output counts. VerifyNewQualfierAsset has
+            // no call sites elsewhere in this tree.
+            if (!VerifyNewQualfierAsset(tx, strError))
+                return state.Invalid(TxValidationResult::TX_CONSENSUS, strError);
+
             CNewAsset asset;
             std::string strAddress;
             if (!QualifierAssetFromTransaction(tx, asset, strAddress))
@@ -395,6 +463,13 @@ bool Consensus::CheckTxAssets(const CTransaction& tx, TxValidationState& state, 
         } else if (IsNewRestrictedAsset(tx)) {
             if (!AreRestrictedAssetsDeployed())
                 return state.Invalid(TxValidationResult::TX_CONSENSUS, "bad-txns-issue-restricted-before-it-is-active");
+
+            // Structural check: burn output present, output counts, and the root TOKEN! owner
+            // transfer. VerifyNewRestrictedAsset has no call sites elsewhere in this tree. Subsumes
+            // the explicit owner-output guard below, kept for defence in depth.
+            if (!VerifyNewRestrictedAsset(tx, strError))
+                return state.Invalid(TxValidationResult::TX_CONSENSUS, strError);
+
             // Restricted asset creation must NOT contain an explicit owner token creation output
             // (TX_NEW_ASSET, fIsOwner=true). The root TOKEN! is transferred, not newly created.
             for (const auto& vout : tx.vout) {

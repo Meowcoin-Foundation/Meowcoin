@@ -281,8 +281,15 @@ bool CreateAssetTransaction(
     // transfers the existing root TOKEN! owner token (section 4 above) rather than creating a new one.
     CTxDestination assetDest = DecodeDestination(address);
     for (const auto& asset : assets) {
-        if (assetType != AssetType::RESTRICTED) {
-            // Owner token output (second-to-last) — not used for restricted assets.
+        // Owner token output (second-to-last) is only created for ROOT and SUB issuance — those are
+        // the only types that mint a *new* owner token. UNIQUE, MSGCHANNEL, QUALIFIER, and RESTRICTED
+        // assets all inherit authority from an existing owner token that gets *transferred* elsewhere
+        // in this tx (section 4 above / pre-selected owner UTXO below), never newly created here. This
+        // was gated on `!= RESTRICTED`, which wrongly built an owner-creation output for UNIQUE and
+        // MSGCHANNEL too — harmless while the matching consensus check was dead code (see
+        // src/consensus/tx_verify.cpp), but once that check is restored this wallet path must not
+        // build a transaction consensus will reject. Mirrors AvianNetwork/Avian commit 6314b8322.
+        if (assetType == AssetType::ROOT || assetType == AssetType::SUB) {
             CScript scriptOwnerNew = GetScriptForDestination(assetDest);
             asset.ConstructOwnerTransaction(scriptOwnerNew);
             if (!RequireLegacyAssetScriptLayout(scriptOwnerNew, error))

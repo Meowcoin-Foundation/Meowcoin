@@ -169,6 +169,11 @@ public:
         consensus.nMinimumChainWork = uint256{"0000000000000000000000000000000000000000000000197526491f2a073489"};
         consensus.defaultAssumeValid = uint256{"0000000001325379def7e999973c963c62bac9bc150b466008bcfd49054d8c79"}; // Block 1911844
 
+        // Asset transfer amount overflow fix (see AvianNetwork/Avian PR #251, same defect class):
+        // activates ~mid/late September 2026 at 1-minute block times, giving pools/exchanges
+        // several weeks' upgrade lead time ahead of the enforced height.
+        consensus.nAssetTransferOverflowFixHeight = 2085000;
+
         /**
          * The message start string is designed to be unlikely to occur in normal data.
          */
@@ -353,6 +358,8 @@ public:
         consensus.nMinimumChainWork = uint256{"0000000000000000000000000000000000000000000000000000000000100010"};
         consensus.defaultAssumeValid = uint256{"000000eaab417d6dfe9bd75119972e1d07ecfe8ff655bef7c2acb3d9a0eeed81"};
 
+        consensus.nAssetTransferOverflowFixHeight = 0; // Active from genesis on testnet
+
         pchMessageStart[0] = 0x6e;
         pchMessageStart[1] = 0x66;
         pchMessageStart[2] = 0x78;
@@ -477,6 +484,8 @@ public:
 
         consensus.nMinimumChainWork = uint256{};
         consensus.defaultAssumeValid = uint256{};
+
+        consensus.nAssetTransferOverflowFixHeight = 0; // Active from genesis on signet
 
         pchMessageStart[0] = 0x53; // S
         pchMessageStart[1] = 0x49; // I
@@ -610,6 +619,8 @@ public:
 
         consensus.nMinimumChainWork = uint256{};
         consensus.defaultAssumeValid = uint256{};
+
+        consensus.nAssetTransferOverflowFixHeight = 0; // Active from genesis on regtest
 
         pchMessageStart[0] = 0x44;
         pchMessageStart[1] = 0x52;
