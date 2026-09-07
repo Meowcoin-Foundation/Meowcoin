@@ -1057,6 +1057,21 @@ bool BlockManager::ReadBlock(CBlock& block, const CBlockIndex& index) const
     return ReadBlock(block, block_pos, index.GetBlockHash());
 }
 
+bool BlockManager::ReadBlockHeader(CBlockHeader& header, const CBlockIndex& index) const
+{
+    if (!index.nVersion.IsAuxpow()) {
+        header = index.GetBlockHeader();
+        return true;
+    }
+
+    CBlock block;
+    if (!ReadBlock(block, index)) {
+        return false;
+    }
+    header = block.GetBlockHeader();
+    return true;
+}
+
 bool BlockManager::ReadRawBlock(std::vector<std::byte>& block, const FlatFilePos& pos) const
 {
     if (pos.nPos < STORAGE_HEADER_BYTES) {

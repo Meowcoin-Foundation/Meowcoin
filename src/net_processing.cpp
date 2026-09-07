@@ -4226,7 +4226,16 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         LogDebug(BCLog::NET, "getheaders %d to %s from peer=%d\n", (pindex ? pindex->nHeight : -1), hashStop.IsNull() ? "end" : hashStop.ToString(), pfrom.GetId());
         for (; pindex; pindex = m_chainman.ActiveChain().Next(pindex))
         {
-            vHeaders.emplace_back(pindex->GetBlockHeader());
+            CBlockHeader header;
+            if (!m_chainman.m_blockman.ReadBlockHeader(header, *pindex)) {
+                // Data unavailable (e.g. pruned) -- stop here rather than send
+                // an AuxPoW header with its proof missing, which every peer
+                // would reject as bad-auxpow-missing.
+                LogDebug(BCLog::NET, "%s: failed to read header for block %s, truncating response to peer=%d\n",
+                        __func__, pindex->GetBlockHash().ToString(), pfrom.GetId());
+                break;
+            }
+            vHeaders.emplace_back(header);
             if (--nLimit <= 0 || pindex->GetBlockHash() == hashStop)
                 break;
         }
@@ -5647,16 +5656,24 @@ bool PeerManagerImpl::SendMessages(CNode* pto)
                         break;
                     }
                     pBestIndex = pindex;
+                    CBlockHeader header;
+                    if (!m_chainman.m_blockman.ReadBlockHeader(header, *pindex)) {
+                        // Data unavailable -- revert to inv rather than announce
+                        // an AuxPoW header with its proof missing (every peer
+                        // would reject that as bad-auxpow-missing).
+                        fRevertToInv = true;
+                        break;
+                    }
                     if (fFoundStartingHeader) {
                         // add this to the headers message
-                        vHeaders.emplace_back(pindex->GetBlockHeader());
+                        vHeaders.emplace_back(header);
                     } else if (PeerHasHeader(&state, pindex)) {
                         continue; // keep looking for the first new block
                     } else if (pindex->pprev == nullptr || PeerHasHeader(&state, pindex->pprev)) {
                         // Peer doesn't have this header but they do have the prior one.
                         // Start sending headers.
                         fFoundStartingHeader = true;
-                        vHeaders.emplace_back(pindex->GetBlockHeader());
+                        vHeaders.emplace_back(header);
                     } else {
                         // Peer doesn't have this header or the prior one -- nothing will
                         // connect, so bail out.

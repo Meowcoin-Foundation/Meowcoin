@@ -415,6 +415,18 @@ public:
     bool ReadBlock(CBlock& block, const CBlockIndex& index) const;
     bool ReadRawBlock(std::vector<std::byte>& block, const FlatFilePos& pos) const;
 
+    /**
+     * Read a block's header, restoring its AuxPoW payload when present.
+     *
+     * CBlockIndex does not retain the AuxPoW data (the parent-chain merge-mining
+     * proof) in memory, so CBlockIndex::GetBlockHeader() alone is not sufficient
+     * to reconstruct a valid header for an AuxPoW block: it comes back with
+     * nVersion.IsAuxpow() set but auxpow == nullptr, which every peer's
+     * CheckBlockHeader() rejects as "bad-auxpow-missing". This re-reads the
+     * full block from disk for AuxPoW entries to recover the real auxpow.
+     */
+    bool ReadBlockHeader(CBlockHeader& header, const CBlockIndex& index) const;
+
     bool ReadBlockUndo(CBlockUndo& blockundo, const CBlockIndex& index) const;
 
     void CleanupBlockRevFiles() const;
