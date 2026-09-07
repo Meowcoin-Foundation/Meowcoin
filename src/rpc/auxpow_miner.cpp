@@ -92,14 +92,24 @@ uint256 TemplateCache::createBlock(const CScript& scriptPubKey,
 
     // Cache the template.
     {
+        // Use the actual current chain tip as the eviction reference, not
+        // this build's own hashPrevBlock: createNewBlock() releases cs_main
+        // internally, so a slow or racing call can finish after the tip has
+        // already moved again. Evicting based on a stale hashPrevBlock would
+        // wrongly delete a different, fresher template that another
+        // (faster) call already cached and may have already handed out for
+        // the real current tip.
+        const uint256 current_tip_hash = WITH_LOCK(chainman.GetMutex(),
+            return chainman.ActiveTip() ? chainman.ActiveTip()->GetBlockHash() : uint256());
+
         std::lock_guard<std::mutex> lock(m_cs);
 
         // Drop templates left over from a previous tip: once the tip moves,
         // they can no longer be submitted successfully, so there's no
         // reason to keep them around.
-        if (m_last_prev_hash != pblock->hashPrevBlock) {
+        if (m_last_prev_hash != current_tip_hash) {
             for (auto it = m_templates.begin(); it != m_templates.end(); ) {
-                if (it->second->hashPrevBlock != pblock->hashPrevBlock) {
+                if (it->second->hashPrevBlock != current_tip_hash) {
                     it = m_templates.erase(it);
                 } else {
                     ++it;
@@ -110,7 +120,7 @@ uint256 TemplateCache::createBlock(const CScript& scriptPubKey,
         m_templates[hash] = pblock;
         m_last_hash = hash;
         m_last_scriptPubKey = scriptPubKey;
-        m_last_prev_hash = pblock->hashPrevBlock;
+        m_last_prev_hash = current_tip_hash;
         m_last_mempool_seq = mempool_seq;
         m_last_build_time = std::chrono::steady_clock::now();
     }
