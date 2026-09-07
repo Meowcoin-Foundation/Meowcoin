@@ -4192,6 +4192,10 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         // block validation -- behind synchronous disk I/O held under the global
         // lock.
         std::vector<const CBlockIndex*> toSend;
+        // True if the chain walk below ran off the end of the active chain
+        // (rather than stopping early on nLimit/hashStop) -- i.e. we intended
+        // to cover everything up to the tip.
+        bool reachedChainEnd = false;
         {
             LOCK(cs_main);
 
@@ -4207,7 +4211,6 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 return;
             }
 
-            CNodeState *nodestate = State(pfrom.GetId());
             const CBlockIndex* pindex = nullptr;
             if (locator.IsNull())
             {
@@ -4238,24 +4241,18 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 if (--nLimit <= 0 || pindex->GetBlockHash() == hashStop)
                     break;
             }
-            // pindex can be nullptr either if we sent m_chainman.ActiveChain().Tip() OR
-            // if our peer has m_chainman.ActiveChain().Tip() (and thus we are sending an empty
-            // headers message). In both cases it's safe to update
-            // pindexBestHeaderSent to be our tip.
-            //
-            // It is important that we simply reset the BestHeaderSent value here,
-            // and not max(BestHeaderSent, newHeaderSent). We might have announced
-            // the currently-being-connected tip using a compact block, which
-            // resulted in the peer sending a headers request, which we respond to
-            // without the new block. By resetting the BestHeaderSent, we ensure we
-            // will re-announce the new block via headers (or compact blocks again)
-            // in the SendMessages logic.
-            nodestate->pindexBestHeaderSent = pindex ? pindex : m_chainman.ActiveChain().Tip();
+            // pindex is nullptr here if we walked off the end of the active
+            // chain, i.e. this response is intended to cover everything up
+            // to the tip (whether toSend ended up empty -- peer already has
+            // our tip -- or not). The actual pindexBestHeaderSent update
+            // happens after we know what was really sent, below.
+            reachedChainEnd = (pindex == nullptr);
         }
 
         // we must use CBlocks, as CBlockHeaders won't include the 0x00 nTx count at the end
         std::vector<CBlock> vHeaders;
         vHeaders.reserve(toSend.size());
+        const CBlockIndex* lastSent = nullptr;
         for (const CBlockIndex* pindex : toSend)
         {
             CBlockHeader header;
@@ -4268,8 +4265,30 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 break;
             }
             vHeaders.emplace_back(header);
+            lastSent = pindex;
         }
         MakeAndPushMessage(pfrom, NetMsgType::HEADERS, TX_WITH_WITNESS(vHeaders));
+
+        // Record what was actually sent, not what we intended to send: a
+        // read failure above (e.g. pruned data) can truncate the response
+        // short of toSend, and the peer must not be recorded as having
+        // received headers it never got.
+        //
+        // It is important that we simply reset the BestHeaderSent value
+        // here, and not max(BestHeaderSent, newHeaderSent). We might have
+        // announced the currently-being-connected tip using a compact
+        // block, which resulted in the peer sending a headers request,
+        // which we respond to without the new block. By resetting
+        // BestHeaderSent, we ensure we will re-announce the new block via
+        // headers (or compact blocks again) in the SendMessages logic.
+        {
+            LOCK(cs_main);
+            if (lastSent) {
+                State(pfrom.GetId())->pindexBestHeaderSent = lastSent;
+            } else if (reachedChainEnd) {
+                State(pfrom.GetId())->pindexBestHeaderSent = m_chainman.ActiveChain().Tip();
+            }
+        }
         return;
     }
 
