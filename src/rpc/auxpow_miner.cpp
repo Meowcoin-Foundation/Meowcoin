@@ -13,6 +13,7 @@
 #include <primitives/block.h>
 #include <script/script.h>
 #include <streams.h>
+#include <txmempool.h>
 #include <uint256.h>
 #include <util/strencodings.h>
 #include <validation.h>
@@ -23,8 +24,31 @@ namespace auxpow_miner {
 
 uint256 TemplateCache::createBlock(const CScript& scriptPubKey,
                                    interfaces::Mining& miner,
-                                   ChainstateManager& chainman)
+                                   ChainstateManager& chainman,
+                                   const CTxMemPool& mempool)
 {
+    const unsigned int mempool_seq = mempool.GetTransactionsUpdated();
+
+    // Reuse the most recently built candidate unless something that should
+    // actually change it has happened: a different payout address, the
+    // chain tip moving, or the mempool having changed *and* the rebuild
+    // debounce having elapsed. A static mempool and unchanged tip means we
+    // keep returning the same hash indefinitely -- matching legacy, where
+    // repeated polls only get a new job when there's a real reason for one.
+    {
+        std::lock_guard<std::mutex> lock(m_cs);
+        if (!m_last_hash.IsNull() &&
+            m_last_scriptPubKey == scriptPubKey &&
+            m_templates.count(m_last_hash) &&
+            (mempool_seq == m_last_mempool_seq ||
+             std::chrono::steady_clock::now() - m_last_build_time < MEMPOOL_REBUILD_DEBOUNCE)) {
+            const CBlockIndex* tip = WITH_LOCK(chainman.GetMutex(), return chainman.ActiveTip());
+            if (tip && tip->GetBlockHash() == m_last_prev_hash) {
+                return m_last_hash;
+            }
+        }
+    }
+
     // Create a new block template via the Mining interface.
     node::BlockCreateOptions opts;
     opts.coinbase_output_script = scriptPubKey;
@@ -69,7 +93,26 @@ uint256 TemplateCache::createBlock(const CScript& scriptPubKey,
     // Cache the template.
     {
         std::lock_guard<std::mutex> lock(m_cs);
+
+        // Drop templates left over from a previous tip: once the tip moves,
+        // they can no longer be submitted successfully, so there's no
+        // reason to keep them around.
+        if (m_last_prev_hash != pblock->hashPrevBlock) {
+            for (auto it = m_templates.begin(); it != m_templates.end(); ) {
+                if (it->second->hashPrevBlock != pblock->hashPrevBlock) {
+                    it = m_templates.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+        }
+
         m_templates[hash] = pblock;
+        m_last_hash = hash;
+        m_last_scriptPubKey = scriptPubKey;
+        m_last_prev_hash = pblock->hashPrevBlock;
+        m_last_mempool_seq = mempool_seq;
+        m_last_build_time = std::chrono::steady_clock::now();
     }
 
     return hash;
