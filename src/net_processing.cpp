@@ -4183,48 +4183,80 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             return;
         }
 
-        LOCK(cs_main);
-
-        // Don't serve headers from our active chain until our chainwork is at least
-        // the minimum chain work. This prevents us from starting a low-work headers
-        // sync that will inevitably be aborted by our peer.
-        if (m_chainman.ActiveTip() == nullptr ||
-                (m_chainman.ActiveTip()->nChainWork < m_chainman.MinimumChainWork() && !pfrom.HasPermission(NetPermissionFlags::Download))) {
-            LogDebug(BCLog::NET, "Ignoring getheaders from peer=%d because active chain has too little work; sending empty response\n", pfrom.GetId());
-            // Just respond with an empty headers message, to tell the peer to
-            // go away but not treat us as unresponsive.
-            MakeAndPushMessage(pfrom, NetMsgType::HEADERS, std::vector<CBlockHeader>());
-            return;
-        }
-
-        CNodeState *nodestate = State(pfrom.GetId());
-        const CBlockIndex* pindex = nullptr;
-        if (locator.IsNull())
+        // Collect the block indexes to serve while holding cs_main -- this part
+        // is cheap, in-memory pointer-chasing only. An AuxPoW header requires a
+        // full block read to recover its proof (see ReadBlockHeader), which is
+        // done below, after releasing cs_main: a peer requesting a long,
+        // AuxPoW-heavy range (routine mid-IBD, at or past the activation height)
+        // must not be able to stall the rest of the node -- other peers, RPC,
+        // block validation -- behind synchronous disk I/O held under the global
+        // lock.
+        std::vector<const CBlockIndex*> toSend;
         {
-            // If locator is null, return the hashStop block
-            pindex = m_chainman.m_blockman.LookupBlockIndex(hashStop);
-            if (!pindex) {
+            LOCK(cs_main);
+
+            // Don't serve headers from our active chain until our chainwork is at least
+            // the minimum chain work. This prevents us from starting a low-work headers
+            // sync that will inevitably be aborted by our peer.
+            if (m_chainman.ActiveTip() == nullptr ||
+                    (m_chainman.ActiveTip()->nChainWork < m_chainman.MinimumChainWork() && !pfrom.HasPermission(NetPermissionFlags::Download))) {
+                LogDebug(BCLog::NET, "Ignoring getheaders from peer=%d because active chain has too little work; sending empty response\n", pfrom.GetId());
+                // Just respond with an empty headers message, to tell the peer to
+                // go away but not treat us as unresponsive.
+                MakeAndPushMessage(pfrom, NetMsgType::HEADERS, std::vector<CBlockHeader>());
                 return;
             }
 
-            if (!BlockRequestAllowed(pindex)) {
-                LogDebug(BCLog::NET, "%s: ignoring request from peer=%i for old block header that isn't in the main chain\n", __func__, pfrom.GetId());
-                return;
+            CNodeState *nodestate = State(pfrom.GetId());
+            const CBlockIndex* pindex = nullptr;
+            if (locator.IsNull())
+            {
+                // If locator is null, return the hashStop block
+                pindex = m_chainman.m_blockman.LookupBlockIndex(hashStop);
+                if (!pindex) {
+                    return;
+                }
+
+                if (!BlockRequestAllowed(pindex)) {
+                    LogDebug(BCLog::NET, "%s: ignoring request from peer=%i for old block header that isn't in the main chain\n", __func__, pfrom.GetId());
+                    return;
+                }
             }
-        }
-        else
-        {
-            // Find the last block the caller has in the main chain
-            pindex = m_chainman.ActiveChainstate().FindForkInGlobalIndex(locator);
-            if (pindex)
-                pindex = m_chainman.ActiveChain().Next(pindex);
+            else
+            {
+                // Find the last block the caller has in the main chain
+                pindex = m_chainman.ActiveChainstate().FindForkInGlobalIndex(locator);
+                if (pindex)
+                    pindex = m_chainman.ActiveChain().Next(pindex);
+            }
+
+            int nLimit = m_opts.max_headers_result;
+            LogDebug(BCLog::NET, "getheaders %d to %s from peer=%d\n", (pindex ? pindex->nHeight : -1), hashStop.IsNull() ? "end" : hashStop.ToString(), pfrom.GetId());
+            for (; pindex; pindex = m_chainman.ActiveChain().Next(pindex))
+            {
+                toSend.push_back(pindex);
+                if (--nLimit <= 0 || pindex->GetBlockHash() == hashStop)
+                    break;
+            }
+            // pindex can be nullptr either if we sent m_chainman.ActiveChain().Tip() OR
+            // if our peer has m_chainman.ActiveChain().Tip() (and thus we are sending an empty
+            // headers message). In both cases it's safe to update
+            // pindexBestHeaderSent to be our tip.
+            //
+            // It is important that we simply reset the BestHeaderSent value here,
+            // and not max(BestHeaderSent, newHeaderSent). We might have announced
+            // the currently-being-connected tip using a compact block, which
+            // resulted in the peer sending a headers request, which we respond to
+            // without the new block. By resetting the BestHeaderSent, we ensure we
+            // will re-announce the new block via headers (or compact blocks again)
+            // in the SendMessages logic.
+            nodestate->pindexBestHeaderSent = pindex ? pindex : m_chainman.ActiveChain().Tip();
         }
 
         // we must use CBlocks, as CBlockHeaders won't include the 0x00 nTx count at the end
         std::vector<CBlock> vHeaders;
-        int nLimit = m_opts.max_headers_result;
-        LogDebug(BCLog::NET, "getheaders %d to %s from peer=%d\n", (pindex ? pindex->nHeight : -1), hashStop.IsNull() ? "end" : hashStop.ToString(), pfrom.GetId());
-        for (; pindex; pindex = m_chainman.ActiveChain().Next(pindex))
+        vHeaders.reserve(toSend.size());
+        for (const CBlockIndex* pindex : toSend)
         {
             CBlockHeader header;
             if (!m_chainman.m_blockman.ReadBlockHeader(header, *pindex)) {
@@ -4236,22 +4268,7 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                 break;
             }
             vHeaders.emplace_back(header);
-            if (--nLimit <= 0 || pindex->GetBlockHash() == hashStop)
-                break;
         }
-        // pindex can be nullptr either if we sent m_chainman.ActiveChain().Tip() OR
-        // if our peer has m_chainman.ActiveChain().Tip() (and thus we are sending an empty
-        // headers message). In both cases it's safe to update
-        // pindexBestHeaderSent to be our tip.
-        //
-        // It is important that we simply reset the BestHeaderSent value here,
-        // and not max(BestHeaderSent, newHeaderSent). We might have announced
-        // the currently-being-connected tip using a compact block, which
-        // resulted in the peer sending a headers request, which we respond to
-        // without the new block. By resetting the BestHeaderSent, we ensure we
-        // will re-announce the new block via headers (or compact blocks again)
-        // in the SendMessages logic.
-        nodestate->pindexBestHeaderSent = pindex ? pindex : m_chainman.ActiveChain().Tip();
         MakeAndPushMessage(pfrom, NetMsgType::HEADERS, TX_WITH_WITNESS(vHeaders));
         return;
     }
