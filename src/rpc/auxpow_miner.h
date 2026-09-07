@@ -18,6 +18,8 @@
 #include <util/hasher.h>
 
 #include <chrono>
+#include <cstddef>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -34,15 +36,19 @@ namespace auxpow_miner {
 /** Hold recent block templates keyed by block hash so a solved AuxPoW
  *  can be matched back to its template.  Thread-safe.
  *
- *  Also caches the most recently built candidate so repeated polls (as
- *  merge-miners typically do every few seconds) return the same hash
- *  instead of minting a brand-new template -- and therefore a new hash,
- *  since the header commits to nTime -- on every call. This mirrors the
- *  legacy (pre-rebase) AuxMiningCreateBlock caching rule: the candidate
- *  is rebuilt only when the chain tip changes, or when the mempool has
- *  actually changed *and* at least MEMPOOL_REBUILD_DEBOUNCE has passed
- *  since the last rebuild. A static mempool and unchanged tip means the
- *  same hash forever -- there is no rebuild-on-elapsed-time-alone case. */
+ *  Also caches the most recently built candidate, per payout address, so
+ *  repeated polls (as merge-miners typically do every few seconds) return
+ *  the same hash instead of minting a brand-new template -- and therefore a
+ *  new hash, since the header commits to nTime -- on every call. This
+ *  mirrors the legacy (pre-rebase) AuxMiningCreateBlock caching rule: the
+ *  candidate is rebuilt only when the chain tip changes, or when the
+ *  mempool has actually changed *and* at least MEMPOOL_REBUILD_DEBOUNCE has
+ *  passed since the last rebuild. A static mempool and unchanged tip means
+ *  the same hash forever -- there is no rebuild-on-elapsed-time-alone case.
+ *  Caching per address (rather than one shared slot) means a node fielding
+ *  more than one payout address -- multiple workers, or a mix of
+ *  getauxblock/createauxblock callers -- doesn't thrash the cache and lose
+ *  the benefit of this entirely. */
 class TemplateCache
 {
 public:
@@ -70,16 +76,25 @@ private:
      *  legacy's AuxMiningCreateBlock, which used the same 60s debounce. */
     static constexpr std::chrono::seconds MEMPOOL_REBUILD_DEBOUNCE{60};
 
+    /** Cap on the number of distinct payout addresses tracked at once, so a
+     *  node that's fielded requests from many different addresses over time
+     *  can't grow this bookkeeping without bound. Comfortably above any
+     *  realistic number of concurrent workers/addresses for one node. */
+    static constexpr std::size_t MAX_CACHED_ADDRESSES{16};
+
     std::mutex m_cs;
     std::unordered_map<uint256, std::shared_ptr<CBlock>, SaltedUint256Hasher> m_templates;
 
-    // Bookkeeping for the most recently built candidate, to decide whether
-    // a poll can be served from m_templates without rebuilding.
-    uint256 m_last_hash;
-    CScript m_last_scriptPubKey;
-    uint256 m_last_prev_hash;
-    unsigned int m_last_mempool_seq{0};
-    std::chrono::steady_clock::time_point m_last_build_time{};
+    // Bookkeeping for the most recently built candidate, per payout address,
+    // to decide whether a poll can be served from m_templates without
+    // rebuilding.
+    struct CachedCandidate {
+        uint256 hash;
+        uint256 prev_hash;
+        unsigned int mempool_seq{0};
+        std::chrono::steady_clock::time_point build_time{};
+    };
+    std::map<CScript, CachedCandidate> m_last_by_address;
 };
 
 } // namespace auxpow_miner

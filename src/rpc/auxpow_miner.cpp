@@ -29,22 +29,24 @@ uint256 TemplateCache::createBlock(const CScript& scriptPubKey,
 {
     const unsigned int mempool_seq = mempool.GetTransactionsUpdated();
 
-    // Reuse the most recently built candidate unless something that should
-    // actually change it has happened: a different payout address, the
-    // chain tip moving, or the mempool having changed *and* the rebuild
-    // debounce having elapsed. A static mempool and unchanged tip means we
-    // keep returning the same hash indefinitely -- matching legacy, where
+    // Reuse the most recently built candidate for this payout address unless
+    // something that should actually change it has happened: the chain tip
+    // moving, or the mempool having changed *and* the rebuild debounce
+    // having elapsed. A static mempool and unchanged tip means we keep
+    // returning the same hash indefinitely -- matching legacy, where
     // repeated polls only get a new job when there's a real reason for one.
+    // Kept per address so a node fielding more than one payout address
+    // doesn't thrash a single shared slot and lose this benefit entirely.
     {
         std::lock_guard<std::mutex> lock(m_cs);
-        if (!m_last_hash.IsNull() &&
-            m_last_scriptPubKey == scriptPubKey &&
-            m_templates.count(m_last_hash) &&
-            (mempool_seq == m_last_mempool_seq ||
-             std::chrono::steady_clock::now() - m_last_build_time < MEMPOOL_REBUILD_DEBOUNCE)) {
+        auto it = m_last_by_address.find(scriptPubKey);
+        if (it != m_last_by_address.end() &&
+            m_templates.count(it->second.hash) &&
+            (mempool_seq == it->second.mempool_seq ||
+             std::chrono::steady_clock::now() - it->second.build_time < MEMPOOL_REBUILD_DEBOUNCE)) {
             const CBlockIndex* tip = WITH_LOCK(chainman.GetMutex(), return chainman.ActiveTip());
-            if (tip && tip->GetBlockHash() == m_last_prev_hash) {
-                return m_last_hash;
+            if (tip && tip->GetBlockHash() == it->second.prev_hash) {
+                return it->second.hash;
             }
         }
     }
@@ -107,22 +109,31 @@ uint256 TemplateCache::createBlock(const CScript& scriptPubKey,
         // Drop templates left over from a previous tip: once the tip moves,
         // they can no longer be submitted successfully, so there's no
         // reason to keep them around.
-        if (m_last_prev_hash != current_tip_hash) {
-            for (auto it = m_templates.begin(); it != m_templates.end(); ) {
-                if (it->second->hashPrevBlock != current_tip_hash) {
-                    it = m_templates.erase(it);
-                } else {
-                    ++it;
-                }
+        for (auto it = m_templates.begin(); it != m_templates.end(); ) {
+            if (it->second->hashPrevBlock != current_tip_hash) {
+                it = m_templates.erase(it);
+            } else {
+                ++it;
             }
         }
 
         m_templates[hash] = pblock;
-        m_last_hash = hash;
-        m_last_scriptPubKey = scriptPubKey;
-        m_last_prev_hash = current_tip_hash;
-        m_last_mempool_seq = mempool_seq;
-        m_last_build_time = std::chrono::steady_clock::now();
+
+        auto it = m_last_by_address.find(scriptPubKey);
+        if (it == m_last_by_address.end() && m_last_by_address.size() >= MAX_CACHED_ADDRESSES) {
+            // Bound memory use: evict whichever tracked address was built
+            // longest ago to make room for this one.
+            auto oldest = m_last_by_address.begin();
+            for (auto cand = m_last_by_address.begin(); cand != m_last_by_address.end(); ++cand) {
+                if (cand->second.build_time < oldest->second.build_time) oldest = cand;
+            }
+            m_last_by_address.erase(oldest);
+        }
+        CachedCandidate& entry = m_last_by_address[scriptPubKey];
+        entry.hash = hash;
+        entry.prev_hash = current_tip_hash;
+        entry.mempool_seq = mempool_seq;
+        entry.build_time = std::chrono::steady_clock::now();
     }
 
     return hash;
