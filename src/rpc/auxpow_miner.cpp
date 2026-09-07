@@ -117,23 +117,38 @@ uint256 TemplateCache::createBlock(const CScript& scriptPubKey,
             }
         }
 
+        // Always keep the built template retrievable by hash: even a build
+        // that lost a race against a tip change (below) may already have had
+        // its hash handed to a caller, who must still be able to submit it.
         m_templates[hash] = pblock;
 
-        auto it = m_last_by_address.find(scriptPubKey);
-        if (it == m_last_by_address.end() && m_last_by_address.size() >= MAX_CACHED_ADDRESSES) {
-            // Bound memory use: evict whichever tracked address was built
-            // longest ago to make room for this one.
-            auto oldest = m_last_by_address.begin();
-            for (auto cand = m_last_by_address.begin(); cand != m_last_by_address.end(); ++cand) {
-                if (cand->second.build_time < oldest->second.build_time) oldest = cand;
+        // Only publish this build as the recommended candidate for this
+        // address if it actually reflects the current tip. createNewBlock()
+        // releases cs_main internally, so a slow or racing call can finish
+        // after the tip has already moved again; pblock->hashPrevBlock is
+        // fixed at that point and may no longer equal current_tip_hash. If we
+        // recorded current_tip_hash here regardless, a subsequent poll's
+        // cache-hit check (which only compares the tip against this
+        // recorded value) would incorrectly treat the stale build as current
+        // and keep serving it indefinitely, rather than rebuilding against
+        // the real tip.
+        if (pblock->hashPrevBlock == current_tip_hash) {
+            auto it = m_last_by_address.find(scriptPubKey);
+            if (it == m_last_by_address.end() && m_last_by_address.size() >= MAX_CACHED_ADDRESSES) {
+                // Bound memory use: evict whichever tracked address was built
+                // longest ago to make room for this one.
+                auto oldest = m_last_by_address.begin();
+                for (auto cand = m_last_by_address.begin(); cand != m_last_by_address.end(); ++cand) {
+                    if (cand->second.build_time < oldest->second.build_time) oldest = cand;
+                }
+                m_last_by_address.erase(oldest);
             }
-            m_last_by_address.erase(oldest);
+            CachedCandidate& entry = m_last_by_address[scriptPubKey];
+            entry.hash = hash;
+            entry.prev_hash = current_tip_hash;
+            entry.mempool_seq = mempool_seq;
+            entry.build_time = std::chrono::steady_clock::now();
         }
-        CachedCandidate& entry = m_last_by_address[scriptPubKey];
-        entry.hash = hash;
-        entry.prev_hash = current_tip_hash;
-        entry.mempool_seq = mempool_seq;
-        entry.build_time = std::chrono::steady_clock::now();
     }
 
     return hash;
