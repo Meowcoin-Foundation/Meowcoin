@@ -1069,6 +1069,24 @@ bool BlockManager::ReadBlockHeader(CBlockHeader& header, const CBlockIndex& inde
         return false;
     }
     header = block.GetBlockHeader();
+
+    // The AuxPoW's embedded parent-chain coinbase carries a witness field
+    // purely because every transaction object has one; CAuxPow::check() only
+    // ever reads scriptSig and the witness-independent txid, so nothing in
+    // consensus validation examines the witness itself. It also costs far
+    // less block-weight than non-witness data, making it by far the cheapest
+    // way to inflate a header's serialized size well past what a getheaders
+    // response can safely batch. Since header-only relay has no use for it,
+    // strip it here. This only affects the in-memory copy built for this
+    // call -- the original block on disk, and everything returned by
+    // getblock, is untouched.
+    if (header.auxpow && header.auxpow->tx) {
+        CMutableTransaction stripped{*header.auxpow->tx};
+        for (auto& txin : stripped.vin) {
+            txin.scriptWitness.SetNull();
+        }
+        header.auxpow->tx = MakeTransactionRef(std::move(stripped));
+    }
     return true;
 }
 
