@@ -4253,6 +4253,18 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
         std::vector<CBlock> vHeaders;
         vHeaders.reserve(toSend.size());
         const CBlockIndex* lastSent = nullptr;
+        // Headers are limited by count above (max_headers_result), but an
+        // AuxPoW header's embedded proof can vary hugely in size, so a batch
+        // that's small in count can still be far too large in bytes for a
+        // single P2P message. Track the actual serialized size and stop
+        // before it would exceed what the transport can send at all -- with
+        // a safety margin below the hard limit for the rest of the message
+        // framing. Always keep at least the first header: by block-weight
+        // limits alone, a single header (even a maximally padded AuxPoW one)
+        // is nowhere near this budget on its own, so this can never produce
+        // an empty, no-progress response.
+        static constexpr size_t HEADERS_RESPONSE_BYTE_BUDGET = MAX_PROTOCOL_MESSAGE_LENGTH - 1000;
+        size_t responseBytes = 0;
         for (const CBlockIndex* pindex : toSend)
         {
             CBlockHeader header;
@@ -4264,7 +4276,19 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
                         __func__, pindex->GetBlockHash().ToString(), pfrom.GetId());
                 break;
             }
-            vHeaders.emplace_back(header);
+            CBlock asHeader{header};
+            const size_t headerBytes = GetSerializeSize(TX_WITH_WITNESS(asHeader));
+            if (!vHeaders.empty() && responseBytes + headerBytes > HEADERS_RESPONSE_BYTE_BUDGET) {
+                // The rest of this batch (and any headers past it) will wait
+                // for the peer's next getheaders, which it derives from what
+                // it already received -- this is a smaller-than-requested
+                // response, not a truncated/broken one.
+                LogDebug(BCLog::NET, "%s: header response for peer=%d hit the size budget after %u headers, deferring the rest to a follow-up request\n",
+                        __func__, pfrom.GetId(), (unsigned)vHeaders.size());
+                break;
+            }
+            responseBytes += headerBytes;
+            vHeaders.emplace_back(std::move(asHeader));
             lastSent = pindex;
         }
         MakeAndPushMessage(pfrom, NetMsgType::HEADERS, TX_WITH_WITNESS(vHeaders));
