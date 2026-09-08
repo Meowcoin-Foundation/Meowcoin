@@ -4285,7 +4285,12 @@ void PeerManagerImpl::ProcessMessage(CNode& pfrom, const std::string& msg_type, 
             LOCK(cs_main);
             if (lastSent) {
                 State(pfrom.GetId())->pindexBestHeaderSent = lastSent;
-            } else if (reachedChainEnd) {
+            } else if (reachedChainEnd && toSend.empty()) {
+                // Genuinely nothing to send (the peer already has our tip),
+                // as opposed to toSend being non-empty but every read in it
+                // failing -- reachedChainEnd alone doesn't distinguish those,
+                // and the latter must not advance BestHeaderSent for a
+                // response that was actually empty.
                 State(pfrom.GetId())->pindexBestHeaderSent = m_chainman.ActiveChain().Tip();
             }
         }
