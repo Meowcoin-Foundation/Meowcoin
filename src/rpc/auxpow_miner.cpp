@@ -94,17 +94,24 @@ uint256 TemplateCache::createBlock(const CScript& scriptPubKey,
 
     // Cache the template.
     {
-        // Use the actual current chain tip as the eviction reference, not
-        // this build's own hashPrevBlock: createNewBlock() releases cs_main
-        // internally, so a slow or racing call can finish after the tip has
-        // already moved again. Evicting based on a stale hashPrevBlock would
-        // wrongly delete a different, fresher template that another
-        // (faster) call already cached and may have already handed out for
-        // the real current tip.
+        std::lock_guard<std::mutex> lock(m_cs);
+
+        // Read the tip while already holding m_cs, not before acquiring it:
+        // reading it first and acting on that snapshot afterward leaves a
+        // window where a different thread can acquire m_cs first, observe a
+        // newer tip, and publish a correct, up-to-date candidate for it --
+        // which this thread would then evict/overwrite using its own,
+        // already-stale snapshot. Reading it under the same lock we use to
+        // act on it closes that window: whichever thread gets here first
+        // sees a tip and acts on it atomically with respect to the other.
+        //
+        // This is also why the eviction below uses the actual tip rather
+        // than this build's own hashPrevBlock: createNewBlock() releases
+        // cs_main internally, so a slow or racing call can finish after the
+        // tip has already moved again, and evicting based on a stale
+        // hashPrevBlock would wrongly delete a different, fresher template.
         const uint256 current_tip_hash = WITH_LOCK(chainman.GetMutex(),
             return chainman.ActiveTip() ? chainman.ActiveTip()->GetBlockHash() : uint256());
-
-        std::lock_guard<std::mutex> lock(m_cs);
 
         // Drop templates left over from a previous tip: once the tip moves,
         // they can no longer be submitted successfully, so there's no
