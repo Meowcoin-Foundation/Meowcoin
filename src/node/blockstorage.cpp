@@ -1073,13 +1073,18 @@ bool BlockManager::ReadBlockHeader(CBlockHeader& header, const CBlockIndex& inde
     // The AuxPoW's embedded parent-chain coinbase carries a witness field
     // purely because every transaction object has one; CAuxPow::check() only
     // ever reads scriptSig and the witness-independent txid, so nothing in
-    // consensus validation examines the witness itself. It also costs far
-    // less block-weight than non-witness data, making it by far the cheapest
-    // way to inflate a header's serialized size well past what a getheaders
-    // response can safely batch. Since header-only relay has no use for it,
-    // strip it here. This only affects the in-memory copy built for this
-    // call -- the original block on disk, and everything returned by
-    // getblock, is untouched.
+    // consensus validation examines the witness itself -- it is pure dead
+    // weight for header-relay purposes. (It is not weight-discounted the way
+    // real segwit witness data is: CMerkleTx::SERIALIZE_METHODS hardcodes
+    // TX_WITH_WITNESS for this embedded transaction regardless of the
+    // enclosing block's own serialization mode, so GetBlockWeight() counts
+    // it in full -- the same 4 weight units per byte as any other data.
+    // Stripping it still shrinks the wire size by exactly what it removes;
+    // it just isn't a specially cheap place to have padded a header in the
+    // first place.) Since header-only relay has no use for it, strip it
+    // here. This only affects the in-memory copy built for this call -- the
+    // original block on disk, and everything returned by getblock, is
+    // untouched.
     if (header.auxpow && header.auxpow->tx) {
         CMutableTransaction stripped{*header.auxpow->tx};
         for (auto& txin : stripped.vin) {
