@@ -19,6 +19,7 @@
 
 #include <chrono>
 #include <cstddef>
+#include <list>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -81,9 +82,19 @@ private:
      *  can't grow this bookkeeping without bound. Comfortably above any
      *  realistic number of concurrent workers/addresses for one node. */
     static constexpr std::size_t MAX_CACHED_ADDRESSES{16};
+    static constexpr std::size_t MAX_CACHED_TEMPLATES{64};
+    static constexpr std::size_t MAX_TEMPLATE_BYTES{64 * 1024 * 1024};
 
     std::mutex m_cs;
-    std::unordered_map<uint256, std::shared_ptr<CBlock>, SaltedUint256Hasher> m_templates;
+    struct CachedTemplate {
+        std::shared_ptr<CBlock> block;
+        std::size_t bytes;
+        std::list<uint256>::iterator order;
+    };
+    std::unordered_map<uint256, CachedTemplate, SaltedUint256Hasher> m_templates;
+    std::list<uint256> m_template_order;
+    std::size_t m_template_bytes{0};
+    void eraseTemplate(decltype(m_templates)::iterator it);
 
     // Bookkeeping for the most recently built candidate, per payout address,
     // to decide whether a poll can be served from m_templates without

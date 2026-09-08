@@ -6,6 +6,7 @@
 # SOURCES property is processed to gather test suite macros.
 add_executable(test_meowcoin
   main.cpp
+  auxpow_relay_tests.cpp
   addrman_tests.cpp
   allocator_tests.cpp
   amount_tests.cpp

@@ -6,6 +6,7 @@
 
 #include <auxpow.h>
 #include <consensus/merkle.h>
+#include <core_memusage.h>
 #include <interfaces/mining.h>
 #include <logging.h>
 #include <node/miner.h>
@@ -21,6 +22,13 @@
 #include <cassert>
 
 namespace auxpow_miner {
+
+void TemplateCache::eraseTemplate(decltype(m_templates)::iterator it)
+{
+    m_template_bytes -= it->second.bytes;
+    m_template_order.erase(it->second.order);
+    m_templates.erase(it);
+}
 
 uint256 TemplateCache::createBlock(const CScript& scriptPubKey,
                                    interfaces::Mining& miner,
@@ -89,27 +97,22 @@ uint256 TemplateCache::createBlock(const CScript& scriptPubKey,
     // Recompute the merkle root after any modifications.
     pblock->hashMerkleRoot = BlockMerkleRoot(*pblock);
 
-    // The hash the parent chain must solve for (SHA256d of the pure header).
+    // The hash committed by the parent coinbase (Scrypt of the pure header).
     uint256 hash = pblock->GetHash();
 
     // Cache the template.
     {
+        // Match the cache-hit path's lock order. In particular, no other
+        // builder can publish a newer job between this tip snapshot and
+        // eviction. Block assembly above does not hold the cache mutex.
         std::lock_guard<std::mutex> lock(m_cs);
-
-        // Read the tip while already holding m_cs, not before acquiring it:
-        // reading it first and acting on that snapshot afterward leaves a
-        // window where a different thread can acquire m_cs first, observe a
-        // newer tip, and publish a correct, up-to-date candidate for it --
-        // which this thread would then evict/overwrite using its own,
-        // already-stale snapshot. Reading it under the same lock we use to
-        // act on it closes that window: whichever thread gets here first
-        // sees a tip and acts on it atomically with respect to the other.
-        //
-        // This is also why the eviction below uses the actual tip rather
-        // than this build's own hashPrevBlock: createNewBlock() releases
-        // cs_main internally, so a slow or racing call can finish after the
-        // tip has already moved again, and evicting based on a stale
-        // hashPrevBlock would wrongly delete a different, fresher template.
+        // Use the actual current chain tip as the eviction reference, not
+        // this build's own hashPrevBlock: createNewBlock() releases cs_main
+        // internally, so a slow or racing call can finish after the tip has
+        // already moved again. Evicting based on a stale hashPrevBlock would
+        // wrongly delete a different, fresher template that another
+        // (faster) call already cached and may have already handed out for
+        // the real current tip.
         const uint256 current_tip_hash = WITH_LOCK(chainman.GetMutex(),
             return chainman.ActiveTip() ? chainman.ActiveTip()->GetBlockHash() : uint256());
 
@@ -117,17 +120,31 @@ uint256 TemplateCache::createBlock(const CScript& scriptPubKey,
         // they can no longer be submitted successfully, so there's no
         // reason to keep them around.
         for (auto it = m_templates.begin(); it != m_templates.end(); ) {
-            if (it->second->hashPrevBlock != current_tip_hash) {
-                it = m_templates.erase(it);
+            if (it->second.block->hashPrevBlock != current_tip_hash) {
+                eraseTemplate(it++);
             } else {
                 ++it;
             }
         }
 
-        // Always keep the built template retrievable by hash: even a build
-        // that lost a race against a tip change (below) may already have had
-        // its hash handed to a caller, who must still be able to submit it.
-        m_templates[hash] = pblock;
+        // Keep the built template retrievable by hash, subject to the count
+        // and memory limits below. Eviction discards the oldest issued jobs.
+        if (auto existing = m_templates.find(hash); existing != m_templates.end()) {
+            eraseTemplate(existing);
+        }
+        // Count the complete transaction allocations, even when shared with
+        // another candidate. This conservatively bounds retained memory.
+        const std::size_t bytes = sizeof(CBlock) + RecursiveDynamicUsage(*pblock);
+        if (bytes > MAX_TEMPLATE_BYTES) {
+            throw std::runtime_error("Block template exceeds mining cache memory limit");
+        }
+        while (!m_templates.empty() &&
+               (m_templates.size() >= MAX_CACHED_TEMPLATES || m_template_bytes + bytes > MAX_TEMPLATE_BYTES)) {
+            eraseTemplate(m_templates.find(m_template_order.front()));
+        }
+        m_template_order.push_back(hash);
+        m_templates.emplace(hash, CachedTemplate{pblock, bytes, std::prev(m_template_order.end())});
+        m_template_bytes += bytes;
 
         // Only publish this build as the recommended candidate for this
         // address if it actually reflects the current tip. createNewBlock()
@@ -174,8 +191,8 @@ bool TemplateCache::submitBlock(const uint256& hashBlock,
                      hashBlock.GetHex());
             return false;
         }
-        pblock = it->second;
-        m_templates.erase(it);
+        pblock = it->second.block;
+        eraseTemplate(it);
     }
 
     // Deserialize the AuxPoW from hex.
@@ -205,7 +222,7 @@ std::shared_ptr<CBlock> TemplateCache::getBlock(const uint256& hash)
 {
     std::lock_guard<std::mutex> lock(m_cs);
     auto it = m_templates.find(hash);
-    if (it != m_templates.end()) return it->second;
+    if (it != m_templates.end()) return it->second.block;
     return nullptr;
 }
 

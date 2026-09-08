@@ -43,9 +43,16 @@ static const bool DEFAULT_PEERBLOOMFILTERS = false;
 static const bool DEFAULT_PEERBLOCKFILTERS = false;
 /** Maximum number of outstanding CMPCTBLOCK requests for the same block. */
 static const unsigned int MAX_CMPCTBLOCKS_INFLIGHT_PER_BLOCK = 3;
-/** Number of headers sent in one getheaders result. We rely on the assumption that if a peer sends
- *  less than this number, we reached its tip. Changing this value is a protocol upgrade. */
+/** Maximum number of headers in one getheaders result. A batch is full when
+ *  it reaches this count or HEADERS_BATCH_SIZE bytes. */
 static const unsigned int MAX_HEADERS_RESULTS = 2000;
+/** Legacy AuxPoW protocol 70031 sends a batch once its serialized headers
+ * reach 4 MiB. One final header may take it above that threshold, but never
+ * above 6 MiB. Sizes exclude the vector count and trailing transaction counts. */
+static constexpr size_t HEADERS_BATCH_SIZE{4 * 1024 * 1024};
+static constexpr size_t MAX_HEADERS_MESSAGE_SIZE{6 * 1024 * 1024};
+
+bool HeadersMessageIsFull(const std::vector<CBlockHeader>& headers, uint32_t max_headers_result = MAX_HEADERS_RESULTS);
 
 struct CNodeStateStats {
     int nSyncHeight = -1;
