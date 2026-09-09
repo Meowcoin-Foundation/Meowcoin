@@ -1057,6 +1057,88 @@ bool BlockManager::ReadBlock(CBlock& block, const CBlockIndex& index) const
     return ReadBlock(block, block_pos, index.GetBlockHash());
 }
 
+bool BlockManager::ReadBlockHeader(CBlockHeader& header, const CBlockIndex& index) const
+{
+    if (!index.nVersion.IsAuxpow()) {
+        header = index.GetBlockHeader();
+        return true;
+    }
+
+    const FlatFilePos pos{WITH_LOCK(cs_main, return index.GetBlockPos())};
+    if (pos.IsNull() || pos.nPos < STORAGE_HEADER_BYTES) return false;
+    const uint256 hash{index.GetBlockHash()};
+    {
+        LOCK(m_header_cache_mutex);
+        const auto it = m_header_cache.find(hash);
+        if (it != m_header_cache.end()) {
+            SpanReader{it->second.data} >> header;
+            m_header_cache_order.splice(m_header_cache_order.end(), m_header_cache_order, it->second.order);
+            return true;
+        }
+    }
+
+    AutoFile file{OpenBlockFile({pos.nFile, pos.nPos - STORAGE_HEADER_BYTES}, /*fReadOnly=*/true)};
+    if (file.IsNull()) return false;
+    try {
+        MessageStartChars magic;
+        uint32_t block_size;
+        file >> magic >> block_size;
+        if (magic != GetParams().MessageStart() || block_size > MAX_SIZE) return false;
+
+        // Decode only the header. A corrupt length/proof must not let the
+        // deserializer consume the next block record as part of this one.
+        BufferedFile reader{file, /*nBufSize=*/4096, /*nRewindIn=*/0};
+        reader.SetLimit(std::min<uint32_t>(block_size, MAX_BLOCK_WEIGHT / WITNESS_SCALE_FACTOR));
+        reader >> header;
+    } catch (const std::exception& e) {
+        LogError("Read block header failed for %s: %s", pos.ToString(), e.what());
+        return false;
+    }
+
+    // Compare every serialized pure-header field with the index instead of
+    // repeating the Scrypt hash on every disk read. Equality implies the same
+    // indexed block hash. AuxPoW does not serialize the native-PoW fields.
+    if (header.nVersion != index.nVersion ||
+        header.hashPrevBlock != (index.pprev ? index.pprev->GetBlockHash() : uint256{}) ||
+        header.hashMerkleRoot != index.hashMerkleRoot || header.nTime != index.nTime ||
+        header.nBits != index.nBits || header.nNonce != index.nNonce || !header.auxpow) {
+        LogError("Block header does not match index for %s", pos.ToString());
+        return false;
+    }
+
+    // The parent txid commits to scriptSig and outputs, but not witness.
+    // This only changes the returned header; the block on disk is untouched.
+    if (header.auxpow && header.auxpow->tx) {
+        CMutableTransaction stripped{*header.auxpow->tx};
+        for (auto& txin : stripped.vin) {
+            txin.scriptWitness.SetNull();
+        }
+        header.auxpow->tx = MakeTransactionRef(std::move(stripped));
+    }
+
+    DataStream serialized;
+    serialized << header;
+    std::vector<std::byte> data{serialized.begin(), serialized.end()};
+    if (data.capacity() <= MAX_HEADER_CACHE_BYTES) {
+        LOCK(m_header_cache_mutex);
+        // Another reader may have populated this entry while disk I/O ran.
+        if (!m_header_cache.contains(hash)) {
+            while (!m_header_cache.empty() &&
+                   (m_header_cache.size() >= MAX_HEADER_CACHE_ENTRIES ||
+                    m_header_cache_bytes + data.capacity() > MAX_HEADER_CACHE_BYTES)) {
+                auto oldest = m_header_cache.find(m_header_cache_order.front());
+                m_header_cache_bytes -= oldest->second.data.capacity();
+                m_header_cache.erase(oldest);
+                m_header_cache_order.pop_front();
+            }
+            m_header_cache_order.push_back(hash);
+            m_header_cache_bytes += data.capacity();
+            m_header_cache.emplace(hash, CachedHeader{std::move(data), std::prev(m_header_cache_order.end())});
+        }
+    }
+    return true;
+}
+
 bool BlockManager::ReadRawBlock(std::vector<std::byte>& block, const FlatFilePos& pos) const
 {
     if (pos.nPos < STORAGE_HEADER_BYTES) {

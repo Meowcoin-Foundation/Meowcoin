@@ -247,7 +247,11 @@ static bool rest_headers(const std::any& context,
     case RESTResponseFormat::BINARY: {
         DataStream ssHeader{};
         for (const CBlockIndex *pindex : headers) {
-            ssHeader << pindex->GetBlockHeader();
+            CBlockHeader header;
+            if (!chainman.m_blockman.ReadBlockHeader(header, *pindex)) {
+                return RESTERR(req, HTTP_NOT_FOUND, pindex->GetBlockHash().GetHex() + " not available (pruned data)");
+            }
+            ssHeader << header;
         }
 
         req->WriteHeader("Content-Type", "application/octet-stream");
@@ -258,7 +262,11 @@ static bool rest_headers(const std::any& context,
     case RESTResponseFormat::HEX: {
         DataStream ssHeader{};
         for (const CBlockIndex *pindex : headers) {
-            ssHeader << pindex->GetBlockHeader();
+            CBlockHeader header;
+            if (!chainman.m_blockman.ReadBlockHeader(header, *pindex)) {
+                return RESTERR(req, HTTP_NOT_FOUND, pindex->GetBlockHash().GetHex() + " not available (pruned data)");
+            }
+            ssHeader << header;
         }
 
         std::string strHex = HexStr(ssHeader) + "\n";

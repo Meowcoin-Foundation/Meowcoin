@@ -5,6 +5,8 @@
 #include <test/util/setup_common.h>
 
 #include <addrman.h>
+#include <assets/assetdb.h>
+#include <assets/assets.h>
 #include <banman.h>
 #include <chainparams.h>
 #include <common/system.h>
@@ -288,10 +290,23 @@ ChainTestingSetup::ChainTestingSetup(const ChainType chainType, TestOpts opts)
         m_node.chainman = std::make_unique<ChainstateManager>(*Assert(m_node.shutdown_signal), chainman_opts, blockman_opts);
     };
     m_make_chainman();
+
+    // ConnectTip flushes the global asset cache and asserts success once assets
+    // are deployed (validation.cpp), but passetsdb/passets/passetsCache are
+    // otherwise only created at real node startup (see AppInitMain in init.cpp).
+    // The test harness never runs node init, so any test whose fixture connects
+    // a block needs them set up here too. In-memory only; mirrors init.cpp.
+    passetsdb = new CAssetsDB(m_args.GetDataDirNet(), 1 << 20, /*fMemory=*/true, /*fWipe=*/true);
+    passets = new CAssetsCache();
+    passetsCache = new CLRUCache<std::string, CDatabasedAssetData>(MAX_CACHE_ASSETS_SIZE);
 }
 
 ChainTestingSetup::~ChainTestingSetup()
 {
+    delete passets; passets = nullptr;
+    delete passetsdb; passetsdb = nullptr;
+    delete passetsCache; passetsCache = nullptr;
+
     if (m_node.scheduler) m_node.scheduler->stop();
     if (m_node.validation_signals) m_node.validation_signals->FlushBackgroundCallbacks();
     m_node.connman.reset();

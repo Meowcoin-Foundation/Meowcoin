@@ -685,8 +685,12 @@ static RPCHelpMan getblockheader()
 
     if (!fVerbose)
     {
+        CBlockHeader header;
+        if (!chainman.m_blockman.ReadBlockHeader(header, *pblockindex)) {
+            throw JSONRPCError(RPC_MISC_ERROR, "Block not available (pruned data)");
+        }
         DataStream ssBlock{};
-        ssBlock << pblockindex->GetBlockHeader();
+        ssBlock << header;
         std::string strHex = HexStr(ssBlock);
         return strHex;
     }

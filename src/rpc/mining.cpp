@@ -1308,7 +1308,8 @@ static RPCHelpMan getauxblock()
 
     // Create a block template.
     Mining& miner = EnsureMining(node);
-    uint256 hash = g_auxpow_templates.createBlock(scriptPubKey, miner, chainman);
+    const CTxMemPool& mempool = EnsureMemPool(node);
+    uint256 hash = g_auxpow_templates.createBlock(scriptPubKey, miner, chainman, mempool);
     auto pblock = g_auxpow_templates.getBlock(hash);
     if (!pblock) {
         throw JSONRPCError(RPC_INTERNAL_ERROR, "Failed to create block template");
@@ -1401,7 +1402,8 @@ static RPCHelpMan createauxblock()
 
     // Create a block template.
     Mining& miner = EnsureMining(node);
-    uint256 hash = g_auxpow_templates.createBlock(scriptPubKey, miner, chainman);
+    const CTxMemPool& mempool = EnsureMemPool(node);
+    uint256 hash = g_auxpow_templates.createBlock(scriptPubKey, miner, chainman, mempool);
     auto pblock = g_auxpow_templates.getBlock(hash);
     if (!pblock) {
         throw JSONRPCError(RPC_INTERNAL_ERROR, "Failed to create block template");
