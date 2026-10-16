@@ -37,6 +37,9 @@ jobs:
             libevent-dev libboost-dev libsqlite3-dev \
             qt6-base-dev qt6-tools-dev qt6-l10n-tools libqrencode-dev
 
+      - name: Build liboqs (ML-DSA-44, pinned)
+        run: ci/install_liboqs.sh "$PWD/liboqs-prefix" -G Ninja
+
       - name: Cache ccache
         uses: actions/cache@v4
         with:
@@ -56,7 +59,8 @@ jobs:
             -DBUILD_FUZZ_BINARY=OFF \
             -DWITH_ZMQ=OFF \
             -DENABLE_IPC=OFF \
-            -DENABLE_WALLET=ON
+            -DENABLE_WALLET=ON \
+            -DCMAKE_PREFIX_PATH="$PWD/liboqs-prefix"
 
       - name: Build
         run: cmake --build build -j $(nproc)
@@ -102,6 +106,9 @@ jobs:
           # Workaround for libevent CMake compatibility
           sed -i '1s/^/set(ENV{CMAKE_POLICY_VERSION_MINIMUM} 3.5)\n/' "${VCPKG_INSTALLATION_ROOT}/scripts/ports.cmake"
 
+      - name: Build liboqs (ML-DSA-44, pinned)
+        run: ci/install_liboqs.sh "$(cygpath -m "$PWD/liboqs-prefix")" -A x64
+
       - name: Cache vcpkg tools
         uses: actions/cache@v4
         with:
@@ -125,7 +132,8 @@ jobs:
             -DBUILD_FUZZ_BINARY=OFF \
             -DWITH_ZMQ=OFF \
             -DVCPKG_MANIFEST_NO_DEFAULT_FEATURES=ON \
-            '-DVCPKG_MANIFEST_FEATURES=wallet;qt'
+            '-DVCPKG_MANIFEST_FEATURES=wallet;qt' \
+            -DCMAKE_PREFIX_PATH="$(cygpath -m "$PWD/liboqs-prefix")"
 
       - name: Build
         working-directory: build
@@ -167,6 +175,9 @@ jobs:
         run: |
           brew install --quiet coreutils ninja pkgconf ccache boost libevent qt@6 qrencode
 
+      - name: Build liboqs (ML-DSA-44, pinned)
+        run: ci/install_liboqs.sh "$PWD/liboqs-prefix" -G Ninja -DOQS_DIST_BUILD=OFF
+
       - name: Cache ccache
         uses: actions/cache@v4
         with:
@@ -186,7 +197,8 @@ jobs:
             -DBUILD_FUZZ_BINARY=OFF \
             -DWITH_ZMQ=OFF \
             -DENABLE_IPC=OFF \
-            -DENABLE_WALLET=ON
+            -DENABLE_WALLET=ON \
+            -DCMAKE_PREFIX_PATH="$PWD/liboqs-prefix"
 
       - name: Build
         run: cmake --build build -j $(sysctl -n hw.logicalcpu)
