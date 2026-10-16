@@ -136,7 +136,7 @@ deployment is active (`src/wallet/rpc/addresses.cpp:69-75`).
 Wallets derive ML-DSA-44 keys through a descriptor:
 
 ```
-mldsa44(<xpub>/25h/1669h/0h/<0h|1h>/*h)        (purpose 25 = RIP-25, coin type 1669 = Meowcoin; 1 on test networks)
+mldsa44(<xpub>/25h/<0h|1h>/0h/<0h|1h>/*h)     (purpose 25 = RIP-25; coin type 0h on mainnet, 1h on test networks)
 ```
 
 All steps are hardened; the final step must be `/*h` (`src/script/descriptor.cpp:2678-2717`,
@@ -169,8 +169,10 @@ Implementation: `src/crypto/mldsa.cpp` `KeyGenFromSeed` computes `xi` and runs F
 (`..._keypair_internal(pk, sk, seed)`, mldsa-native backend, liboqs >= 0.16), a standardized
 byte-buffer contract with no struct-ABI coupling. liboqs exposes no public seeded keypair, so this
 one internal symbol is the only such dependency; sign and verify use the public context-string API.
-Because `KeyGen_internal(xi)` is standardized, the output was confirmed byte-identical across the
-0.12.0 pqcrystals backend and the 0.16.0 mldsa-native backend. This replaces the original approach,
+Because `KeyGen_internal(xi)` is standardized, the output is implementation-independent: Avian
+confirmed it byte-identical across the liboqs 0.12.0 pqcrystals and 0.16.0 mldsa-native backends,
+and the Meowcoin vectors below were reproduced with an independent pure-Python FIPS 204
+implementation (dilithium-py). This replaces the original approach,
 which forced determinism by temporarily swapping liboqs's global RNG for a SHA256 counter-mode KDF
 and so coupled every address to liboqs's internal RNG call order.
 
