@@ -133,6 +133,23 @@ class MLDsa44Test(BitcoinTestFramework):
         self.mine(node, 1)
         utxo = node.listunspent(1, 9999999, [spend_addr])[0]
 
+        self.log.info("Test an activated node rejects a tampered PQ signature")
+        unsigned = node.createrawtransaction(
+            [{"txid": utxo["txid"], "vout": utxo["vout"]}], {legacy_dest: 9.0})
+        signed = node.signrawtransactionwithwallet(unsigned)
+        assert_equal(signed["complete"], True)
+        # Disable only the test's fee ceiling; the same valid transaction must
+        # pass first, so an unrelated fee/input/policy failure cannot mask a
+        # missing activation flag or an anyone-can-spend consensus path.
+        assert_equal(node.testmempoolaccept([signed["hex"]], 0)[0]["allowed"], True)
+        signature = node.decoderawtransaction(signed["hex"])["vin"][0]["txinwitness"][0]
+        assert_equal(signed["hex"].count(signature), 1)
+        damaged = bytes([int(signature[:2], 16) ^ 1]).hex() + signature[2:]
+        tampered = signed["hex"].replace(signature, damaged, 1)
+        rejection = node.testmempoolaccept([tampered], 0)[0]
+        assert_equal(rejection["allowed"], False)
+        assert "signature" in str(rejection).lower(), rejection
+
         res = node.send(
             outputs={legacy_dest: 9.0},
             options={"inputs": [{"txid": utxo["txid"], "vout": utxo["vout"]}],
