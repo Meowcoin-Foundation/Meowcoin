@@ -48,6 +48,11 @@ Build with the SHA-256-pinned liboqs 0.16.0 from `ci/install_liboqs.sh` or
 `depends`, with tests and the wallet enabled. Build all command-line tools,
 not just the test executable: this also checks consensus-library linkage.
 
+On macOS, first run `ci/install_boost_headers.sh "$PWD/boost-prefix"` and
+add `-DBoost_ROOT="$PWD/boost-prefix"` to the configure command below. This
+uses the SHA-256-pinned Boost 1.88.0 from the dependency recipe; current
+Homebrew Boost releases are incompatible with the existing index-list types.
+
 ```sh
 ci/install_liboqs.sh "$PWD/liboqs-prefix" -G Ninja
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo \
