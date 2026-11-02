@@ -3691,6 +3691,20 @@ util::Result<void> CWallet::SetupPostQuantumDescriptors(bool internal)
     if (!master_key) {
         return util::Error{_("No wallet root available. Import post-quantum descriptors or create a new descriptor wallet.")};
     }
+    // Inactive ranged imports may already track used addresses, including
+    // equivalent paths written with apostrophes instead of 'h' (different
+    // descriptor IDs). Require explicit activation/import rather than replacing
+    // a manager, resetting its index, or reissuing its addresses from index zero.
+    for (auto* spkm : GetAllScriptPubKeyMans()) {
+        if (spkm == GetScriptPubKeyMan(OutputType::PQ, false) || spkm == GetScriptPubKeyMan(OutputType::PQ, true)) continue;
+        auto* desc_spkm = dynamic_cast<DescriptorScriptPubKeyMan*>(spkm);
+        if (!desc_spkm) continue;
+        LOCK(desc_spkm->cs_desc_man);
+        const auto desc = desc_spkm->GetWalletDescriptor();
+        if (desc.descriptor->IsRange() && desc.descriptor->GetOutputType() == OutputType::PQ) {
+            return util::Error{_("An inactive post-quantum descriptor is already stored. Import explicitly active post-quantum descriptors to preserve existing address indexes.")};
+        }
+    }
     if (!RunWithinTxn(GetDatabase(), "setup post-quantum descriptors", [&](WalletBatch& batch) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet) {
         for (bool internal : {false, true}) {
             if (!GetScriptPubKeyMan(OutputType::PQ, internal)) {

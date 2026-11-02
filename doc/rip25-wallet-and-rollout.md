@@ -33,7 +33,10 @@ and address caches.
 The automatic upgrade only uses an unambiguous depth-zero root with a local
 private key. An account-only, external-signer, or ambiguous multi-root wallet
 must import explicit PQ descriptors or use a new locally managed descriptor
-wallet. An explicitly imported PQ receive descriptor can generate receive
+wallet. If inactive ranged PQ descriptors are already stored, explicitly
+activate/import the intended descriptors with `importdescriptors`; the
+automatic upgrade preserves their address indexes, including equivalent paths
+written with `h` or apostrophes. An explicitly imported PQ receive descriptor can generate receive
 addresses without a change descriptor or local private keys, while its cached
 range remains available.
 

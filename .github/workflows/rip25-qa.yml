@@ -60,6 +60,15 @@ jobs:
       - name: Build pinned liboqs (Windows)
         if: runner.os == 'Windows'
         run: ci/install_liboqs.sh "$(cygpath -m "$PWD/liboqs-prefix")" -A x64
+      - name: Cache Windows dependency binaries
+        if: runner.os == 'Windows'
+        uses: actions/cache@v4
+        with:
+          path: ~/AppData/Local/vcpkg/archives
+          key: win-rip25-vcpkg-binary-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            win-rip25-vcpkg-binary-
+            win-vcpkg-binary-
       - name: Configure (Unix)
         if: runner.os != 'Windows'
         run: |

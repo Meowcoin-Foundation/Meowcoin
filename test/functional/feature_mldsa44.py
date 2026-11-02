@@ -10,6 +10,8 @@ any activation block logic.
 
 import os
 
+from test_framework.descriptors import descsum_create
+
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import (
     assert_equal,
@@ -350,6 +352,30 @@ class MLDsa44Test(BitcoinTestFramework):
         assert_raises_rpc_error(-12, "Multiple wallet roots", ambiguous.getnewaddress, "", "pq")
         assert_equal(len(ambiguous.listdescriptors()["descriptors"]), 2)
         assert_equal(ambiguous.getaddressinfo(ambiguous.getnewaddress("", "legacy"))["ismine"], True)
+
+        self.log.info("Test an existing inactive PQ descriptor is never replaced")
+        existing_pq = next(d for d in w0.listdescriptors(True)["descriptors"]
+                           if d["desc"].startswith("mldsa44(") and not d["internal"])
+        assert existing_pq["next"] > 0
+        for style in ("h", "apostrophe"):
+            name = "pq_inactive_" + style
+            node.createwallet(name, blank=True)
+            imported = node.get_wallet_rpc(name)
+            for result in imported.importdescriptors(imports):
+                assert_equal(result["success"], True)
+            descriptor = existing_pq["desc"].split("#")[0]
+            if style == "apostrophe":
+                for step in ("25", "0", "1", "*"):
+                    descriptor = descriptor.replace("/" + step + "h", "/" + step + "'")
+            result = imported.importdescriptors([{
+                "desc": descsum_create(descriptor), "timestamp": "now", "active": False,
+                "range": existing_pq["range"], "next_index": existing_pq["next"],
+            }])[0]
+            assert_equal(result["success"], True)
+            before = imported.listdescriptors()
+            assert_raises_rpc_error(-12, "already stored", imported.getnewaddress, "", "pq")
+            assert_equal(imported.listdescriptors(), before)
+            assert_equal(imported.getaddressinfo(pq_addr)["ismine"], True)
 
         self.log.info("All ML-DSA-44 tests passed")
 
