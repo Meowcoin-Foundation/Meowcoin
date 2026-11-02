@@ -25,6 +25,7 @@
 #include <cstdint>
 #include <functional>
 #include <limits>
+#include <list>
 #include <map>
 #include <memory>
 #include <optional>
@@ -141,6 +142,20 @@ class BlockManager
     friend ChainstateManager;
 
 private:
+    // Serialized headers avoid sharing mutable AuxPoW objects with callers.
+    // Bound both payload bytes and container overhead; only disk-backed
+    // AuxPoW entries use this cache.
+    static constexpr size_t MAX_HEADER_CACHE_BYTES{16 * 1024 * 1024};
+    static constexpr size_t MAX_HEADER_CACHE_ENTRIES{4096};
+    struct CachedHeader {
+        std::vector<std::byte> data;
+        std::list<uint256>::iterator order;
+    };
+    mutable Mutex m_header_cache_mutex;
+    mutable std::unordered_map<uint256, CachedHeader, SaltedUint256Hasher> m_header_cache GUARDED_BY(m_header_cache_mutex);
+    mutable std::list<uint256> m_header_cache_order GUARDED_BY(m_header_cache_mutex);
+    mutable size_t m_header_cache_bytes GUARDED_BY(m_header_cache_mutex){0};
+
     const CChainParams& GetParams() const { return m_opts.chainparams; }
     const Consensus::Params& GetConsensus() const { return m_opts.chainparams.GetConsensus(); }
     /**
@@ -423,7 +438,9 @@ public:
      * to reconstruct a valid header for an AuxPoW block: it comes back with
      * nVersion.IsAuxpow() set but auxpow == nullptr, which every peer's
      * CheckBlockHeader() rejects as "bad-auxpow-missing". This re-reads the
-     * full block from disk for AuxPoW entries to recover the real auxpow.
+     * header prefix from disk for AuxPoW entries to recover the real auxpow.
+     * A bounded cache avoids repeating disk reads. Parent coinbase witness,
+     * which is not part of the AuxPoW commitment, is omitted from the result.
      */
     bool ReadBlockHeader(CBlockHeader& header, const CBlockIndex& index) const;
 
