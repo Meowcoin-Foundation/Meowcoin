@@ -24,7 +24,12 @@ WORK="$(mktemp -d)"
 cd "${WORK}"
 curl --location --fail --retry 3 -o liboqs.tar.gz \
   "https://github.com/open-quantum-safe/liboqs/archive/refs/tags/${LIBOQS_VERSION}.tar.gz"
-echo "${LIBOQS_SHA256}  liboqs.tar.gz" | sha256sum -c -
+if command -v sha256sum >/dev/null 2>&1; then
+  echo "${LIBOQS_SHA256}  liboqs.tar.gz" | sha256sum -c -
+else
+  # macOS provides shasum by default, without GNU coreutils.
+  echo "${LIBOQS_SHA256}  liboqs.tar.gz" | shasum -a 256 -c -
+fi
 tar xzf liboqs.tar.gz
 
 cmake -S "liboqs-${LIBOQS_VERSION}" -B build \

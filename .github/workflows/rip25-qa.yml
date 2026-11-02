@@ -7,6 +7,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: rip25-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   rip25:
     strategy:
@@ -15,6 +19,8 @@ jobs:
         os: [ubuntu-24.04, windows-2022, macos-14]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 120
+    env:
+      PYTHONUTF8: 1
     defaults:
       run:
         shell: bash
@@ -35,9 +41,19 @@ jobs:
         if: runner.os == 'Windows'
         with:
           arch: x64
+      - name: Configure vcpkg build compatibility
+        if: runner.os == 'Windows'
+        run: |
+          echo 'set(VCPKG_BUILD_TYPE release)' >> "${VCPKG_INSTALLATION_ROOT}/triplets/x64-windows.cmake"
+          sed -i '1s/^/set(ENV{CMAKE_POLICY_VERSION_MINIMUM} 3.5)\n/' "${VCPKG_INSTALLATION_ROOT}/scripts/ports.cmake"
       - name: Build pinned liboqs (Unix)
         if: runner.os != 'Windows'
-        run: ci/install_liboqs.sh "$PWD/liboqs-prefix" -G Ninja
+        run: |
+          if [[ "$RUNNER_OS" == macOS ]]; then
+            ci/install_liboqs.sh "$PWD/liboqs-prefix" -G Ninja -DOQS_DIST_BUILD=OFF
+          else
+            ci/install_liboqs.sh "$PWD/liboqs-prefix" -G Ninja
+          fi
       - name: Build pinned liboqs (Windows)
         if: runner.os == 'Windows'
         run: ci/install_liboqs.sh "$(cygpath -m "$PWD/liboqs-prefix")" -A x64
