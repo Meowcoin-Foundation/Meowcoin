@@ -173,7 +173,10 @@ jobs:
         env:
           HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: 1
         run: |
-          brew install --quiet coreutils ninja pkgconf ccache boost libevent qt@6 qrencode
+          brew install --quiet coreutils ninja pkgconf ccache libevent qt@6 qrencode
+
+      - name: Install pinned Boost headers
+        run: ci/install_boost_headers.sh "$PWD/boost-prefix"
 
       - name: Build liboqs (ML-DSA-44, pinned)
         run: ci/install_liboqs.sh "$PWD/liboqs-prefix" -G Ninja -DOQS_DIST_BUILD=OFF
@@ -198,6 +201,7 @@ jobs:
             -DWITH_ZMQ=OFF \
             -DENABLE_IPC=OFF \
             -DENABLE_WALLET=ON \
+            -DBoost_ROOT="$PWD/boost-prefix" \
             -DCMAKE_PREFIX_PATH="$PWD/liboqs-prefix"
 
       - name: Build

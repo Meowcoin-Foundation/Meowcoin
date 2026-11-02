@@ -1,2 +1,3 @@
 src/clientversion.cpp export-subst
 ci/install_liboqs.sh text eol=lf
+ci/install_boost_headers.sh text eol=lf

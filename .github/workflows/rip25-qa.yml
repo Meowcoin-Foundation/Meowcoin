@@ -36,7 +36,10 @@ jobs:
           sudo apt-get install -y build-essential cmake ninja-build pkgconf libevent-dev libboost-dev libboost-test-dev libsqlite3-dev
       - name: Install macOS dependencies
         if: runner.os == 'macOS'
-        run: brew install cmake ninja pkgconf boost libevent sqlite
+        run: brew install cmake ninja pkgconf libevent sqlite
+      - name: Install pinned Boost headers (macOS)
+        if: runner.os == 'macOS'
+        run: ci/install_boost_headers.sh "$PWD/boost-prefix"
       - uses: ilammy/msvc-dev-cmd@v1
         if: runner.os == 'Windows'
         with:
@@ -60,10 +63,14 @@ jobs:
       - name: Configure (Unix)
         if: runner.os != 'Windows'
         run: |
+          boost_args=()
+          if [[ "$RUNNER_OS" == macOS ]]; then
+            boost_args=(-DBoost_ROOT="$PWD/boost-prefix")
+          fi
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo \
             -DCMAKE_PREFIX_PATH="$PWD/liboqs-prefix" -DBUILD_GUI=OFF \
             -DBUILD_TESTS=ON -DBUILD_BENCH=OFF -DBUILD_FUZZ_BINARY=OFF \
-            -DENABLE_IPC=OFF -DWITH_ZMQ=OFF
+            -DENABLE_IPC=OFF -DWITH_ZMQ=OFF "${boost_args[@]}"
       - name: Configure (Windows)
         if: runner.os == 'Windows'
         run: |
