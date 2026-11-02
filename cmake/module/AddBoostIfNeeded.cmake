@@ -45,6 +45,14 @@ function(add_boost_if_needed)
     # We don't use multi_index serialization.
     BOOST_MULTI_INDEX_DISABLE_SERIALIZATION
   )
+  if(Boost_VERSION VERSION_GREATER_EQUAL 1.92.0)
+    # New Boost defaults to Mp11-only index lists and leaves indexed_by
+    # undefined. Our named index lists inherit from indexed_by, so retain the
+    # supported MPL compatibility mode rather than changing mempool indexes.
+    target_compile_definitions(Boost::headers INTERFACE
+      BOOST_MULTI_INDEX_ENABLE_MPL_SUPPORT
+    )
+  endif()
   if(DEFINED VCPKG_TARGET_TRIPLET)
     # Workaround for https://github.com/microsoft/vcpkg/issues/36955.
     target_compile_definitions(Boost::headers INTERFACE
