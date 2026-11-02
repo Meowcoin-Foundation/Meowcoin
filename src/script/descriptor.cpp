@@ -2234,20 +2234,12 @@ public:
         }
         CExtKey leaf;
         if (!GetLeafExtKey(pos, arg, leaf)) return std::nullopt;
-        std::array<uint8_t, mldsa::SEED_SIZE> seed;
-        std::memcpy(seed.data(), leaf.key.begin(), mldsa::SEED_SIZE);
-        std::array<uint8_t, mldsa::PUBKEY_SIZE> pubkey_buf;
-        std::array<uint8_t, mldsa::SECRETKEY_SIZE> seckey_buf;
-        if (!mldsa::KeyGenFromSeed(pubkey_buf, seckey_buf, seed)) return std::nullopt;
-
-        uint256 wp;
-        CSHA256().Write(pubkey_buf.data(), pubkey_buf.size()).Finalize(wp.begin());
-
-        CPQKey pq_key;
-        CPQPubKey pq_pubkey{std::span<const uint8_t, mldsa::PUBKEY_SIZE>{pubkey_buf}};
-        if (pq_key.SetKeyData(std::span<const uint8_t, mldsa::SECRETKEY_SIZE>{seckey_buf}, pq_pubkey)) {
-            out.pq_keys.insert_or_assign(wp, std::make_shared<CPQKey>(std::move(pq_key)));
-        }
+        // Derive directly into CPQKey's secure storage. Do not leave a copy of
+        // the seed or the 2560-byte private key in ordinary stack buffers.
+        auto pq_key = std::make_shared<CPQKey>();
+        if (!pq_key->SetSeed(std::span<const uint8_t, mldsa::SEED_SIZE>(reinterpret_cast<const uint8_t*>(leaf.key.data()), mldsa::SEED_SIZE))) return std::nullopt;
+        const uint256 wp = pq_key->GetPubKey().GetWitnessProgram();
+        out.pq_keys.insert_or_assign(wp, std::move(pq_key));
         if (write_cache) {
             write_cache->CacheMlDsaWitnessProgram((uint32_t)pos, wp);
         }
@@ -2258,20 +2250,10 @@ public:
     {
         CExtKey leaf;
         if (!GetLeafExtKey(pos, arg, leaf)) return;
-        std::array<uint8_t, mldsa::SEED_SIZE> seed;
-        std::memcpy(seed.data(), leaf.key.begin(), mldsa::SEED_SIZE);
-        std::array<uint8_t, mldsa::PUBKEY_SIZE> pubkey_buf;
-        std::array<uint8_t, mldsa::SECRETKEY_SIZE> seckey_buf;
-        if (!mldsa::KeyGenFromSeed(pubkey_buf, seckey_buf, seed)) return;
-
-        uint256 wp;
-        CSHA256().Write(pubkey_buf.data(), pubkey_buf.size()).Finalize(wp.begin());
-
-        CPQKey pq_key;
-        CPQPubKey pq_pubkey{std::span<const uint8_t, mldsa::PUBKEY_SIZE>{pubkey_buf}};
-        if (pq_key.SetKeyData(std::span<const uint8_t, mldsa::SECRETKEY_SIZE>{seckey_buf}, pq_pubkey)) {
-            out.pq_keys.insert_or_assign(wp, std::make_shared<CPQKey>(std::move(pq_key)));
-        }
+        auto pq_key = std::make_shared<CPQKey>();
+        if (!pq_key->SetSeed(std::span<const uint8_t, mldsa::SEED_SIZE>(reinterpret_cast<const uint8_t*>(leaf.key.data()), mldsa::SEED_SIZE))) return;
+        const uint256 wp = pq_key->GetPubKey().GetWitnessProgram();
+        out.pq_keys.insert_or_assign(wp, std::move(pq_key));
     }
 
     bool IsRange() const override { return true; }

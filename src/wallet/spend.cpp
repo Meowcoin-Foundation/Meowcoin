@@ -1424,6 +1424,19 @@ static util::Result<CreatedTransactionResult> CreateTransactionInternal(
 {
     AssertLockHeld(wallet.cs_wallet);
 
+    // A PQ address is anyone-can-spend until RIP-25 activates. Refuse to
+    // construct payments or explicit change to such outputs before then,
+    // including addresses supplied by another wallet rather than generated here.
+    const bool pays_pq = std::any_of(vecSend.begin(), vecSend.end(), [](const CRecipient& recipient) {
+        return std::holds_alternative<WitnessV2MLDsa44>(recipient.dest);
+    });
+    const bool pq_change = coin_control.m_change_type == OutputType::PQ ||
+                           (!coin_control.m_change_type && wallet.m_default_change_type == OutputType::PQ) ||
+                           std::holds_alternative<WitnessV2MLDsa44>(coin_control.destChange);
+    if ((pays_pq || pq_change) && !wallet.chain().isDeploymentActive(Consensus::DEPLOYMENT_MLDSA44)) {
+        return util::Error{_("ML-DSA-44 (pq) addresses are not yet active on this network.")};
+    }
+
     FastRandomContext rng_fast;
     CMutableTransaction txNew; // The resulting transaction that we make
 

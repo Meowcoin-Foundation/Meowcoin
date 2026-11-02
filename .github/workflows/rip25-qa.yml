@@ -1,0 +1,72 @@
+name: RIP-25 wallet and consensus QA
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rip25:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022, macos-14]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build pkgconf libevent-dev libboost-dev libboost-test-dev libsqlite3-dev
+      - name: Install macOS dependencies
+        if: runner.os == 'macOS'
+        run: brew install cmake ninja pkgconf boost libevent sqlite
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: runner.os == 'Windows'
+        with:
+          arch: x64
+      - name: Build pinned liboqs (Unix)
+        if: runner.os != 'Windows'
+        run: ci/install_liboqs.sh "$PWD/liboqs-prefix" -G Ninja
+      - name: Build pinned liboqs (Windows)
+        if: runner.os == 'Windows'
+        run: ci/install_liboqs.sh "$(cygpath -m "$PWD/liboqs-prefix")" -A x64
+      - name: Configure (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_PREFIX_PATH="$PWD/liboqs-prefix" -DBUILD_GUI=OFF \
+            -DBUILD_TESTS=ON -DBUILD_BENCH=OFF -DBUILD_FUZZ_BINARY=OFF \
+            -DENABLE_IPC=OFF -DWITH_ZMQ=OFF
+      - name: Configure (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          cmake -S . -B build --preset vs2022 \
+            -DCMAKE_TOOLCHAIN_FILE="${VCPKG_INSTALLATION_ROOT}/scripts/buildsystems/vcpkg.cmake" \
+            -DCMAKE_PREFIX_PATH="$(cygpath -m "$PWD/liboqs-prefix")" \
+            -DVCPKG_MANIFEST_NO_DEFAULT_FEATURES=ON '-DVCPKG_MANIFEST_FEATURES=wallet;tests' \
+            -DBUILD_GUI=OFF -DBUILD_TESTS=ON -DBUILD_BENCH=OFF \
+            -DBUILD_FUZZ_BINARY=OFF -DENABLE_IPC=OFF -DWITH_ZMQ=OFF
+      - name: Build all command-line tools and tests
+        run: cmake --build build --config RelWithDebInfo --parallel 3
+      - name: PQ consensus, derivation, and wallet regression tests
+        run: |
+          if [[ "$RUNNER_OS" == Windows ]]; then
+            unit=build/bin/RelWithDebInfo/test_meowcoin.exe
+            export BITCOIND="$(cygpath -m "$PWD/build/bin/RelWithDebInfo/meowcoind.exe")"
+            export BITCOINCLI="$(cygpath -m "$PWD/build/bin/RelWithDebInfo/meowcoin-cli.exe")"
+          else
+            unit=build/bin/test_meowcoin
+          fi
+          "$unit" --run_test=pqkey_tests,mldsa44_sighash_tests,mldsa44_witness_tests --report_level=detailed
+          python test/functional/feature_mldsa44.py --configfile=build/test/config.ini

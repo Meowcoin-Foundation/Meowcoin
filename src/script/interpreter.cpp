@@ -8,7 +8,7 @@
 #include <crypto/ripemd160.h>
 #include <crypto/sha1.h>
 #include <crypto/sha256.h>
-#include <pqkey.h>
+#include <crypto/mldsa.h>
 #include <pubkey.h>
 #include <script/script.h>
 #include <uint256.h>
@@ -2046,7 +2046,7 @@ static bool VerifyWitnessProgram(const CScriptWitness& witness, int witversion, 
         const valtype& pk_bytes  = stack[1]; // pubkey (1312 bytes)
         const valtype& sig_bytes = stack[0]; // signature (2420 bytes)
 
-        if (pk_bytes.size() != CPQPubKey::SIZE) {
+        if (pk_bytes.size() != mldsa::PUBKEY_SIZE) {
             return set_error(serror, SCRIPT_ERR_PQ_PUBKEY_SIZE);
         }
         // Exactly SIG_SIZE: the signature is the raw ML-DSA-44 signature with no
@@ -2066,12 +2066,14 @@ static bool VerifyWitnessProgram(const CScriptWitness& witness, int witversion, 
         const CScript scriptCode = CScript() << OP_2 << program;
         const uint256 sighash = checker.GetMLDsa44SigHash(scriptCode);
 
-        CPQPubKey pq_pubkey(std::span<const uint8_t, CPQPubKey::SIZE>(pk_bytes.data(), CPQPubKey::SIZE));
         // Domain-separated (RIP-25): the signature must be bound to this
-        // network's ML-DSA-44 context, not merely to the sighash.
-        if (!pq_pubkey.Verify(std::span<const uint8_t>(sig_bytes.data(), sig_bytes.size()),
-                              std::span<const uint8_t>(sighash.begin(), 32),
-                              GetMLDsa44DomainContext())) {
+        // network's ML-DSA-44 context, not merely to the sighash. Use the crypto
+        // layer directly: consensus must not depend on wallet/private-key code
+        // from meowcoin_common (which itself depends on consensus).
+        if (!mldsa::Verify(std::span<const uint8_t, mldsa::SIG_SIZE>(sig_bytes.data(), mldsa::SIG_SIZE),
+                           std::span<const uint8_t>(sighash.begin(), 32),
+                           GetMLDsa44DomainContext(),
+                           std::span<const uint8_t, mldsa::PUBKEY_SIZE>(pk_bytes.data(), mldsa::PUBKEY_SIZE))) {
             return set_error(serror, SCRIPT_ERR_PQ_SIGNATURE_VERIFY_FAILED);
         }
         return set_success(serror);

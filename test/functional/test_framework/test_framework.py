@@ -298,7 +298,11 @@ class BitcoinTestFramework(metaclass=BitcoinTestMetaClass):
                 "bin",
                 binary + self.config["environment"]["EXEEXT"],
             )
-            setattr(paths, env_variable_name.lower(), os.getenv(env_variable_name, default=default_filename))
+            bin_path = os.getenv(env_variable_name, default=default_filename)
+            # Keep the upstream environment-variable aliases while exposing the
+            # Meowcoin attributes used by Binaries and tool_meowcoin.py.
+            setattr(paths, env_variable_name.lower(), bin_path)
+            setattr(paths, "meowcoin_bin" if binary == "meowcoin" else binary.replace("-", ""), bin_path)
         # BITCOIN_CMD environment variable can be specified to invoke meowcoin
         # wrapper binary instead of other executables.
         paths.meowcoin_cmd = shlex.split(os.getenv("BITCOIN_CMD", "")) or None

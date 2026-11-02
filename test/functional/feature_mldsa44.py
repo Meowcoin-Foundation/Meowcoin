@@ -25,7 +25,21 @@ MLDSA44_PUBKEY_SIZE = 1312
 class MLDsa44Test(BitcoinTestFramework):
     def set_test_params(self):
         self.setup_clean_chain = True
-        self.num_nodes = 1
+        self.num_nodes = 2
+        self.extra_args = [["-keypool=10"], ["-keypool=10", "-vbparams=mldsa44:-2:9223372036854775807"]]
+
+    def setup_network(self):
+        # Independent chains: node 1 exercises the pre-activation wallet guards.
+        self.add_nodes(self.num_nodes, self.extra_args)
+        self.start_nodes()
+        for node in self.nodes:
+            node.createwallet(self.default_wallet_name, load_on_startup=True)
+
+    def mine(self, node, count):
+        # Meowcoin uses its own address/WIF prefixes, not the Bitcoin coinbase
+        # fixture keys used by the upstream test framework.
+        wallet = node.get_wallet_rpc(self.default_wallet_name)
+        return self.generatetoaddress(node, count, wallet.getnewaddress("", "legacy"), sync_fun=self.no_op)
 
     def skip_test_if_missing_module(self):
         self.skip_if_no_wallet()
@@ -49,11 +63,23 @@ class MLDsa44Test(BitcoinTestFramework):
     def run_test(self):
         node = self.nodes[0]
 
+        self.log.info("Test receive and change requests before activation")
+        inactive = self.nodes[1]
+        assert_raises_rpc_error(-8, "not yet active", inactive.getnewaddress, "", "pq")
+        assert_raises_rpc_error(-8, "not yet active", inactive.getrawchangeaddress, "pq")
+
         self.log.info("Test ML-DSA-44 PQ address generation")
 
         # Generate first PQ address (empty label, type "pq").
         pq_addr = node.getnewaddress("", "pq")
         self.log.info(f"Generated PQ address: {pq_addr}")
+
+        self.mine(inactive, 101)
+        assert_raises_rpc_error(-6, "not yet active", inactive.sendtoaddress, pq_addr, 1.0)
+        inactive_dest = inactive.getnewaddress("", "legacy")
+        raw = inactive.createrawtransaction([], {inactive_dest: 1.0})
+        assert_raises_rpc_error(-4, "not yet active", inactive.fundrawtransaction, raw, {"changeAddress": pq_addr})
+        assert_raises_rpc_error(-4, "not yet active", inactive.fundrawtransaction, raw, {"change_type": "pq"})
 
         # Verify address info.
         info = node.getaddressinfo(pq_addr)
@@ -75,14 +101,14 @@ class MLDsa44Test(BitcoinTestFramework):
         self.log.info("Test receiving funds at a PQ address")
 
         # Mine blocks to make coinbase outputs spendable.
-        self.generate(node, 101)
+        self.mine(node, 101)
 
         # Send funds to the first PQ address.
         txid = node.sendtoaddress(pq_addr, 1.0)
-        self.log.info(f"Sent 1.0 AVN to PQ address, txid: {txid}")
+        self.log.info(f"Sent 1.0 MEWC to PQ address, txid: {txid}")
 
         # Confirm the transaction.
-        self.generate(node, 1)
+        self.mine(node, 1)
 
         # The UTXO must be tracked by the wallet.
         utxos = node.listunspent(1, 9999999, [pq_addr])
@@ -104,7 +130,7 @@ class MLDsa44Test(BitcoinTestFramework):
         # False so only the ML-DSA input is used) to a legacy destination.
         spend_addr = node.getnewaddress("", "pq")
         node.sendtoaddress(spend_addr, 10.0)
-        self.generate(node, 1)
+        self.mine(node, 1)
         utxo = node.listunspent(1, 9999999, [spend_addr])[0]
 
         res = node.send(
@@ -112,7 +138,7 @@ class MLDsa44Test(BitcoinTestFramework):
             options={"inputs": [{"txid": utxo["txid"], "vout": utxo["vout"]}],
                      "add_inputs": False, "change_type": "legacy"})
         assert_equal(res["complete"], True)
-        self.generate(node, 1)
+        self.mine(node, 1)
 
         # Confirmed in a block => consensus verified and accepted the ML-DSA spend
         # (verify_with_ctx_str + domain context + witness/program/sigop rules).
@@ -127,7 +153,7 @@ class MLDsa44Test(BitcoinTestFramework):
         b = node.getnewaddress("", "pq")
         node.sendtoaddress(a, 5.0)
         node.sendtoaddress(b, 5.0)
-        self.generate(node, 1)
+        self.mine(node, 1)
         ua = node.listunspent(1, 9999999, [a])[0]
         ub = node.listunspent(1, 9999999, [b])[0]
 
@@ -138,7 +164,7 @@ class MLDsa44Test(BitcoinTestFramework):
                                 {"txid": ub["txid"], "vout": ub["vout"]}],
                      "add_inputs": False, "change_type": "legacy"})
         assert_equal(res2["complete"], True)
-        self.generate(node, 1)
+        self.mine(node, 1)
 
         assert_greater_than_or_equal(node.gettransaction(res2["txid"])["confirmations"], 1)
         # Both PQ inputs carry the canonical witness.
@@ -156,7 +182,7 @@ class MLDsa44Test(BitcoinTestFramework):
             options={"inputs": [{"txid": uc["txid"], "vout": uc["vout"]}],
                      "add_inputs": False, "change_type": "legacy"})
         assert_equal(res3["complete"], True)
-        self.generate(node, 1)
+        self.mine(node, 1)
         assert_greater_than_or_equal(node.gettransaction(res3["txid"])["confirmations"], 1)
         self.assert_pq_witness(node, res3["txid"], {(uc["txid"], uc["vout"])})
 
@@ -168,7 +194,7 @@ class MLDsa44Test(BitcoinTestFramework):
         pq_recipient = node.getnewaddress("", "pq")
         recipient_spk = node.getaddressinfo(pq_recipient)["scriptPubKey"]
         change_txid = node.sendtoaddress(pq_recipient, 1.0)
-        self.generate(node, 1)
+        self.mine(node, 1)
         dec = node.decoderawtransaction(node.gettransaction(change_txid)["hex"])
         change_types = []
         for out in dec["vout"]:
@@ -188,7 +214,7 @@ class MLDsa44Test(BitcoinTestFramework):
         # keys" gate: the PQ secret is derived from the (backed-up) descriptor xpriv.
         recover_addr = node.getnewaddress("", "pq")
         node.sendtoaddress(recover_addr, 7.0)
-        self.generate(node, 1)
+        self.mine(node, 1)
         backup_path = os.path.join(self.nodes[0].datadir_path, "pq_backup.dat")
         node.backupwallet(backup_path)
         node.restorewallet("pq_restored", backup_path)
@@ -201,7 +227,7 @@ class MLDsa44Test(BitcoinTestFramework):
             options={"inputs": [{"txid": ru["txid"], "vout": ru["vout"]}],
                      "add_inputs": False, "change_type": "legacy"})
         assert_equal(rres["complete"], True)
-        self.generate(node, 1)
+        self.mine(node, 1)
         assert_greater_than_or_equal(restored.gettransaction(rres["txid"])["confirmations"], 1)
         self.assert_pq_witness(restored, rres["txid"], {(ru["txid"], ru["vout"])})
         node.unloadwallet("pq_restored")
@@ -216,7 +242,7 @@ class MLDsa44Test(BitcoinTestFramework):
         enc = node.get_wallet_rpc("pq_enc")
         enc_addr = enc.getnewaddress("", "pq")
         w0.sendtoaddress(enc_addr, 8.0)
-        self.generate(node, 1)
+        self.mine(node, 1)
         eu = enc.listunspent(1, 9999999, [enc_addr])[0]
         enc.encryptwallet("test-pass")
         assert_raises_rpc_error(-13, "walletpassphrase", enc.sendtoaddress, legacy_dest, 1.0)
@@ -226,14 +252,87 @@ class MLDsa44Test(BitcoinTestFramework):
             options={"inputs": [{"txid": eu["txid"], "vout": eu["vout"]}],
                      "add_inputs": False, "change_type": "legacy"})
         assert_equal(eres["complete"], True)
-        self.generate(node, 1)
+        self.mine(node, 1)
         assert_greater_than_or_equal(enc.gettransaction(eres["txid"])["confirmations"], 1)
         self.assert_pq_witness(enc, eres["txid"], {(eu["txid"], eu["vout"])})
         enc.walletlock()
 
-        self.log.info("Test that 'pq' address type is rejected on non-regtest without deployment")
-        # On regtest DEPLOYMENT_MLDSA44 is always active, so no negative-activation
-        # test is needed here; the RPC-level guard is covered by the unit tests.
+        self.log.info("Test existing descriptor wallet upgrade, encryption, and reload")
+        # Recreate a pre-RIP-25 descriptor wallet: same backed-up root and
+        # ordinary descriptors, with no PQ descriptors. Use a private-key import
+        # rather than editing wallet database internals.
+        ordinary = [d for d in w0.listdescriptors(True)["descriptors"] if not d["desc"].startswith("mldsa44(")]
+        ordinary_public = [d["desc"] for d in w0.listdescriptors()["descriptors"] if not d["desc"].startswith("mldsa44(")]
+        node.createwallet("pq_upgrade", blank=True, passphrase="upgrade-pass")
+        upgrade = node.get_wallet_rpc("pq_upgrade")
+        upgrade.walletpassphrase("upgrade-pass", 60)
+        imports = [{"desc": d["desc"], "timestamp": "now", "active": d["active"],
+                    "internal": d["internal"], "range": [0, 9]} for d in ordinary]
+        for result in upgrade.importdescriptors(imports):
+            assert_equal(result["success"], True)
+        assert_equal(len(upgrade.listdescriptors()["descriptors"]), len(ordinary))
+        upgrade.walletlock()
+        assert_raises_rpc_error(-12, "unlock", upgrade.getnewaddress, "", "pq")
+        upgrade.walletpassphrase("upgrade-pass", 60)
+        assert_equal(upgrade.getaddressinfo(upgrade.getnewaddress("", "pq"))["ismine"], True)
+        upgrade.walletlock()
+        # The other upgrade entry point is raw PQ change-address generation.
+        node.createwallet("pq_old", blank=True)
+        old = node.get_wallet_rpc("pq_old")
+        for result in old.importdescriptors(imports):
+            assert_equal(result["success"], True)
+        old_change = old.getrawchangeaddress("pq")
+        assert_equal(old.getaddressinfo(old_change)["ismine"], True)
+        old_pq = old.getnewaddress("", "pq")
+        assert_equal(old_pq, pq_addr)  # same backed-up root, same PQ derivation
+        assert_equal(old.getaddressinfo(old_pq)["ismine"], True)
+        upgraded = old.listdescriptors()["descriptors"]
+        assert_equal(len(upgraded), len(ordinary) + 2)
+        # Existing ordinary descriptors and their roots must not be replaced.
+        assert_equal(sorted(d["desc"] for d in upgraded if not d["desc"].startswith("mldsa44(")),
+                     sorted(ordinary_public))
+        w0.sendtoaddress(old_pq, 4.0)
+        self.mine(node, 1)
+        node.unloadwallet("pq_old")
+        node.loadwallet("pq_old")
+        old = node.get_wallet_rpc("pq_old")
+        assert_equal(old.getaddressinfo(old_pq)["ismine"], True)
+        recovered_coin = next(u for u in old.listunspent(1, 9999999, [old_pq]) if u["amount"] == 4)
+        old.encryptwallet("old-pass")
+        assert_raises_rpc_error(-13, "walletpassphrase", old.sendtoaddress, legacy_dest, 1.0)
+        old.walletpassphrase("old-pass", 60)
+        old_res = old.send(outputs={legacy_dest: 3.0},
+                           options={"inputs": [{"txid": recovered_coin["txid"], "vout": recovered_coin["vout"]}],
+                                    "add_inputs": False, "change_type": "legacy"})
+        assert_equal(old_res["complete"], True)
+        old_txid = old_res["txid"]
+        self.mine(node, 1)
+        assert_greater_than_or_equal(old.gettransaction(old_txid)["confirmations"], 1)
+        self.assert_pq_witness(old, old_txid, {(recovered_coin["txid"], recovered_coin["vout"])})
+
+        self.log.info("Test a PQ spend survives block disconnect and reconnect")
+        confirmed_block = node.getbestblockhash()
+        node.invalidateblock(confirmed_block)
+        assert_equal(old.gettransaction(old_txid)["confirmations"], 0)
+        node.getmempoolentry(old_txid)
+        node.reconsiderblock(confirmed_block)
+        assert_equal(old.gettransaction(old_txid)["confirmations"], 1)
+
+        self.log.info("Test automatic upgrade refuses ambiguous imported roots")
+        node.createwallet("pq_other_root")
+        other = node.get_wallet_rpc("pq_other_root")
+        other_descs = other.listdescriptors(True)["descriptors"]
+        node.createwallet("pq_ambiguous", blank=True)
+        ambiguous = node.get_wallet_rpc("pq_ambiguous")
+        first = next(d for d in ordinary if d["desc"].startswith("pkh(") and not d["internal"])
+        second = next(d for d in other_descs if d["desc"].startswith("wpkh(") and not d["internal"])
+        for result in ambiguous.importdescriptors([
+                {"desc": d["desc"], "timestamp": "now", "active": True, "range": [0, 9]}
+                for d in (first, second)]):
+            assert_equal(result["success"], True)
+        assert_raises_rpc_error(-12, "Multiple wallet roots", ambiguous.getnewaddress, "", "pq")
+        assert_equal(len(ambiguous.listdescriptors()["descriptors"]), 2)
+        assert_equal(ambiguous.getaddressinfo(ambiguous.getnewaddress("", "legacy"))["ismine"], True)
 
         self.log.info("All ML-DSA-44 tests passed")
 
