@@ -1,1 +1,2 @@
 src/clientversion.cpp export-subst
+ci/install_liboqs.sh text eol=lf
