@@ -56,7 +56,7 @@ cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo \
   -DENABLE_IPC=OFF -DWITH_ZMQ=OFF
 cmake --build build --parallel 3
 build/bin/test_meowcoin \
-  --run_test=pqkey_tests,mldsa44_sighash_tests,mldsa44_witness_tests \
+  --run_test=pqkey_tests,pqkey_vectors_tests,mldsa44_sighash_tests,mldsa44_witness_tests \
   --report_level=detailed
 python3 test/functional/feature_mldsa44.py --configfile=build/test/config.ini
 ```

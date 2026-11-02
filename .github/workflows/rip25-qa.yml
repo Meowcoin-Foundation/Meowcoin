@@ -84,5 +84,5 @@ jobs:
           else
             unit=build/bin/test_meowcoin
           fi
-          "$unit" --run_test=pqkey_tests,mldsa44_sighash_tests,mldsa44_witness_tests --report_level=detailed
+          "$unit" --run_test=pqkey_tests,pqkey_vectors_tests,mldsa44_sighash_tests,mldsa44_witness_tests --report_level=detailed
           python test/functional/feature_mldsa44.py --configfile=build/test/config.ini
