@@ -17,7 +17,8 @@ function(add_boost_if_needed)
   directory and other added INTERFACE properties.
   ]=]
 
-  if(CMAKE_HOST_APPLE)
+  # Honor an explicitly supplied (for example, pinned CI) Boost installation.
+  if(CMAKE_HOST_APPLE AND NOT Boost_ROOT)
     find_program(HOMEBREW_EXECUTABLE brew)
     if(HOMEBREW_EXECUTABLE)
       execute_process(

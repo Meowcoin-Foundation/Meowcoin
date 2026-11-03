@@ -491,6 +491,8 @@ static OutputType GetOutputType(TxoutType type, bool is_from_p2sh)
     switch (type) {
         case TxoutType::WITNESS_V1_TAPROOT:
             return OutputType::BECH32M;
+        case TxoutType::WITNESS_V2_MLDSA44:
+            return OutputType::PQ; // RIP-25: post-quantum ML-DSA-44 output
         case TxoutType::WITNESS_V0_KEYHASH:
         case TxoutType::WITNESS_V0_SCRIPTHASH:
             if (is_from_p2sh) return OutputType::P2SH_SEGWIT;
@@ -1421,6 +1423,19 @@ static util::Result<CreatedTransactionResult> CreateTransactionInternal(
         bool sign) EXCLUSIVE_LOCKS_REQUIRED(wallet.cs_wallet)
 {
     AssertLockHeld(wallet.cs_wallet);
+
+    // A PQ address is anyone-can-spend until RIP-25 activates. Refuse to
+    // construct payments or explicit change to such outputs before then,
+    // including addresses supplied by another wallet rather than generated here.
+    const bool pays_pq = std::any_of(vecSend.begin(), vecSend.end(), [](const CRecipient& recipient) {
+        return std::holds_alternative<WitnessV2MLDsa44>(recipient.dest);
+    });
+    const bool pq_change = coin_control.m_change_type == OutputType::PQ ||
+                           (!coin_control.m_change_type && wallet.m_default_change_type == OutputType::PQ) ||
+                           std::holds_alternative<WitnessV2MLDsa44>(coin_control.destChange);
+    if ((pays_pq || pq_change) && !wallet.chain().isDeploymentActive(Consensus::DEPLOYMENT_MLDSA44)) {
+        return util::Error{_("ML-DSA-44 (pq) addresses are not yet active on this network.")};
+    }
 
     FastRandomContext rng_fast;
     CMutableTransaction txNew; // The resulting transaction that we make

@@ -246,43 +246,6 @@ bool FillableSigningProvider::GetCScript(const CScriptID &hash, CScript& redeemS
     return false;
 }
 
-bool FillableSigningProvider::AddPQKey(CPQKey&& key)
-{
-    CPQPubKey pubkey = key.GetPubKey();
-    uint256 program = pubkey.GetWitnessProgram();
-    LOCK(cs_KeyStore);
-    mapPQPubKeys[program] = pubkey;
-    mapPQKeys[program] = std::move(key);
-    return true;
-}
-
-bool FillableSigningProvider::HavePQKey(const uint256& program) const
-{
-    LOCK(cs_KeyStore);
-    return mapPQKeys.count(program) > 0;
-}
-
-bool FillableSigningProvider::GetPQKey(const uint256& program, CPQKey& key) const
-{
-    LOCK(cs_KeyStore);
-    auto it = mapPQKeys.find(program);
-    if (it == mapPQKeys.end()) return false;
-    CPQPubKey pubkey;
-    auto pit = mapPQPubKeys.find(program);
-    if (pit != mapPQPubKeys.end()) pubkey = pit->second;
-    key.SetKeyData(it->second.GetData(), pubkey);
-    return true;
-}
-
-bool FillableSigningProvider::GetPQPubKey(const uint256& program, CPQPubKey& pubkey) const
-{
-    LOCK(cs_KeyStore);
-    auto it = mapPQPubKeys.find(program);
-    if (it == mapPQPubKeys.end()) return false;
-    pubkey = it->second;
-    return true;
-}
-
 CKeyID GetKeyForDestination(const SigningProvider& store, const CTxDestination& dest)
 {
     // Only supports destinations which map to single public keys:
@@ -366,6 +329,22 @@ bool MultiSigningProvider::GetTaprootBuilder(const XOnlyPubKey& output_key, Tapr
 {
     for (const auto& provider: m_providers) {
         if (provider->GetTaprootBuilder(output_key, builder)) return true;
+    }
+    return false;
+}
+
+bool MultiSigningProvider::GetPQKey(const uint256& program, CPQKey& key) const
+{
+    for (const auto& provider: m_providers) {
+        if (provider->GetPQKey(program, key)) return true;
+    }
+    return false;
+}
+
+bool MultiSigningProvider::HavePQKey(const uint256& program) const
+{
+    for (const auto& provider: m_providers) {
+        if (provider->HavePQKey(program)) return true;
     }
     return false;
 }

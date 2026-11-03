@@ -8,12 +8,29 @@
 #include <crypto/ripemd160.h>
 #include <crypto/sha1.h>
 #include <crypto/sha256.h>
-#include <pqkey.h>
+#include <crypto/mldsa.h>
 #include <pubkey.h>
 #include <script/script.h>
 #include <uint256.h>
 
 typedef std::vector<unsigned char> valtype;
+
+// RIP-25 ML-DSA-44 domain-separation context. Set once at startup from
+// SelectParams() (single-threaded, before any validation) and thereafter read
+// only, so no synchronisation is needed. See interpreter.h for the rationale.
+namespace {
+std::vector<unsigned char> g_mldsa44_domain_ctx;
+} // namespace
+
+void SetMLDsa44DomainContext(std::span<const unsigned char> ctx)
+{
+    g_mldsa44_domain_ctx.assign(ctx.begin(), ctx.end());
+}
+
+std::span<const unsigned char> GetMLDsa44DomainContext()
+{
+    return g_mldsa44_domain_ctx;
+}
 
 namespace {
 
@@ -1754,8 +1771,13 @@ bool GenericTransactionSignatureChecker<T>::CheckSchnorrSignature(std::span<cons
 template <class T>
 uint256 GenericTransactionSignatureChecker<T>::GetMLDsa44SigHash(const CScript& scriptCode) const
 {
-    // Compute a BIP143-style sighash for ML-DSA-44 witness v2 inputs.
-    // Uses SIGHASH_ALL (0x01) — no fork-id in Meowcoin.
+    // RIP-25 (normative, see doc/rip-25.md): ML-DSA-44 witness v2 inputs always
+    // commit to SIGHASH_ALL and nothing else (Meowcoin has no SIGHASH_FORKID;
+    // Avian's variant uses SIGHASH_ALL | SIGHASH_FORKID). Unlike ECDSA and
+    // Schnorr, no sighash-type byte is carried in the witness: the signature
+    // element is the bare 2420-byte ML-DSA signature and the type is fixed here.
+    // The exact-length check in the verify branch enforces the "no carried byte"
+    // half of this rule; this constant enforces the "only this type" half.
     constexpr int32_t nHashType = SIGHASH_ALL;
     return SignatureHash(scriptCode, *txTo, nIn, nHashType, amount, SigVersion::WITNESS_V0, txdata);
 }
@@ -2012,7 +2034,7 @@ static bool VerifyWitnessProgram(const CScriptWitness& witness, int witversion, 
         // ML-DSA-44 post-quantum witness v2 spending rule.
         // Witness stack must be: [sig (2420 bytes), pubkey (1312 bytes)]
         // Witness program is SHA256(pubkey).
-        if (!(flags & SCRIPT_VERIFY_PQ_HYBRID)) {
+        if (!(flags & SCRIPT_VERIFY_MLDSA44)) {
             if (flags & SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_WITNESS_PROGRAM) {
                 return set_error(serror, SCRIPT_ERR_DISCOURAGE_UPGRADABLE_WITNESS_PROGRAM);
             }
@@ -2024,9 +2046,11 @@ static bool VerifyWitnessProgram(const CScriptWitness& witness, int witversion, 
         const valtype& pk_bytes  = stack[1]; // pubkey (1312 bytes)
         const valtype& sig_bytes = stack[0]; // signature (2420 bytes)
 
-        if (pk_bytes.size() != CPQPubKey::SIZE) {
+        if (pk_bytes.size() != mldsa::PUBKEY_SIZE) {
             return set_error(serror, SCRIPT_ERR_PQ_PUBKEY_SIZE);
         }
+        // Exactly SIG_SIZE: the signature is the raw ML-DSA-44 signature with no
+        // trailing sighash-type byte (RIP-25 carries no hashtype in the witness).
         if (sig_bytes.size() != mldsa::SIG_SIZE) {
             return set_error(serror, SCRIPT_ERR_PQ_SIGNATURE_SIZE);
         }
@@ -2042,9 +2066,14 @@ static bool VerifyWitnessProgram(const CScriptWitness& witness, int witversion, 
         const CScript scriptCode = CScript() << OP_2 << program;
         const uint256 sighash = checker.GetMLDsa44SigHash(scriptCode);
 
-        CPQPubKey pq_pubkey(std::span<const uint8_t, CPQPubKey::SIZE>(pk_bytes.data(), CPQPubKey::SIZE));
-        if (!pq_pubkey.Verify(std::span<const uint8_t>(sig_bytes.data(), sig_bytes.size()),
-                              std::span<const uint8_t>(sighash.begin(), 32))) {
+        // Domain-separated (RIP-25): the signature must be bound to this
+        // network's ML-DSA-44 context, not merely to the sighash. Use the crypto
+        // layer directly: consensus must not depend on wallet/private-key code
+        // from meowcoin_common (which itself depends on consensus).
+        if (!mldsa::Verify(std::span<const uint8_t, mldsa::SIG_SIZE>(sig_bytes.data(), mldsa::SIG_SIZE),
+                           std::span<const uint8_t>(sighash.begin(), 32),
+                           GetMLDsa44DomainContext(),
+                           std::span<const uint8_t, mldsa::PUBKEY_SIZE>(pk_bytes.data(), mldsa::PUBKEY_SIZE))) {
             return set_error(serror, SCRIPT_ERR_PQ_SIGNATURE_VERIFY_FAILED);
         }
         return set_success(serror);
@@ -2179,7 +2208,7 @@ bool VerifyScript(const CScript& scriptSig, const CScript& scriptPubKey, const C
     return set_success(serror);
 }
 
-size_t static WitnessSigOps(int witversion, const std::vector<unsigned char>& witprogram, const CScriptWitness& witness)
+size_t static WitnessSigOps(int witversion, const std::vector<unsigned char>& witprogram, const CScriptWitness& witness, unsigned int flags)
 {
     if (witversion == 0) {
         if (witprogram.size() == WITNESS_V0_KEYHASH_SIZE)
@@ -2189,6 +2218,15 @@ size_t static WitnessSigOps(int witversion, const std::vector<unsigned char>& wi
             CScript subscript(witness.stack.back().begin(), witness.stack.back().end());
             return subscript.GetSigOpCount(true);
         }
+    }
+
+    // RIP-25: an ML-DSA-44 spend (witness v2, 32-byte program) performs exactly
+    // one signature verification. Charge it a sigop cost so it counts against
+    // the block and per-tx sigop limits and the sigop-based fee weighting, but
+    // only once the post-quantum rule is active (the same gate as the
+    // verification itself), so pre-activation cost accounting is unchanged.
+    if (witversion == 2 && witprogram.size() == 32 && (flags & SCRIPT_VERIFY_MLDSA44)) {
+        return MLDSA44_SIGOP_COST;
     }
 
     // Future flags may be implemented here.
@@ -2207,7 +2245,7 @@ size_t CountWitnessSigOps(const CScript& scriptSig, const CScript& scriptPubKey,
     int witnessversion;
     std::vector<unsigned char> witnessprogram;
     if (scriptPubKey.IsWitnessProgram(witnessversion, witnessprogram)) {
-        return WitnessSigOps(witnessversion, witnessprogram, witness ? *witness : witnessEmpty);
+        return WitnessSigOps(witnessversion, witnessprogram, witness ? *witness : witnessEmpty, flags);
     }
 
     if (scriptPubKey.IsPayToScriptHash() && scriptSig.IsPushOnly()) {
@@ -2219,7 +2257,7 @@ size_t CountWitnessSigOps(const CScript& scriptSig, const CScript& scriptPubKey,
         }
         CScript subscript(data.begin(), data.end());
         if (subscript.IsWitnessProgram(witnessversion, witnessprogram)) {
-            return WitnessSigOps(witnessversion, witnessprogram, witness ? *witness : witnessEmpty);
+            return WitnessSigOps(witnessversion, witnessprogram, witness ? *witness : witnessEmpty, flags);
         }
     }
 

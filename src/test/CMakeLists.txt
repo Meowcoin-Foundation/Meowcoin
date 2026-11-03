@@ -56,6 +56,9 @@ add_executable(test_meowcoin
   key_io_tests.cpp
   key_tests.cpp
   pqkey_tests.cpp
+  mldsa44_sighash_tests.cpp
+  mldsa44_witness_tests.cpp
+  pqkey_vectors_tests.cpp
   logging_tests.cpp
   mempool_tests.cpp
   merkle_tests.cpp
@@ -142,6 +145,7 @@ target_json_data_sources(test_meowcoin
   data/blockfilters.json
   data/key_io_invalid.json
   data/key_io_valid.json
+  data/rip25_vectors.json
   data/script_tests.json
   data/sighash.json
   data/tx_invalid.json

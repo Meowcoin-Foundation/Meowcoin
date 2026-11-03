@@ -199,7 +199,7 @@ class ReserveDestination
 {
 protected:
     //! The wallet to reserve from
-    const CWallet* const pwallet;
+    CWallet* const pwallet;
     //! The ScriptPubKeyMan to reserve from. Based on type when GetReservedDestination is called
     ScriptPubKeyMan* m_spk_man{nullptr};
     OutputType const type;
@@ -786,6 +786,8 @@ public:
     void MarkDestinationsDirty(const std::set<CTxDestination>& destinations) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
 
     util::Result<CTxDestination> GetNewDestination(const OutputType type, const std::string label);
+    //! Enable missing PQ descriptors using an existing wallet root, without replacing other address types.
+    util::Result<void> SetupPostQuantumDescriptors(bool internal);
     util::Result<CTxDestination> GetNewChangeDestination(const OutputType type);
 
     bool IsMine(const CTxDestination& dest) const EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);

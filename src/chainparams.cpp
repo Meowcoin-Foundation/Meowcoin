@@ -10,6 +10,7 @@
 #include <consensus/params.h>
 #include <deploymentinfo.h>
 #include <logging.h>
+#include <script/interpreter.h>
 #include <tinyformat.h>
 #include <util/chaintype.h>
 #include <util/strencodings.h>
@@ -141,4 +142,23 @@ void SelectParams(const ChainType chain)
 {
     SelectBaseParams(chain);
     globalChainParams = CreateChainParams(gArgs, chain);
+
+    const auto& consensus = globalChainParams->GetConsensus();
+
+    // RIP-25: bind ML-DSA-44 signatures to this network. The context is
+    //   "MEWC/ML-DSA-44/v1/" || genesis block hash (32 bytes).
+    // The genesis hash is the canonical, immutable per-network identifier, so a
+    // signature made for one network cannot verify on another. This is set here,
+    // the single choke point for network selection (node and tests alike), so
+    // the consensus verifier and the signer share one value; see
+    // GetMLDsa44DomainContext() in script/interpreter.h.
+    {
+        static constexpr char PQ_DST[] = "MEWC/ML-DSA-44/v1/";
+        const uint256& genesis = consensus.hashGenesisBlock;
+        std::vector<unsigned char> ctx;
+        ctx.reserve(sizeof(PQ_DST) - 1 + genesis.size());
+        ctx.insert(ctx.end(), PQ_DST, PQ_DST + sizeof(PQ_DST) - 1);
+        ctx.insert(ctx.end(), genesis.begin(), genesis.end());
+        SetMLDsa44DomainContext(ctx);
+    }
 }

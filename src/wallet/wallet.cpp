@@ -18,6 +18,7 @@
 #include <consensus/amount.h>
 #include <consensus/consensus.h>
 #include <consensus/validation.h>
+#include <crypto/mldsa.h>
 #include <external_signer.h>
 #include <interfaces/chain.h>
 #include <interfaces/handler.h>
@@ -2249,19 +2250,17 @@ OutputType CWallet::TransactionChangeType(const std::optional<OutputType>& chang
         return *change_type;
     }
 
-    // if m_default_address_type is legacy, use legacy address as change.
-    if (m_default_address_type == OutputType::LEGACY) {
-        return OutputType::LEGACY;
-    }
-
     bool any_tr{false};
     bool any_wpkh{false};
     bool any_sh{false};
     bool any_pkh{false};
+    bool any_pq{false}; // RIP-25: any ML-DSA-44 post-quantum recipient
 
     for (const auto& recipient : vecSend) {
         if (std::get_if<WitnessV1Taproot>(&recipient.dest)) {
             any_tr = true;
+        } else if (std::get_if<WitnessV2MLDsa44>(&recipient.dest)) {
+            any_pq = true;
         } else if (std::get_if<WitnessV0KeyHash>(&recipient.dest)) {
             any_wpkh = true;
         } else if (std::get_if<ScriptHash>(&recipient.dest)) {
@@ -2269,6 +2268,21 @@ OutputType CWallet::TransactionChangeType(const std::optional<OutputType>& chang
         } else if (std::get_if<PKHash>(&recipient.dest)) {
             any_pkh = true;
         }
+    }
+
+    // RIP-25: keep post-quantum change with a post-quantum recipient so the
+    // change output does not downgrade the spend to a quantum-vulnerable type.
+    // This deliberately takes precedence over the legacy-default rule below: a
+    // spend to a post-quantum address should not leave change in an output a
+    // quantum adversary could seize.
+    const bool has_pq_spkman(GetScriptPubKeyMan(OutputType::PQ, /*internal=*/true));
+    if (has_pq_spkman && any_pq) {
+        return OutputType::PQ;
+    }
+
+    // if m_default_address_type is legacy, use legacy address as change.
+    if (m_default_address_type == OutputType::LEGACY) {
+        return OutputType::LEGACY;
     }
 
     const bool has_bech32m_spkman(GetScriptPubKeyMan(OutputType::BECH32M, /*internal=*/true));
@@ -2545,6 +2559,9 @@ bool CWallet::TopUpKeyPool(unsigned int kpSize)
 util::Result<CTxDestination> CWallet::GetNewDestination(const OutputType type, const std::string label)
 {
     LOCK(cs_wallet);
+    if (type == OutputType::PQ) {
+        if (auto res = SetupPostQuantumDescriptors(/*internal=*/false); !res) return util::Error{util::ErrorString(res)};
+    }
     auto spk_man = GetScriptPubKeyMan(type, /*internal=*/false);
     if (!spk_man) {
         return util::Error{strprintf(_("Error: No %s addresses available."), FormatOutputType(type))};
@@ -2624,6 +2641,9 @@ std::set<std::string> CWallet::ListAddrBookLabels(const std::optional<AddressPur
 
 util::Result<CTxDestination> ReserveDestination::GetReservedDestination(bool internal)
 {
+    if (type == OutputType::PQ) {
+        if (auto res = pwallet->SetupPostQuantumDescriptors(internal); !res) return util::Error{util::ErrorString(res)};
+    }
     m_spk_man = pwallet->GetScriptPubKeyMan(type, internal);
     if (!m_spk_man) {
         return util::Error{strprintf(_("Error: No %s addresses available."), FormatOutputType(type))};
@@ -3610,10 +3630,90 @@ void CWallet::SetupDescriptorScriptPubKeyMans(WalletBatch& batch, const CExtKey&
     AssertLockHeld(cs_wallet);
     for (bool internal : {false, true}) {
         for (OutputType t : OUTPUT_TYPES) {
-            if (t == OutputType::PQ) continue;
+            // Keep inactive networks and explicit builds without liboqs on
+            // ordinary descriptors. Existing wallets can add PQ descriptors
+            // from the same root when the deployment is active.
+            if (t == OutputType::PQ && (!mldsa::IsAvailable() || !HaveChain() ||
+                !chain().isDeploymentActive(Consensus::DEPLOYMENT_MLDSA44))) continue;
             SetupDescriptorScriptPubKeyMan(batch, master_key, t, internal);
         }
     }
+}
+
+util::Result<void> CWallet::SetupPostQuantumDescriptors(bool internal)
+{
+    LOCK(cs_wallet);
+    if (!mldsa::IsAvailable()) {
+        return util::Error{_("This build does not support ML-DSA-44 post-quantum addresses.")};
+    }
+    if (!HaveChain() || !chain().isDeploymentActive(Consensus::DEPLOYMENT_MLDSA44)) {
+        return util::Error{_("ML-DSA-44 (pq) addresses are not yet active on this network.")};
+    }
+    // An explicitly imported receive-only/watch-only descriptor is sufficient
+    // for receiving; do not require a local root or a change descriptor.
+    if (GetScriptPubKeyMan(OutputType::PQ, internal)) return {};
+    if (!IsWalletFlagSet(WALLET_FLAG_DESCRIPTORS) ||
+        IsWalletFlagSet(WALLET_FLAG_DISABLE_PRIVATE_KEYS) || IsWalletFlagSet(WALLET_FLAG_EXTERNAL_SIGNER)) {
+        return util::Error{_("Import post-quantum descriptors or use a descriptor wallet with local private keys.")};
+    }
+    if (IsLocked()) {
+        return util::Error{_("Please unlock the wallet to enable post-quantum addresses.")};
+    }
+
+    // Pre-RIP-25 descriptor wallets have no PQ managers. Reuse a root already
+    // backed up in the wallet instead of generating a new, unrelated seed. Only
+    // roots at depth zero are eligible; imported account keys are not roots.
+    std::optional<CExtKey> master_key;
+    for (auto* spkm : GetActiveScriptPubKeyMans()) {
+        auto* desc_spkm = dynamic_cast<DescriptorScriptPubKeyMan*>(spkm);
+        if (!desc_spkm) continue;
+        LOCK(desc_spkm->cs_desc_man);
+        std::set<CPubKey> pubkeys;
+        std::set<CExtPubKey> roots;
+        desc_spkm->GetWalletDescriptor().descriptor->GetPubKeys(pubkeys, roots);
+        for (const auto& root : roots) {
+            if (root.nDepth != 0) continue;
+            auto key = desc_spkm->GetKey(root.pubkey.GetID());
+            if (!key) continue;
+            CExtKey candidate;
+            candidate.nDepth = root.nDepth;
+            std::copy(std::begin(root.vchFingerprint), std::end(root.vchFingerprint), candidate.vchFingerprint);
+            candidate.nChild = root.nChild;
+            candidate.chaincode = root.chaincode;
+            candidate.key = *key;
+            // Do not silently choose between unrelated imported wallet roots.
+            if (master_key && master_key->Neuter() != root) {
+                return util::Error{_("Multiple wallet roots found. Import explicit post-quantum descriptors instead.")};
+            }
+            master_key = candidate;
+        }
+    }
+    if (!master_key) {
+        return util::Error{_("No wallet root available. Import post-quantum descriptors or create a new descriptor wallet.")};
+    }
+    // Inactive ranged imports may already track used addresses, including
+    // equivalent paths written with apostrophes instead of 'h' (different
+    // descriptor IDs). Require explicit activation/import rather than replacing
+    // a manager, resetting its index, or reissuing its addresses from index zero.
+    for (auto* spkm : GetAllScriptPubKeyMans()) {
+        if (spkm == GetScriptPubKeyMan(OutputType::PQ, false) || spkm == GetScriptPubKeyMan(OutputType::PQ, true)) continue;
+        auto* desc_spkm = dynamic_cast<DescriptorScriptPubKeyMan*>(spkm);
+        if (!desc_spkm) continue;
+        LOCK(desc_spkm->cs_desc_man);
+        const auto desc = desc_spkm->GetWalletDescriptor();
+        if (desc.descriptor->IsRange() && desc.descriptor->GetOutputType() == OutputType::PQ) {
+            return util::Error{_("An inactive post-quantum descriptor is already stored. Import explicitly active post-quantum descriptors to preserve existing address indexes.")};
+        }
+    }
+    if (!RunWithinTxn(GetDatabase(), "setup post-quantum descriptors", [&](WalletBatch& batch) EXCLUSIVE_LOCKS_REQUIRED(cs_wallet) {
+        for (bool internal : {false, true}) {
+            if (!GetScriptPubKeyMan(OutputType::PQ, internal)) {
+                SetupDescriptorScriptPubKeyMan(batch, *master_key, OutputType::PQ, internal);
+            }
+        }
+        return true;
+    })) return util::Error{_("Unable to save post-quantum descriptors.")};
+    return {};
 }
 
 void CWallet::SetupOwnDescriptorScriptPubKeyMans(WalletBatch& batch)
