@@ -81,6 +81,11 @@ platforms or a public testnet campaign have passed.
 
 ## Public deployment gates
 
+Use the bounded [soak runner](rip25-soak.md) for repeatable transaction,
+encrypted recovery, restart, and chain-agreement receipts. Its isolated
+validation also exercises interruption/resume and block disconnect/reconnect.
+The live campaign and independent operator qualification remain separate gates.
+
 1. Review and merge the implementation after platform CI passes. Build test
    artifacts with real liboqs, and publish their exact source revision and
    checksums.
