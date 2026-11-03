@@ -29,9 +29,9 @@ get_directory_property(precious_variables CACHE_VARIABLES)
 set(CLIENT_NAME "Meowcoin Core")
 set(CLIENT_VERSION_MAJOR 30)
 set(CLIENT_VERSION_MINOR 2)
-set(CLIENT_VERSION_BUILD 8)
-set(CLIENT_VERSION_RC 0)
-set(CLIENT_VERSION_IS_RELEASE "true")
+set(CLIENT_VERSION_BUILD 9)
+set(CLIENT_VERSION_RC 2)
+set(CLIENT_VERSION_IS_RELEASE "false")
 set(COPYRIGHT_YEAR "2026")
 
 # During the enabling of the CXX and CXXOBJ languages, we modify
