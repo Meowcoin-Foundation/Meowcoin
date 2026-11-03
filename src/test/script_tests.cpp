@@ -1611,7 +1611,9 @@ BOOST_AUTO_TEST_CASE(script_HasValidOps)
     BOOST_CHECK(script.HasValidOps());
     script = ToScript("ff88ac"_hex); // Script with OP_INVALIDOPCODE explicit
     BOOST_CHECK(!script.HasValidOps());
-    script = ToScript("88acc0"_hex); // Script with undefined opcode
+    script = ToScript("88acc0"_hex); // OP_MEWC_ASSET is a defined Meowcoin opcode.
+    BOOST_CHECK(script.HasValidOps());
+    script = ToScript("88acc1"_hex); // First undefined opcode after OP_MEWC_ASSET.
     BOOST_CHECK(!script.HasValidOps());
 }
 

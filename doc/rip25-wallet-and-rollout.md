@@ -64,7 +64,7 @@ cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo \
   -DENABLE_IPC=OFF -DWITH_ZMQ=OFF
 cmake --build build --parallel 3
 build/bin/test_meowcoin \
-  --run_test=pqkey_tests,pqkey_vectors_tests,mldsa44_sighash_tests,mldsa44_witness_tests \
+  --run_test=descriptor_tests,script_tests,wallet_tests,pqkey_tests,pqkey_vectors_tests,mldsa44_sighash_tests,mldsa44_witness_tests \
   --report_level=detailed
 python3 test/functional/feature_mldsa44.py --configfile=build/test/config.ini
 ```
@@ -80,6 +80,11 @@ x86_64, and macOS ARM64. A passing local run is not evidence that the other
 platforms or a public testnet campaign have passed.
 
 ## Public deployment gates
+
+Use the bounded [soak runner](rip25-soak.md) for repeatable transaction,
+encrypted recovery, restart, and chain-agreement receipts. Its isolated
+validation also exercises interruption/resume and block disconnect/reconnect.
+The live campaign and independent operator qualification remain separate gates.
 
 1. Review and merge the implementation after platform CI passes. Build test
    artifacts with real liboqs, and publish their exact source revision and

@@ -91,7 +91,7 @@ jobs:
             -DBUILD_FUZZ_BINARY=OFF -DENABLE_IPC=OFF -DWITH_ZMQ=OFF
       - name: Build all command-line tools and tests
         run: cmake --build build --config RelWithDebInfo --parallel 3
-      - name: PQ consensus, derivation, and wallet regression tests
+      - name: PQ and legacy descriptor, script, and wallet regression tests
         run: |
           if [[ "$RUNNER_OS" == Windows ]]; then
             unit=build/bin/RelWithDebInfo/test_meowcoin.exe
@@ -101,4 +101,15 @@ jobs:
             unit=build/bin/test_meowcoin
           fi
           "$unit" --run_test=pqkey_tests,pqkey_vectors_tests,mldsa44_sighash_tests,mldsa44_witness_tests --report_level=detailed
+          "$unit" --run_test=descriptor_tests,script_tests,wallet_tests --report_level=detailed
           python test/functional/feature_mldsa44.py --configfile=build/test/config.ini
+      - name: Validate bounded soak engine and recovery on isolated regtest
+        run: |
+          if [[ "$RUNNER_OS" == Windows ]]; then
+            daemon="$(cygpath -m "$PWD/build/bin/RelWithDebInfo/meowcoind.exe")"
+            result="$(cygpath -m "$RUNNER_TEMP/rip25-soak-validation")"
+          else
+            daemon="$PWD/build/bin/meowcoind"
+            result="$RUNNER_TEMP/rip25-soak-validation"
+          fi
+          python contrib/rip25/validate_soak.py --binary "$daemon" --output "$result"
