@@ -94,6 +94,9 @@ class Campaign:
         chain_dir = "testnet3" if args.chain == "test" else "regtest"
         self.observer = RPC(f"http://127.0.0.1:{args.rpc_port}", self.root / "node" / chain_dir / ".cookie")
         self.report = {"schema": 1, "status": "starting", "chain": args.chain,
+                       "mode": "isolated-validation" if args.cycles else "soak-campaign",
+                       "criteria": {"duration_seconds": args.duration, "minimum_cycles": args.min_cycles,
+                                    "minimum_new_blocks": args.min_blocks, "confirmations": args.confirmations},
                        "binary_sha256": hashlib.sha256(Path(args.binary).read_bytes()).hexdigest(),
                        "checks": {}, "completed_cycles": 0, "fees": "0", "transactions": []}
 
@@ -514,6 +517,7 @@ class Campaign:
         require(self.reference.call("getblockcount") - self.report["start_height"] >= self.args.min_blocks, "Minimum new-block gate not reached")
         for name in ("encrypted_backup_restore", "owned_observer_restart", "locked_signing_refused", "damaged_signature_rejected"):
             require(self.report["checks"].get(name, 0) > 0, "Missing required coverage: " + name)
+        require(not self.report.get("failures"), "Campaign has prior failed checks; qualification cannot pass")
         self.report["status"] = "passed"
         self.checkpoint()
         self.event("campaign_passed", cycles=self.state["completed_cycles"])
@@ -583,6 +587,8 @@ def main():
         campaign.report["status"] = "interrupted" if campaign.stopping else "failed"
         # Do not serialize arbitrary exceptions (HTTP auth, private paths, or RPC input).
         campaign.report["failure"] = str(error) if isinstance(error, (CheckFailed, RPCError)) else type(error).__name__
+        if not campaign.stopping:
+            campaign.report.setdefault("failures", []).append({"time": int(time.time()), "reason": campaign.report["failure"]})
         if campaign.lock_fd is not None:
             campaign.event("campaign_failed", reason=campaign.report["failure"])
         else:

@@ -86,6 +86,10 @@ campaigns exit nonzero. SIGINT/SIGTERM stop the owned observer, lock/unload only
 the campaign wallet on the reference, and preserve state. Run with the same
 arguments plus `--resume` to reuse pending signed transaction bytes and avoid
 duplicating payments. The original deadline and fee counter are preserved.
+A resumed integrity or transport failure remains in the failure history and
+prevents a qualification pass. A deliberate operator interruption can resume
+without counting as a failed check. Resume is for preserving/recovering work,
+not erasing a failed campaign.
 A duplicate campaign is refused by an exclusive lock. After an unclean crash,
 verify the prior runner and its owned node are stopped before removing the stale
 `campaign.lock`. `private-state.json` is the authoritative atomic checkpoint;
