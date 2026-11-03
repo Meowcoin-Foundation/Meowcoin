@@ -385,7 +385,9 @@ TestChain100Setup::TestChain100Setup(
     TestOpts opts)
     : TestingSetup{ChainType::REGTEST, opts}
 {
-    SetMockTime(1598887952);
+    // Keep the deterministic fixture clock after this chain's genesis. The
+    // upstream Bitcoin timestamp predates Meowcoin and makes new blocks future-dated.
+    SetMockTime(Params().GenesisBlock().GetBlockTime() + 1);
     constexpr std::array<unsigned char, 32> vchKey = {
         {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}};
     coinbaseKey.Set(vchKey.begin(), vchKey.end(), true);
@@ -395,9 +397,9 @@ TestChain100Setup::TestChain100Setup(
 
     {
         LOCK(::cs_main);
-        assert(
-            m_node.chainman->ActiveChain().Tip()->GetBlockHash().ToString() ==
-            "0c8c5f79505775a0f6aed6aca2350718ceb9c6f2c878667864d5c7a6d8ffa2a6");
+        assert(m_node.chainman->ActiveChain().Height() == COINBASE_MATURITY);
+        assert(m_node.chainman->ActiveChain().Tip()->GetBlockHash() ==
+               uint256{"00f881f3ac442574eaebc009665603cf8d482dec38e7a2d4cf37f51aca810786"});
     }
 }
 
